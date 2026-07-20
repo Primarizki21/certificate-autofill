@@ -1,0 +1,14 @@
+fastapi
+uvicorn[standard]
+python-multipart
+SQLAlchemy
+psycopg2-binary
+prometheus-client
+pydantic
+PyMuPDF
+pytesseract
+Pillow
+rapidocr-onnxruntime
+docling
+python-dotenv
+tqdm

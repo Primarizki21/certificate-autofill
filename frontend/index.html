@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Input Kartu Hasil Prestasi</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <div class="page-wrap">
+    <div class="title-row">
+      <div class="title-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" width="28" height="28">
+          <path fill="white" d="M12 3L2 8l10 5 10-5-10-5Zm-7 8.2v4.1c0 .8.5 1.5 1.3 1.8l5.7 2.4 5.7-2.4c.8-.3 1.3-1 1.3-1.8v-4.1l-7 3.5-7-3.5Z"/>
+        </svg>
+      </div>
+      <h1>Input Kartu Hasil Prestasi</h1>
+    </div>
+
+    <main class="form-card">
+      <form id="khpForm" autocomplete="off">
+        <div class="form-row">
+          <label for="tahun_akademik">Tahun Akademik</label>
+          <select id="tahun_akademik" name="tahun_akademik"></select>
+        </div>
+
+        <div class="form-row">
+          <label for="bukti_fisik">Bukti Fisik</label>
+          <select id="bukti_fisik" name="bukti_fisik"></select>
+        </div>
+
+        <div class="form-row">
+          <label for="upload_bukti">Upload Bukti</label>
+          <div class="field-block">
+            <input id="upload_bukti" name="file" type="file" accept="application/pdf" />
+            <div class="hint">Jenis file yang dapat di upload adalah (.pdf) dengan ukuran maksimal 10 Mb</div>
+            <div class="upload-actions">
+              <button type="submit" id="parseBtn" class="btn teal">PROSES PDF</button>
+              <button type="button" id="resetBtn" class="btn gray">RESET</button>
+              <span id="statusText" class="status-text">Upload PDF untuk melakukan parsing extraction.</span>
+            </div>
+          </div>
+        </div>
+
+        <section id="afterUploadSection" class="after-upload hidden">
+          <div class="preview-row">
+            <label>Preview PDF</label>
+            <div class="preview-box">
+              <iframe id="pdfPreview" title="Preview PDF Sertifikat"></iframe>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="kelompok_kegiatan">Kelompok Kegiatan:</label>
+            <select id="kelompok_kegiatan" name="kelompok_kegiatan"></select>
+          </div>
+
+          <div class="form-row">
+            <label for="jenis_kegiatan">Jenis Kegiatan:</label>
+            <select id="jenis_kegiatan" name="jenis_kegiatan"></select>
+          </div>
+
+          <div class="form-row">
+            <label for="tingkat">Tingkat:</label>
+            <select id="tingkat" name="tingkat"></select>
+          </div>
+
+          <div class="form-row">
+            <label for="prestasi_partisipasi_jabatan">Prestasi/Partisipasi/Jabatan:</label>
+            <div class="field-block">
+              <select id="prestasi_partisipasi_jabatan" name="prestasi_partisipasi_jabatan"></select>
+              <div class="hint">Pilih null jika kegiatan pada master jabatan kosong. Capaian sebagai terbaik/terfavorit/best setara dengan Finalis</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="nama_kegiatan_sertifikasi">Nama Kegiatan / Sertifikasi</label>
+            <input id="nama_kegiatan_sertifikasi" name="nama_kegiatan_sertifikasi" type="text" placeholder="Masukkan nama kegiatan" />
+          </div>
+
+          <div class="form-row">
+            <label for="waktu_mulai_pelaksanaan">Waktu Mulai Pelaksanaan</label>
+            <input id="waktu_mulai_pelaksanaan" name="waktu_mulai_pelaksanaan" type="text" placeholder="dd/mm/tttt" />
+          </div>
+
+          <div class="form-row">
+            <label for="waktu_selesai_pelaksanaan">Waktu Selesai Pelaksanaan</label>
+            <input id="waktu_selesai_pelaksanaan" name="waktu_selesai_pelaksanaan" type="text" placeholder="dd/mm/tttt" />
+          </div>
+
+          <div class="form-row">
+            <label for="jenis_penyelenggara">Jenis Penyelenggara</label>
+            <select id="jenis_penyelenggara" name="jenis_penyelenggara"></select>
+          </div>
+
+          <div class="form-row">
+            <label for="penyelenggara_kegiatan">Penyelenggara Kegiatan</label>
+            <input id="penyelenggara_kegiatan" name="penyelenggara_kegiatan" type="text" placeholder="Masukkan penyelenggara kegiatan" />
+          </div>
+
+          <div class="form-row">
+            <label for="nomor_bukti_fisik_nomor_sertifikasi">Nomor Bukti Fisik / Nomor Sertifikasi</label>
+            <input id="nomor_bukti_fisik_nomor_sertifikasi" name="nomor_bukti_fisik_nomor_sertifikasi" type="text" placeholder="Masukkan nomor bukti fisik" />
+          </div>
+
+          <div class="form-row">
+            <label for="upload_foto_menerima_sertifikat">Upload Foto Menerima Sertifikat</label>
+            <div class="field-block">
+              <input id="upload_foto_menerima_sertifikat" type="file" accept="application/pdf" />
+              <div class="hint">Jenis file yang dapat di upload adalah (.pdf) dengan ukuran maksimal 10 Mb</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="nidn_pembimbing">NIDN Pembimbing</label>
+            <div class="field-block select-with-arrow">
+              <input id="nidn_pembimbing" type="text" placeholder="Pilih Pembimbing" />
+              <div class="hint">Bila kegiatan tidak memiliki dosen pembimbing, dapat dimasukkan NIDN dosen wali ketua kegiatan. Kegiatan Sertifikasi yang di inputkan adalah nama dosen wali / WD 1 Fakultas</div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="nuptk_pembimbing">NUPTK Pembimbing</label>
+            <div class="field-block select-with-arrow">
+              <input id="nuptk_pembimbing" type="text" placeholder="Pilih Pembimbing" />
+            </div>
+          </div>
+
+          <div class="form-row">
+            <label for="laman_publikasi_kegiatan">Laman Publikasi Kegiatan</label>
+            <div class="field-block">
+              <input id="laman_publikasi_kegiatan" type="url" placeholder="https://example.com" />
+              <div class="hint">Dapat diisi alamat laman website publikasi kegiatan, atau laman berita/media sosial terkait kegiatan</div>
+            </div>
+          </div>
+        </section>
+
+        <div class="footer-actions">
+          <button type="button" class="btn yellow">MASTER KEGIATAN</button>
+          <button type="button" id="saveBtn" class="btn cyan">SIMPAN</button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <script src="./app.js"></script>
+</body>
+</html>
