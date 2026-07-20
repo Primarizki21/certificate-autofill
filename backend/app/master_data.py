@@ -1,0 +1,113 @@
+FORM_OPTIONS = {
+    "tahun_akademik": [
+        "2022/2023 - Ganjil",
+        "2022/2023 - Genap",
+        "2023/2024 - Ganjil",
+        "2023/2024 - Genap",
+        "2024/2025 - Ganjil",
+        "2024/2025 - Genap",
+        "2025/2026 - Ganjil",
+        "2025/2026 - Genap",
+        "2035/2036 - Genap",
+    ],
+    "kelompok_kegiatan": [
+        ":: Pilih Kelompok Kegiatan ::",
+        "Kegiatan Wajib Universitas",
+        "Kegiatan Bidang Organisasi dan Kepemimpinan",
+        "Kegiatan Bidang Penalaran dan Keilmuan",
+        "Kegiatan Bidang Minat dan Bakat",
+        "Kegiatan Bidang Kepedulian Sosial",
+        "Kegiatan Lainnya",
+    ],
+    "jenis_kegiatan": [
+        "--",
+        "Pengurus Organisasi",
+        "Anggota Aktif Organisasi",
+        "Mengikuti Pelatihan Kepemimpinan LKMM",
+        "Latihan Kepemimpinan Lainnya",
+        "Panitia Dalam Suatu Kegiatan Kemahasiswaan",
+        "Mencalonkan Diri Sebagai Calon Ketua/Anggota Organisasi Mahasiswa",
+        "Berpartisipasi Dalam Pemira",
+        "Peserta PKKMB",
+    ],
+    "tingkat": [
+        "Internasional",
+        "Nasional",
+        "Universitas",
+        "Fakultas",
+        "Departemen/Program Studi",
+        "UKM",
+    ],
+    "prestasi_partisipasi_jabatan": [
+        "Ketua",
+        "Wakil Ketua",
+        "Sekretaris",
+        "Pengurus Inti Lain",
+        "Anggota Pengurus",
+        "Panitia",
+        "Peserta",
+    ],
+    "jenis_penyelenggara": [
+        "PTN di Indonesia",
+        "PTS di Indonesia",
+        "PT di luar negeri",
+        "Kementerian Negara",
+        "BUMN",
+        "Lembaga/Yayasan lain",
+    ],
+    "bukti_fisik": [
+        "Sertifikat",
+        "Surat Keputusan",
+        "Surat Perintah",
+        "Presensi",
+        "Kartu Pemilih",
+        "Patent",
+        "Fotocopi Hasil Karya",
+        "Daftar Hadir",
+        "Hasil Karya",
+        "Dokumen",
+        "Daftar Nilai",
+    ],
+}
+
+PTN_KEYWORDS = [
+    "UNIVERSITAS AIRLANGGA",
+    "UNIVERSITAS INDONESIA",
+    "UNIVERSITAS GADJAH MADA",
+    "INSTITUT TEKNOLOGI BANDUNG",
+    "INSTITUT TEKNOLOGI SEPULUH NOPEMBER",
+    "UNIVERSITAS BRAWIJAYA",
+    "UNIVERSITAS DIPONEGORO",
+    "UNIVERSITAS PADJADJARAN",
+    "UNIVERSITAS NEGERI",
+]
+
+PTS_KEYWORDS = [
+    "UNIVERSITAS MUHAMMADIYAH",
+    "UNIVERSITAS ISLAM INDONESIA",
+    "UNIVERSITAS BINA NUSANTARA",
+    "UNIVERSITAS TELKOM",
+    "UNIVERSITAS TRISAKTI",
+    "UNIVERSITAS PELITA HARAPAN",
+]
+
+BUMN_KEYWORDS = [
+    "PERTAMINA",
+    "TELKOM INDONESIA",
+    "BANK MANDIRI",
+    "BANK RAKYAT INDONESIA",
+    "BRI",
+    "BANK NEGARA INDONESIA",
+    "BNI",
+    "PLN",
+    "KAI",
+    "ANGKASA PURA",
+]
+
+FOREIGN_UNIVERSITY_HINTS = [
+    "UNIVERSITY OF",
+    "COLLEGE OF",
+    "NATIONAL UNIVERSITY OF",
+    "TECHNICAL UNIVERSITY",
+    "INSTITUTE OF TECHNOLOGY",
+]
