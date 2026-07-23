@@ -2,10 +2,11 @@
 """Batch arXiv + Semantic Scholar paper search with rate limiting.
 
 Searches queries from docs/paper_keywords.md.
-Respects arXiv (~1 req/3s) and Semantic Scholar (~2 req/s) rate limits.
-Downloads PDFs by default (--no-pdfs to skip).
-Uses tqdm progress bars throughout.
-Results grouped by low-level topic within each group.
+Respects arXiv (~1 req/3s) and Semantic Scholar (~5 req/s) rate limits.
+Downloads PDFs by default (--no-pdfs to skip). Groups PDFs by section/topic.
+Uses tqdm progress bars throughout. Results grouped by low-level topic
+within each group. Has auto-resume from checkpoint (--fresh to reset).
+Category filter: cs.CL, cs.AI, cs.LG only (arXiv categories).
 
 All HTTP calls have retry with exponential backoff (429/5xx/network errors).
 
@@ -18,6 +19,8 @@ Usage:
   python scripts/paper_search.py --query "LLM document extraction" --max 20
   python scripts/paper_search.py --all --no-pdfs
   python scripts/paper_search.py --all --dry-run
+  python scripts/paper_search.py --all --json
+  python scripts/paper_search.py --all --fresh
 """
 
 import argparse
@@ -37,7 +40,7 @@ from tqdm import tqdm
 NS = {'a': 'http://www.w3.org/2005/Atom'}
 
 ARXIV_DELAY = 3
-SS_DELAY = 2
+SS_DELAY = 5
 PDF_DELAY = 3
 MAX_RESULTS = 20
 YEAR_PREFERRED = 2023
@@ -52,6 +55,8 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 KEYWORDS_FILE = REPO_ROOT / "docs" / "paper_keywords.md"
 FINDINGS_FILE = REPO_ROOT / "docs" / "paper_findings.md"
 PDF_DIR = REPO_ROOT / "papers"
+CHECKPOINT_FILE = REPO_ROOT / "scripts" / ".paper_search_state.json"
+ARXIV_CATEGORIES = ["cs.CL", "cs.AI", "cs.LG"]
 
 _last_arxiv = 0.0
 _last_ss = 0.0
@@ -80,8 +85,9 @@ def search_arxiv(query, max_results=20, sort="relevance", retry=0):
     global _last_arxiv
     _last_arxiv = rate_limit(ARXIV_DELAY, _last_arxiv)
 
+    cat_filter = '+OR+'.join(f'cat:{c}' for c in ARXIV_CATEGORIES)
     params = {
-        'search_query': f'all:{urllib.parse.quote(query)}',
+        'search_query': f'all:{urllib.parse.quote(query)}+AND+({cat_filter})',
         'max_results': str(max_results),
         'sortBy': sort,
         'sortOrder': 'descending',
@@ -256,6 +262,23 @@ def passes_year_filter(year, tolerance_used):
     return False
 
 
+def save_checkpoint(state):
+    with open(CHECKPOINT_FILE, 'w', encoding='utf-8') as f:
+        json.dump(state, f, indent=2, ensure_ascii=False)
+
+
+def load_checkpoint():
+    if CHECKPOINT_FILE.exists():
+        with open(CHECKPOINT_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    return None
+
+
+def cleanup_checkpoint():
+    if CHECKPOINT_FILE.exists():
+        CHECKPOINT_FILE.unlink()
+
+
 def main():
     global ARXIV_DELAY, SS_DELAY, MAX_RESULTS, MIN_CITATIONS
 
@@ -294,6 +317,14 @@ def main():
     parser.add_argument(
         '--pdf-dir', type=str, default=str(PDF_DIR),
         help=f'PDF output directory (default: {PDF_DIR})'
+    )
+    parser.add_argument(
+        '--fresh', action='store_true',
+        help='Ignore checkpoint and start fresh'
+    )
+    parser.add_argument(
+        '--json', action='store_true', dest='json_output',
+        help='Also write findings as JSON (addon, .md always written)'
     )
     args = parser.parse_args()
 
@@ -348,6 +379,25 @@ def main():
     processed = 0
     seen_groups = {}
 
+    checkpoint = None if args.fresh else load_checkpoint()
+    if checkpoint:
+        all_results = checkpoint['all_results']
+        global_tolerance_used = checkpoint['global_tolerance_used']
+        completed = checkpoint.get('completed_queries', [])
+        paper_to_groups = {k: set(v) for k, v in checkpoint.get('paper_to_groups', {}).items()}
+        queries = [
+            q for q in queries
+            if {'group': q['group'], 'section': q['section'], 'query': q['query']} not in completed
+        ]
+        processed = checkpoint.get('progress', {}).get('processed', 0)
+        print(f"\n  Checkpoint found — resuming from query {processed + 1}/{total_queries}")
+        print(f"  ({len(completed)} queries already done, {len(queries)} remaining)")
+        if not queries:
+            print("  All queries already completed. Use --fresh to re-run.")
+    else:
+        paper_to_groups = {}
+        checkpoint = None
+
     for q in queries:
         q['topic_label'] = q.get('topic_label') or ' '.join(q['query'].split()[:4])[:TOPIC_LABEL_MAX]
 
@@ -401,9 +451,10 @@ def main():
                 print(f"  {i}. [{p['arxiv_id']}] ({p['year']}, cit:{c}) {p['title'][:90]}")
 
         if not args.no_pdfs and final:
-            group_pdf_dir = Path(args.pdf_dir) / f"group_{q['group'] or 'Custom'}"
+            section_dir = f"{q['section']}__{q['section_name'].replace(' ', '_')}"[:80]
+            section_pdf_dir = Path(args.pdf_dir) / f"group_{q['group'] or 'Custom'}" / section_dir
             for p in tqdm(final, desc="  PDF download", unit=" pdf", leave=False):
-                ok = download_pdf(p['arxiv_id'], group_pdf_dir)
+                ok = download_pdf(p['arxiv_id'], section_pdf_dir)
                 if not ok:
                     tqdm.write(f"    [WARN] Failed PDF: {p['arxiv_id']}")
 
@@ -412,20 +463,47 @@ def main():
         section_dict = all_results[gk][sk]['papers']
         for p in final:
             pid = p['arxiv_id']
+            paper_to_groups.setdefault(pid, set()).add(gk)
             if pid in section_dict:
                 existing_label = q.get('topic_label', '')
                 if existing_label and existing_label not in section_dict[pid].get('found_by', []):
                     section_dict[pid].setdefault('found_by', []).append(existing_label)
+                if gk not in section_dict[pid].setdefault('also_in_groups', []):
+                    section_dict[pid]['also_in_groups'].append(gk)
             else:
                 p['found_by'] = [q.get('topic_label', '')] if q.get('topic_label') else []
+                p['also_in_groups'] = []
                 section_dict[pid] = p
 
         seen_groups.setdefault(gk, q['group_name'] or '')
+
+        # --- checkpoint ---
+        cp = {
+            'all_results': all_results,
+            'global_tolerance_used': global_tolerance_used,
+            'completed_queries': checkpoint.get('completed_queries', []) if checkpoint else [],
+            'paper_to_groups': {k: list(v) for k, v in paper_to_groups.items()},
+            'progress': {'total': total_queries, 'processed': processed},
+        }
+        cp_entry = {'group': q['group'], 'section': q['section'], 'query': q['query']}
+        if cp_entry not in cp['completed_queries']:
+            cp['completed_queries'].append(cp_entry)
+        save_checkpoint(cp)
+        checkpoint = cp
 
     print()
     print(f"{'='*60}")
     print(f"  DONE — processed {processed}/{total_queries} queries")
     print(f"{'='*60}")
+
+    # Cross-group tags: fill also_in_groups for papers found in multiple groups
+    for pid, groups in paper_to_groups.items():
+        if len(groups) > 1:
+            for gk in groups:
+                for sk in all_results.get(gk, {}):
+                    section = all_results[gk][sk]
+                    if pid in section.get('papers', {}):
+                        section['papers'][pid]['also_in_groups'] = sorted(groups - {gk})
 
     FINDINGS_FILE.parent.mkdir(parents=True, exist_ok=True)
     if FINDINGS_FILE.exists():
@@ -470,17 +548,19 @@ def main():
                 if all_topics:
                     f.write(f"*Topics: {', '.join(sorted(all_topics))}*\n\n")
 
-                f.write("| # | Paper | Y | Cit | Topic |\n")
-                f.write("|---|-------|---|-----|-------|\n")
+                f.write("| # | Paper | Y | Cit | Topic | Cross |\n")
+                f.write("|---|-------|---|-----|-------|-------|\n")
                 for i, p in enumerate(papers_list, 1):
                     title_esc = p['title'].replace('|', '\\|')[:100]
                     c = p.get('citationCount', 'N/A')
                     if c is None:
                         c = '?'
                     topic = (p.get('found_by') or [''])[0][:50]
+                    cross = p.get('also_in_groups', [])
+                    cross_str = ', '.join(sorted(cross))[:30] if cross else ''
                     f.write(
                         f"| {i} | [{p['arxiv_id']}]({p['url']}) {title_esc} "
-                        f"| {p['year'] % 100} | {c} | {topic} |\n"
+                        f"| {p['year'] % 100} | {c} | {topic} | {cross_str} |\n"
                     )
 
                 sk_short = sk.split(' — ')[0]
@@ -500,12 +580,62 @@ def main():
 
         f.write(f"**Total papers collected: {total_unique}**\n")
 
+    if args.json_output:
+        json_path = FINDINGS_FILE.with_suffix('.json')
+        json_out = {
+            'generated': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'filters': {
+                'year_min': YEAR_TOLERATED,
+                'year_preferred': YEAR_PREFERRED,
+                'min_citations': MIN_CITATIONS,
+            },
+            'total_papers': total_unique,
+            'groups': {},
+        }
+        for gk in sorted(all_results.keys()):
+            sections = all_results[gk]
+            if not sections:
+                continue
+            group_data = {'description': seen_groups.get(gk, ''), 'sections': {}}
+            for sk in sorted(sections.keys()):
+                papers_dict = sections[sk]['papers']
+                if not papers_dict:
+                    continue
+                papers_list = sorted(
+                    papers_dict.values(),
+                    key=lambda x: x.get('citationCount') or 0,
+                    reverse=True,
+                )
+                group_data['sections'][sk] = []
+                for p in papers_list:
+                    group_data['sections'][sk].append({
+                        'arxiv_id': p['arxiv_id'],
+                        'title': p['title'][:200],
+                        'year': p['year'],
+                        'citation_count': p.get('citationCount'),
+                        'categories': p.get('categories', ''),
+                        'found_in_queries': p.get('found_by', []),
+                        'also_in_groups': p.get('also_in_groups', []),
+                        'url': p['url'],
+                        'abstract': p['abstract'][:1000],
+                    })
+            json_out['groups'][gk] = group_data
+        with open(json_path, 'w', encoding='utf-8') as f:
+            json.dump(json_out, f, indent=2, ensure_ascii=False)
+        print(f"       → {json_path}")
+
+    cleanup_checkpoint()
+
     print(f"\nResults → {FINDINGS_FILE}")
+    if args.json_output:
+        print(f"       → {FINDINGS_FILE.with_suffix('.json')}")
     print(f"Total unique papers: {total_unique}")
     if not args.no_pdfs:
         pdf_dir_used = Path(args.pdf_dir)
-        count = sum(1 for d in pdf_dir_used.glob("group_*") for _ in d.glob("*.pdf"))
+        count = sum(1 for d in pdf_dir_used.glob("group_*") for _ in d.rglob("*.pdf"))
         print(f"PDFs downloaded: {count} → {pdf_dir_used}")
+    if not args.fresh:
+        cleanup_checkpoint()
 
 
 if __name__ == '__main__':

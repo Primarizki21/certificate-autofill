@@ -14,3 +14,6 @@ papers/
 
 # Secrets — one real file per developer
 .env
+
+# Arxiv search state (auto-generated, resume checkpoint)
+scripts/.paper_search_state.json
