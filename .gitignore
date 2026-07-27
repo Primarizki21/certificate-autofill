@@ -12,6 +12,9 @@ wheels/
 # Downloaded arXiv PDFs
 papers/
 
+# Ground truth certificate files (binary, managed externally)
+Sertifikat_Ground_Truth/
+
 # Secrets — one real file per developer
 .env
 
