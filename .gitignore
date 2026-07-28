@@ -20,3 +20,6 @@ Sertifikat_Ground_Truth/
 
 # Arxiv search state (auto-generated, resume checkpoint)
 scripts/.paper_search_state.json
+
+# Windows download artifacts
+*:Zone.Identifier
