@@ -1,0 +1,255 @@
+GROUND TRUTH VERIFICATION CHECKLIST
+====================================
+Generated: 2026-07-30
+
+Check each file in the PDF/Sertifikat_Ground_Truth/ folder and verify
+the corresponding entry in Ground_Truth_Sertifikat.csv is correct.
+
+File naming note: some numeric-ID filenames (e.g. "1930354_219642_skp.pdf")
+map to a PDF under "Magang/" folder in Sertifikat_Ground_Truth/.
+All filenames listed are the "Nama File" column in the CSV.
+
+======================================================================
+CATEGORY 1: GT entry has empty/dash fields (38 files)
+======================================================================
+These may be intentional (e.g. no date on cert). Verify the field is
+truly missing in the PDF, not a data entry mistake.
+
+Sertif_sportfes_vene_panitia.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+primarizki_panitia_binary_2024.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+PRIMARIZKI_panitia_binary_2025.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+Primarizki_panitia_synreaach_2024.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+Primarizki_kim_unair_2024.png
+  -> empty: Nomor
+
+Piagam HIMA S1-AK 2025-compressed_69.pdf
+  -> empty: Waktu Mulai, Waktu Selesai, Nomor
+
+Primarizki_hima.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+VENEDICT_sertif_bem.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+2065179_219642_skp.pdf
+  -> empty: Nomor
+
+Sertifikat Kepengurusan IRIS 2025_Muhammad Fazil Irvan Putra.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+BINARY_Venedict_peserta.pdf
+  -> empty: Nomor
+
+Sertif_ppkmb_univ_peserta.pdf
+  -> empty: Nomor
+
+SERTIF76.png
+  -> empty: Nomor
+
+Sertif sinem_vene_magang UKM.pdf
+  -> empty: Waktu Mulai, Waktu Selesai, Nomor
+
+2030325_219642_skp.pdf
+  -> empty: Waktu Mulai, Waktu Selesai, Nomor
+
+2071996_221065_skp.pdf
+  -> empty: Waktu Mulai, Waktu Selesai, Nomor
+
+1966887_221065_skp.pdf
+  -> empty: Nomor
+
+2954283_219642_skp.pdf
+  -> empty: Nomor
+
+AQEEL_Seminar.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_Certificate Guest Lecture 9 Nov 2023.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_Certificate Guest Lecture 17 Nov 2023.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_E - Certificate Agentic AI 17 November 2025.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_Guest Lecture 25 October 2024.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_Guest Lecture ERP SAP 25 April 2025.pdf
+  -> empty: Nomor
+
+Ananda Aqeel Fathur Rahman_Guest Lecture FDM 29 November 2024.pdf
+  -> empty: Nomor
+
+E-certificate Ananda Aqeel Fathur Rahman (1).pdf
+  -> empty: Nomor
+
+File sertifikat untuk _VenedictGrinaldyPrasetyo__240103_143733_ORM.pdf
+  -> empty: Nomor
+
+Venedict G. P_peserta talkshow.pdf
+  -> empty: Penyelenggara, Waktu Mulai, Waktu Selesai, Nomor
+
+2954685_219642_skp.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+2954933_219642_skp.pdf
+  -> empty: Nomor
+
+Airno_Faiz.pdf
+  -> empty: Nomor
+
+FIT_Faiz.pdf
+  -> empty: Nomor
+
+Girifest_Faiz.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+NIC_Faiz.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+Poisson.Faiz.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+Primarizki Ahmad Hariyono_data slayer 2_lomba.png
+  -> empty: Waktu Mulai, Waktu Selesai
+
+SDC Unisba_Faiz.pdf
+  -> EMPTY: Nama Kegiatan, Waktu Mulai, Waktu Selesai
+  * Nama Kegiatan should not be empty! This is likely a real GT error.
+
+Sertifikat_Peserta_Primarizki Ahmad Hariyono_ML.pdf
+  -> empty: Waktu Mulai, Waktu Selesai
+
+
+======================================================================
+CATEGORY 2: NER failed ALL fields (42 files)
+======================================================================
+These are the hardest cases. NER got 0/5 fields correct for these files.
+Check if GT is wrong OR if the certificate text is too garbled for extraction.
+
+1930354_219642_skp.pdf  (folder: Magang)
+  5/5 fields failed
+1952296_219642_skp.pdf  (folder: Magang)
+  5/5 fields failed
+1966887_221065_skp.pdf  (folder: Magang)
+  4/4 fields failed
+2030372_219642_skp.pdf  (folder: Magang)
+  5/5 fields failed
+2160238_221065_skp.pdf  (folder: Magang)
+  5/5 fields failed
+2398697_219642_skp.pdf  (folder: Magang)
+  5/5 fields failed
+2398703_219642_skp.pdf  (folder: Magang)
+  5/5 fields failed
+2439919_221065_skp.pdf  (folder: Magang)
+  5/5 fields failed
+2954421_219642_skp.pdf  (folder: Lomba)
+  5/5 fields failed
+2954571_219642_skp.pdf  (folder: Lomba)
+  5/5 fields failed
+2954631_219642_skp.pdf  (folder: Lomba)
+  5/5 fields failed
+2954685_219642_skp.pdf  (folder: Lomba)
+  3/3 fields failed
+2955331_219642_skp.pdf  (folder: Lomba)
+  5/5 fields failed
+ACTION_Muhammad Fazil Irvan Putra_compressed.pdf  (folder: Aksi Sosial)
+  5/5 fields failed
+ACW_Faiz.pdf  (folder: Pembicara)
+  5/5 fields failed
+Ananda Aqeel Fathur Rahman_Certificate Guest Lecture 17 Nov 2023.pdf
+  4/4 fields failed
+Ananda Aqeel Fathur Rahman_E - Certificate Agentic AI 17 November 2025.pdf
+  4/4 fields failed
+Ananda Aqeel Fathur Rahman_Guest Lecture ERP SAP 25 April 2025.pdf
+  4/4 fields failed
+BINARY_Venedict_peserta.pdf  (folder: Peserta Seminar)
+  4/4 fields failed
+E-certificate Ananda Aqeel Fathur Rahman (1).pdf
+  4/4 fields failed
+FIT_Faiz.pdf  (folder: Lomba)
+  4/4 fields failed
+Falcon_Faiz.pdf  (folder: Lomba)
+  5/5 fields failed
+Gelar Rasa_Muhammad Fazil Irvan Putra.pdf  (folder: Aksi Sosial)
+  5/5 fields failed
+Girifest_Faiz.pdf  (folder: Lomba)
+  3/3 fields failed
+KARSA_Venedict_peserta.pdf  (folder: Peserta Seminar)
+  5/5 fields failed
+MLQ - Primarizki Ahmad Hariyono.pdf  (folder: Lomba)
+  5/5 fields failed
+NIC_Faiz.pdf  (folder: Lomba)
+  3/3 fields failed
+PRIMARIZKI_panitia_binary_2025.pdf  (folder: Kepanitiaan)
+  3/3 fields failed
+PRIMARIZKI_panitia_dataquest_2025.pdf  (folder: Kepanitiaan)
+  5/5 fields failed
+Poisson.Faiz.pdf  (folder: Lomba)
+  3/3 fields failed
+Primarizki Ahmad Hariyono_data slayer 2_lomba.png  (folder: Lomba)
+  3/3 fields failed
+Primarizki Ahmad Hariyono_gammafest_lomba.pdf  (folder: Lomba)
+  5/5 fields failed
+Primarizki_hima.pdf  (folder: ORMAWA)
+  3/3 fields failed
+Primarizki_panitia_synreaach_2024.pdf  (folder: Kepanitiaan)
+  3/3 fields failed
+PsyAcc_Faiz.pdf  (folder: Lomba)
+  5/5 fields failed
+Rasio_Faiz.pdf  (folder: Lomba)
+  5/5 fields failed
+Sertif_sportfes_vene_panitia.pdf  (folder: Kepanitiaan)
+  3/3 fields failed
+UNITY_Muhammad Fazil Irvan Putra.pdf  (folder: Lomba)
+  5/5 fields failed
+VENEDICT_panitia_karsa.pdf  (folder: Kepanitiaan)
+  5/5 fields failed
+Venedict_panitia_specta.pdf  (folder: Kepanitiaan)
+  5/5 fields failed
+hakim_lomba.png  (folder: Lomba)
+  5/5 fields failed
+primarizki_panitia_binary_2024.pdf  (folder: Kepanitiaan)
+  3/3 fields failed
+
+
+======================================================================
+CATEGORY 3: Regex failed ALL fields (15 files)
+======================================================================
+These files are so hard that even regex gets nothing. Verify GT is
+correct before assuming these are unsolvable.
+
+1966887_221065_skp.pdf
+2030325_219642_skp.pdf
+2071996_221065_skp.pdf
+Ananda Aqeel Fathur Rahman_E - Certificate Agentic AI 17 November 2025.pdf
+FIT_Faiz.pdf
+Girifest_Faiz.pdf
+KARSA_Venedict_peserta.pdf
+NIC_Faiz.pdf
+Piagam HIMA S1-AK 2025-compressed_69.pdf
+Poisson.Faiz.pdf
+Primarizki Ahmad Hariyono_data slayer 2_lomba.png
+Rasio_Faiz.pdf
+Sertif sinem_vene_magang UKM.pdf
+Sertifikat_Peserta_Primarizki Ahmad Hariyono_ML.pdf
+Venedict G. P_peserta talkshow.pdf
+
+
+======================================================================
+BEST PRACTICE
+======================================================================
+1. Open each PDF in Sertifikat_Ground_Truth/<folder>/
+2. Compare against the CSV entry for that file
+3. Mark corrections in the CSV
+4. Files in Category 2 + 3 are highest priority — both regex AND NER fail

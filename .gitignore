@@ -23,3 +23,7 @@ scripts/.paper_search_state.json
 
 # Windows download artifacts
 *:Zone.Identifier
+
+# Benchmark output (generated)
+tests/benchmark_runs/
+tests/benchmark_results.json

@@ -62,3 +62,33 @@ def test_match_missing_actual():
     r = match_field("sesuatu", None, "nama_kegiatan_sertifikasi")
     assert r["exact"] is False
     assert r["fuzzy"] is False
+
+
+def test_wer_cer_exact():
+    r = match_field("Dataquest 4.0", "Dataquest 4.0", "nama_kegiatan_sertifikasi")
+    assert r["wer"] == 0.0
+    assert r["cer"] == 0.0
+
+
+def test_wer_cer_partial():
+    r = match_field("Dataquest 4.0", "Dataquest 5.0", "nama_kegiatan_sertifikasi")
+    assert 0 < r["wer"] < 1.0
+    assert 0 < r["cer"] < 1.0
+
+
+def test_wer_cer_null():
+    r = match_field("Dataquest 4.0", None, "nama_kegiatan_sertifikasi")
+    assert r["wer"] == 1.0
+    assert r["cer"] == 1.0
+
+
+def test_wer_cer_normalized_case():
+    r = match_field("HOLOGY 7.0", "Hology 7.0", "nama_kegiatan_sertifikasi")
+    assert r["wer"] == 0.0
+    assert r["cer"] == 0.0
+
+
+def test_wer_cer_partial_word():
+    r = match_field("Dataquest 4.0", "Dataquest 5.0", "nama_kegiatan_sertifikasi")
+    assert 0 < r["wer"] < 1.0
+    assert 0 < r["cer"] < 1.0
