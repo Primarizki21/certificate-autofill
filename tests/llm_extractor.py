@@ -48,7 +48,7 @@ class TokenUsage:
     correct: bool | None = None
 
 
-def call_ollama(prompt: str, model: str = DEFAULT_MODEL) -> tuple[str, dict[str, Any]]:
+def call_ollama(prompt: str, model: str = DEFAULT_MODEL, max_tokens: int = 30) -> tuple[str, dict[str, Any]]:
     url = f"{OLLAMA_BASE}/api/generate"
     payload = json.dumps({
         "model": model,
@@ -56,7 +56,7 @@ def call_ollama(prompt: str, model: str = DEFAULT_MODEL) -> tuple[str, dict[str,
         "stream": False,
         "options": {
             "num_ctx": 4096,
-            "num_predict": 30,
+            "num_predict": max_tokens,
             "temperature": 0,
         }
     }).encode()
