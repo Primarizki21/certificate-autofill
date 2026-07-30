@@ -1,3 +1,4 @@
+import re
 import sys
 import os
 
@@ -37,11 +38,23 @@ def load_ner_model():
     return _ner_pipe
 
 
+def normalize_for_ner(text: str) -> str:
+    if not text:
+        return text
+    space_around_comma = re.sub(r",(\S)", r", \1", text)
+    space_before_upper = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", space_around_comma)
+    space_digit_letter = re.sub(r"(?<=\d)(?=[A-Za-z])", " ", space_before_upper)
+    space_letter_digit = re.sub(r"(?<=[A-Za-z])(?=\d)", " ", space_digit_letter)
+    result = re.sub(r"\s+", " ", space_letter_digit).strip()
+    return result
+
+
 def extract_entities(text: str, ner_pipe=None) -> list[NEREntity]:
     if not text or not text.strip():
         return []
     if ner_pipe is None:
         ner_pipe = load_ner_model()
+    text = normalize_for_ner(text)
     max_length = 512
     chunks = [text[i:i+max_length] for i in range(0, len(text), max_length)]
     entities = []

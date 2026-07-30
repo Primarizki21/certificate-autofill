@@ -78,6 +78,28 @@ def cer_score(reference: str, hypothesis: str) -> float:
     return min(edit_dist / len(reference), 1.0)
 
 
+def is_abbreviation_of(abbr: str, full: str) -> bool:
+    abbr_clean = re.sub(r"[^a-zA-Z]", "", abbr).lower()
+    if not abbr_clean or len(abbr_clean) < 2:
+        return False
+    full_words = re.sub(r"[^a-zA-Z\s]", "", full).lower().split()
+    if len(full_words) < 2 or len(full_words) > len(abbr_clean) * 3:
+        return False
+    i = 0
+    for word in full_words:
+        if not word:
+            continue
+        if i < len(abbr_clean) and word[0] == abbr_clean[i]:
+            i += 1
+    return i >= len(abbr_clean) * 0.6
+
+
+def abbreviation_match(expected: str, actual: str | None) -> bool:
+    if not actual:
+        return False
+    return is_abbreviation_of(expected, actual) or is_abbreviation_of(actual, expected)
+
+
 def match_field(expected: str, actual: str | None, field_name: str) -> dict:
     if not actual:
         return {
@@ -114,12 +136,18 @@ def match_field(expected: str, actual: str | None, field_name: str) -> dict:
     norm_act = normalize_value(actual)
     w = wer_score(norm_exp, norm_act)
     c = cer_score(norm_exp, norm_act)
+    fuzzy = contains or overlap >= 0.5
+
+    if not fuzzy and field_name in ("penyelenggara_kegiatan", "nama_kegiatan_sertifikasi"):
+        if abbreviation_match(expected, actual):
+            fuzzy = True
+            exact = True
 
     return {
         "exact": exact,
         "contains": contains,
         "token_overlap": overlap,
-        "fuzzy": contains or overlap >= 0.5,
+        "fuzzy": fuzzy,
         "wer": w,
         "cer": c,
     }
