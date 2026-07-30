@@ -34,3 +34,23 @@ tests/benchmark_results.json
 # Marker pipeline input/output (external paper PDFs)
 input_marker_paper/
 output_marker/
+
+# ML model checkpoints (binary, stored in model registry)
+tests/ner_model/
+
+# Generated Excel outputs
+*.xlsx
+
+# One-off docs (handoff superseded versions, verification reports)
+docs/handoff.md
+docs/handoff_v2.md
+docs/handoff_v3.md
+docs/handoff_v4.md
+docs/ground_truth_checklist.txt
+docs/gt_verification_report.txt
+docs/phase_v4_methodology.docx
+docs/phase_v4_results_summary.xlsx
+README_RUN_FIXED.md
+FRONTEND_INCLUDED.md
+RUN_BACKEND.ps1
+RUN_FRONTEND_STANDALONE.ps1
