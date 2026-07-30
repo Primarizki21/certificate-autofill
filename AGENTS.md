@@ -17,7 +17,16 @@ docker compose up --build
 - Prometheus: `http://localhost:9090`
 - Grafana: `http://localhost:3000` (`admin:admin`)
 
-### Manual (backend only)
+### Manual — Linux / macOS
+```bash
+export APP_ENV=development
+export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
+export PROCESSING_MODE=background
+uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+```
+PostgreSQL 17 harus aktif di port 5434, database `certautofill` sudah dibuat.
+
+### Manual — Windows (PowerShell)
 ```powershell
 $env:APP_ENV="development"
 $env:DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
@@ -85,8 +94,26 @@ frontend/
   styles.css                  # Styling
   app.js                      # Client-side logic (polling, autofill)
 tests/
-  test_field_extractor.py
-  test_generalized_parser.py
+  benchmark_pipeline.py       # Regex baseline benchmark
+  benchmark_ner.py            # NER benchmark
+  benchmark_hybrid.py         # Hybrid + post-processing benchmark
+  benchmark_llm.py            # Hybrid + LLM benchmark
+  evaluation_framework.py     # Exact/fuzzy/WER/CER evaluation
+  ner_extractor.py            # NER model loading + inference
+  ner_to_fields.py            # NER entities → form field mapping
+  post_processors.py          # Entity scoring, signer detection, person filter
+  matchers.py                 # Abbreviation matching, string utilities
+  generate_bio_labels.py      # BIO label generation
+  fine_tune_ner.py            # NER fine-tuning (reference)
+  verify_ground_truth.py      # Ground truth verification
+  date_normalizer.py          # Date normalization helpers
+  llm_extractor.py            # LLM inference via Ollama
+  llm_extractor_v2.py         # LLM inference v2 (full-text approach)
+  test_field_extractor.py     # Unit test: field extractor
+  test_generalized_parser.py  # Unit test: generalized parser
+  test_evaluation_framework.py # Unit test: evaluation framework
+  conftest.py                 # Pytest fixtures
+  bio_labels/                 # Test fixtures (75 JSON)
 monitoring/
   prometheus.yml
   loki-config.yml
@@ -123,6 +150,36 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 ---
 
+## Testing & Benchmark
+
+```bash
+# Semua unit test
+pytest tests/ -v
+
+# Benchmark per pipeline komponen
+uv run python -m tests.benchmark_pipeline      # Regex baseline
+uv run python -m tests.benchmark_ner            # NER benchmark
+uv run python -m tests.benchmark_hybrid         # Hybrid + post-processing
+uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
+```
+
+### Hasil Benchmark (74 sertifikat)
+
+| Method | MACRO exact | MACRO fuzzy | Latency/cert | LLM calls |
+|--------|:--------:|:---------:|:----------:|:--------:|
+| Regex baseline | 42.2% | — | ~0.1s | 0 |
+| NER v1 only | 18.4% | — | ~0.07s | 0 |
+| Hybrid + post-processing | 48.1% | 66.1% | ~0.6s | 0 |
+| **Hybrid + LLM (A2 v2 full-text)** | **58.3%** | **74.5%** | **~2.5s** | 74 |
+
+### Ollama Setup
+```bash
+curl -fsSL https://ollama.com/install.sh | sh
+ollama pull llama3.2:8b
+```
+
+---
+
 ## Conventions
 
 ### Code Style
@@ -142,14 +199,6 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 ---
 
-## Testing
-```bash
-pytest tests/
-```
-Saat ini 2 file test. Coverage masih rendah — struktur test dapat berubah sesuai arahan tim.
-
----
-
 ## Perubahan yang Ada & yang Mungkin Datang
 
 Yang sudah berubah:
@@ -158,6 +207,8 @@ Yang sudah berubah:
 - V6: GENERALIZED PARSER — parser reusable, tidak hardcode satu format
 - V7: HIMA TINGKAT — aturan HIMA/Student Association menentukan Tingkat
 - V8: HIMA AIRLANGGA ONLY — HIMA mapping butuh konteks Airlangga eksplisit
+- Phase v3 (Hybrid+PP): NER + regex + post-processing — 48.1% exact
+- Phase v4 (LLM): Hybrid + Ollama llama3.2 — 58.3% exact, ~2.5s/cert
 
 Yang mungkin berubah ke depannya:
 - Skema database (migration tool mungkin ditambahkan)
@@ -176,9 +227,13 @@ Yang mungkin berubah ke depannya:
 - Docling bergantung pada model yang di-download saat runtime — slow first call
 - Form mapper punya 2 fungsi validasi: `validate_with_needs_review` (required fields) dan `field_needs_review` (per-field threshold confidence < 0.80)
 - `has_student_association_signature_context()` mendeteksi dari pola *signer dekat dengan nama organisasi*, bukan dari lokasi fisik tanda tangan
+- Ollama perlu CUDA library path untuk RTX 5050 — lihat `scripts/start_ollama.sh`
+- `pyproject.toml` punya dependencies untuk NER/fine-tuning (torch, transformers, seqeval, peft, datasets) yang tidak dipakai di pipeline utama
 
 ---
 
 ## Dokumen Referensi
+- **Status eksperimen terbaru:** [docs/handoff_v5.md](docs/handoff_v5.md) — Phase v4 (LLM), hasil benchmark, execution plan
 - **Improvement tracking:** [docs/improvements.md](docs/improvements.md) — checklist perbaikan teridentifikasi
 - **Paper keywords:** [docs/paper_keywords.md](docs/paper_keywords.md) — keyword pencarian paper per topik
+- **Literature review:** [docs/paper_findings.md](docs/paper_findings.md) — 363 papers, 57 queries, 9 groups
