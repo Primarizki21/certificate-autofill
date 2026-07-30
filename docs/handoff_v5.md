@@ -243,29 +243,40 @@ Run on same 74 certs:
 
 ### Actual Results (v4 complete)
 
-| Field | Hybrid+PP | Hybrid+PP+LLM | Delta | Notes |
-|-------|-----------|---------------|-------|-------|
-| nama_kegiatan | 24.3% | 25.7% | +1.4pp | LLM helps marginally, garbled text still hard |
-| penyelenggara | 13.5% | 13.5% | +0.0pp | LLM couldn't improve — same limitations as regex |
-| waktu_mulai | 81.8% | 81.8% | +0.0pp | Already high |
-| waktu_selesai | 81.8% | 81.8% | +0.0pp | Already high |
-| nomor | 59.6% | **65.4%** | +5.8pp | LLM finds cert numbers regex misses |
-| **tingkat** | 0% | **47.3%** | **+47.3pp** | Biggest win — LLM infers from organizer/context |
-| **MACRO exact** | 38.8% | **49.0%** | **+10.2pp** | |
-| **MACRO fuzzy** | 53.4% | **64.6%** | **+11.2pp** | |
+### Method Comparison
+
+| Method | MACRO exact | MACRO fuzzy | Calls | Total tokens | Tokens per % | Latency/cert | Notes |
+|--------|:---------:|:---------:|:----:|:----------:|:----------:|:----------:|-------|
+| Baseline (Hybrid+PP) | 38.8% | 53.4% | 0 (no LLM) | 0 | — | ~0.6s | No LLM cost |
+| A1 — per-field LLM | 49.0% | 64.6% | 125 | 61,679 | 1,259 | ~2s (4×0.5s) | Calls LLM per empty field |
+| **A2 v2 — full-text LLM** | **58.3%** | **74.5%** | **74** | **61,706** | **1,058** | **~2.5s** | **Winner: best accuracy/token** |
+
+### Per-Field Comparison (Best in bold)
+
+| Field | Baseline | A1 (per-field) | A2 v2 (full-text) |
+|-------|:------:|:-----------:|:--------------:|
+| nama_kegiatan | 24.3% | 25.7% | **43.2%** |
+| penyelenggara | 13.5% | 13.5% | **31.1%** |
+| waktu_mulai | 81.8% | 81.8% | **94.5%** |
+| waktu_selesai | 81.8% | 81.8% | **94.5%** |
+| nomor | 59.6% | 65.4% | **73.1%** |
+| tingkat | 0.0% | **47.3%** | 36.5% |
+| **MACRO** | 38.8% | 49.0% | **58.3%** |
 
 ### Key Findings
-1. **Tingkat is the main value add** — 47.3% from 0%. LLM understands BEM→Fakultas, HIMA→Departemen/Prodi heuristics.
-2. **Garbled OCR is still a ceiling** — LLM can't parse heavily concatenated text like `APHSABEMFKM` into meaningful organizers.
-3. **Prompt heuristics matter** — The aggressive prompts with explicit rules (BEM FTMM → Fakultas) were essential. Without them, LLM defaults to "Universitas" from prominent university name.
-4. **Token tracking is comprehensive** — 125 calls, 61,679 tokens, avg 503ms latency. Full per-call data in `calls.json`.
+1. **Approach 2 (full-text) wins on accuracy and token efficiency** — MACRO 58.3% vs 49.0%, same token budget.
+2. **Full context helps** — LLM sees all text at once and decides which field each piece belongs to. This helps nama_kegiatan (+13.5pp over A1) and penyelenggara (+17.6pp).
+3. **Tingkat heuristics must be in the prompt** — without explicit rules (BEM FTMM → Fakultas), LLM defaults to "Universitas" from the prominent "UNIVERSITAS AIRLANGGA" text.
+4. **Same-date post-processing** — copying waktu_mulai → waktu_selesai when selesai is missing recovered +49pp for waktu_selesai (45.5% → 94.5%).
+5. **Token tracking per field available** — `calls.json` in benchmark_runs/ directories contain per-call records for cross-method comparison.
 
 ### What to Try Next
 - **Better OCR (PaddleOCR)** — would reduce garbled text and help both LLM and regex
-- **Qwen 2.5 7B** — better at structured output, might improve tingkat accuracy past 47.3%
-- **Batch prompting** — infer all fields in one call per cert (reduce latency, maintain accuracy)
+- **Qwen 2.5 7B** — better at structured output, might improve tingkat past 36.5%
+- **Hybrid:** Use A2 v2 for most fields, but if tingkat is still low, add a separate tingkat-focused prompt (approach 1 style) as a second call
+- **Integrate into extraction_pipeline.py** — A2 v2 is production-ready: 1 LLM call per cert,~2.5s, 58.3% MACRO
 
-### Time: 2h (one-shot, model already pulled)
+### Time: ~3h total (incl. approach 1 + 2 runs, fixes, analysis)
 
 ---
 
