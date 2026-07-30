@@ -185,6 +185,10 @@ def extract_activity_name(text: str) -> str | None:
         r"\bat\s+([A-Za-z0-9][A-Za-z0-9 .&\-]{2,80})\s+which\s+was\s+held",
         r"PENGENALAN\s+KEHIDUPAN\s+KAMPUS\s+BAGI\s+MAHASISWA\s+BARU\s*\((PKKMB)\)",
         r"Kepengurusan\s+(.+?)\s+Masa\s+Bakti",
+        r"as\s+a\s+participant\s+in\s+(.+?)(?:\s+held|\s+on|\s+which|\n|$)",
+        r"participated\s+in\s+(.+?)(?:\s+on|\s+held|\s+which|\n|$)",
+        r"the\s+position\s+of\s+.+?\s+in\s+(.+?)(?:\s+held|\s+on|\s+which|\n|$)",
+        r"certificate\s+of\s+(?:completion|excellence|achievement|participation)\s+in\s+(.+?)(?:\s+held|\s+on|\s+which|\n|$)",
     ]
     for pattern in patterns:
         match = re.search(pattern, text, flags=re.IGNORECASE | re.DOTALL)
@@ -222,6 +226,9 @@ def extract_organizer(text: str) -> str | None:
     direct_patterns = [
         r"diselenggarakan\s+oleh\s+(.+?)(?:\s+pada\s+tanggal|\s+pada\s+\d|\s+tanggal\s+\d|\n|$)",
         r"yang\s+diselenggarakan\s+oleh\s+(.+?)(?:\s+pada\s+tanggal|\s+pada\s+\d|\s+tanggal\s+\d|\n|$)",
+        r"held\s+by\s+(.+?)(?:\s+on|\s+from|\s+proudly|\s+at|\s+which|\n|$)",
+        r"organized\s+by\s+(.+?)(?:\s+on|\s+from|\s+which|\n|$)",
+        r"presented\s+by\s+(.+?)(?:\s+on|\s+from|\s+which|\n|$)",
         r"\bby\s+([A-Za-z][A-Za-z0-9 .&\-]{2,80})(?:\n|$)",
     ]
     for pattern in direct_patterns:

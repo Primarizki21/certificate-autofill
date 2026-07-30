@@ -17,9 +17,8 @@ def score_entity_for_field(entity: NEREntity, full_text: str) -> float:
 
     words = [w for w in text.split() if w]
     n_words = len(words)
-    if n_words > 0:
-        title_words = sum(1 for w in words if w[0].isupper())
-        if title_words / n_words > 0.5:
+    if n_words > 0 and full_text and entity.start < len(full_text):
+        if full_text[entity.start].isupper():
             score += 0.15
 
     if re.search(r"\d", text):
@@ -42,6 +41,18 @@ def score_entity_for_field(entity: NEREntity, full_text: str) -> float:
         score += 0.10
 
     return score
+
+
+def is_likely_person_name(text: str, full_text: str) -> bool:
+    text_lower = text.lower().strip()
+    full_lower = full_text.lower()
+    pos = full_lower.find(text_lower)
+    if pos < 0:
+        return False
+    before = full_lower[max(0, pos - 80):pos]
+    if re.search(r"diberikan\s+kepada|menghargaan\s+kepada|diberikan\s+kpd", before):
+        return True
+    return False
 
 
 def has_nip_or_nim_nearby(full_text: str, entity_end: int, look_after: int = 200) -> bool:
@@ -79,6 +90,8 @@ def filter_signer_roles(entities: list[NEREntity], full_text: str) -> list[NEREn
     filtered = []
     for e in entities:
         if e.entity_type == "ORG" and is_signer_role(e, full_text):
+            continue
+        if e.entity_type == "ORG" and is_likely_person_name(e.text, full_text):
             continue
         filtered.append(e)
 

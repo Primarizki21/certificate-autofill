@@ -24,6 +24,22 @@ def map_entities_to_fields(entities: list[NEREntity], full_text: str = "") -> di
                 source="ner_indobert",
             )
 
+    nors = [e for e in entities if e.entity_type == "NOR" and len(e.text.strip()) >= 8]
+    has_good_org = (
+        "penyelenggara_kegiatan" in fields
+        and fields["penyelenggara_kegiatan"].value
+        and len(fields["penyelenggara_kegiatan"].value) >= 5
+    )
+    if nors and not has_good_org:
+        merged_nor = _merge_consecutive(nors)
+        if merged_nor:
+            best_nor = max(merged_nor, key=lambda e: score_entity_for_field(e, full_text))
+            fields["penyelenggara_kegiatan"] = ExtractedValue(
+                value=best_nor.text,
+                confidence=round(score_entity_for_field(best_nor, full_text), 2),
+                source="ner_indobert_nor",
+            )
+
     evts = [e for e in entities if e.entity_type == "EVT"]
     if evts:
         merged = _merge_consecutive(evts)

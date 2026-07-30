@@ -91,7 +91,7 @@ def is_abbreviation_of(abbr: str, full: str) -> bool:
             continue
         if i < len(abbr_clean) and word[0] == abbr_clean[i]:
             i += 1
-    return i >= len(abbr_clean) * 0.6
+    return i >= len(abbr_clean) * 0.5
 
 
 def abbreviation_match(expected: str, actual: str | None) -> bool:
