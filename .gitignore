@@ -27,3 +27,10 @@ scripts/.paper_search_state.json
 # Benchmark output (generated)
 tests/benchmark_runs/
 tests/benchmark_results.json
+
+# Generated docx documents (literature review summaries)
+*.docx
+
+# Marker pipeline input/output (external paper PDFs)
+input_marker_paper/
+output_marker/
