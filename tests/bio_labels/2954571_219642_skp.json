@@ -1,0 +1,94 @@
+{
+  "filename": "2954571_219642_skp.pdf",
+  "tokens": [
+    "TAXCENTER",
+    "PKN",
+    "STAN",
+    "SERTIFIKAT",
+    "SERT-2465/PKN.1/2025",
+    "Diberikankepada:",
+    "Raafa",
+    "Agna",
+    "Rasyada",
+    "Sebagai",
+    "Peserta",
+    "Lomba",
+    "Infografis",
+    "olehTaxCenterPoliteknikKeuanganNegaraSTAN",
+    "TangerangSelatan,30Desember2025",
+    "WakilDirekturBidangAkademik",
+    "Ditandatanganisecara",
+    "elektronik",
+    "Dr.Agus",
+    "Bandiyono,S.E,M.Si,",
+    "M.Ak"
+  ],
+  "labels": [
+    "O",
+    "O",
+    "O",
+    "O",
+    "B-NUM",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "B-ORG",
+    "B-DAT",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O"
+  ],
+  "matches": [
+    {
+      "field": "nama_kegiatan_sertifikasi",
+      "entity": "EVT",
+      "start": -1,
+      "end": -1,
+      "matched_text": "",
+      "gt_value": "Enchantax 2.0"
+    },
+    {
+      "field": "penyelenggara_kegiatan",
+      "entity": "ORG",
+      "start": 13,
+      "end": 14,
+      "matched_text": "olehTaxCenterPoliteknikKeuanganNegaraSTAN",
+      "gt_value": "Tax Center Politeknik Keuangan Negara STAN"
+    },
+    {
+      "field": "waktu_mulai_pelaksanaan",
+      "entity": "DAT",
+      "start": 14,
+      "end": 15,
+      "matched_text": "TangerangSelatan,30Desember2025",
+      "gt_value": "30 Desember 2025"
+    },
+    {
+      "field": "waktu_selesai_pelaksanaan",
+      "entity": "DAT",
+      "start": 14,
+      "end": 15,
+      "matched_text": "TangerangSelatan,30Desember2025",
+      "gt_value": "30 Desember 2025"
+    },
+    {
+      "field": "nomor_bukti_fisik_nomor_sertifikasi",
+      "entity": "NUM",
+      "start": 4,
+      "end": 5,
+      "matched_text": "SERT-2465/PKN.1/2025",
+      "gt_value": "SERT-2465/PKN.1/2025"
+    }
+  ],
+  "n_tokens": 21,
+  "n_matched": 4,
+  "n_fields": 5
+}

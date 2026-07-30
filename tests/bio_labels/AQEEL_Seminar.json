@@ -1,0 +1,72 @@
+{
+  "filename": "AQEEL_Seminar.pdf",
+  "tokens": [
+    "\"LITERASI",
+    "DIGITAL",
+    "DIMULAI",
+    "DARI",
+    "SEKARANG\"",
+    "ANANDA",
+    "AQEEL",
+    "FATHUR",
+    "RAHMAN",
+    "16",
+    "NOVEMBER",
+    "2021",
+    "NO:",
+    "11385275/11-16413/LITDIG/2021"
+  ],
+  "labels": [
+    "B-EVT",
+    "I-EVT",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "O",
+    "B-DAT",
+    "I-DAT",
+    "I-DAT",
+    "O",
+    "O"
+  ],
+  "matches": [
+    {
+      "field": "nama_kegiatan_sertifikasi",
+      "entity": "EVT",
+      "start": 0,
+      "end": 2,
+      "matched_text": "\"LITERASI DIGITAL",
+      "gt_value": "Literasi Digital Nasional: Indonesia Makin Cakap Digital dengan Tema"
+    },
+    {
+      "field": "penyelenggara_kegiatan",
+      "entity": "ORG",
+      "start": -1,
+      "end": -1,
+      "matched_text": "",
+      "gt_value": "Kementriann Komunikasi dan Informatika Republik Indonesia dan Gerakan Nasional L"
+    },
+    {
+      "field": "waktu_mulai_pelaksanaan",
+      "entity": "DAT",
+      "start": 9,
+      "end": 12,
+      "matched_text": "16 NOVEMBER 2021",
+      "gt_value": "16 November 2021"
+    },
+    {
+      "field": "waktu_selesai_pelaksanaan",
+      "entity": "DAT",
+      "start": 9,
+      "end": 12,
+      "matched_text": "16 NOVEMBER 2021",
+      "gt_value": "16 November 2021"
+    }
+  ],
+  "n_tokens": 14,
+  "n_matched": 3,
+  "n_fields": 4
+}
