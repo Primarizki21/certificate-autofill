@@ -36,7 +36,7 @@ FORM_OPTIONS = {
         "Universitas",
         "Fakultas",
         "Departemen/Program Studi",
-        "UKM",
+        "Lainnya",
     ],
     "prestasi_partisipasi_jabatan": [
         "Ketua",
