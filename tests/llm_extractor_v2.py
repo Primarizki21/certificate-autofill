@@ -23,7 +23,7 @@ from tests.llm_extractor import (
     TokenUsage,
 )
 
-PROMPT_VERSION = "v2_fulltext"
+PROMPT_VERSION = "v2_fulltext_v2"
 
 # Field names in the LLM output
 FIELD_MAP = {
@@ -71,8 +71,17 @@ def build_prompt_v2(raw_text: str) -> str:
         "- Jawaban HANYA format \"field: nilai\" (satu field per baris)",
         "- Setiap field harus dijawab, jangan ada yang dilewati",
         "- Jika field tidak ditemukan, tulis: field: TIDAK_DITEMUKAN",
+        "- Jika hanya ada SATU tanggal di teks, gunakan tanggal yang SAMA untuk waktu_mulai DAN waktu_selesai",
         "- Jangan tambahkan penjelasan, hanya field dan nilai",
         "- Format tanggal: DD/MM/YYYY",
+        "",
+        "PETUNJUK TINGKAT:",
+        "- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas",
+        "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Program Studi",
+        "- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas",
+        "- Jika kegiatan berskala nasional (lomba nasional, webinar nasional), maka == Nasional",
+        "- Jika kegiatan berskala internasional (konferensi internasional), maka == Internasional",
+        "- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat",
         "",
         "Field yang perlu diekstrak:",
         "1. tingkat: (pilih salah satu dari daftar ini)",
@@ -169,4 +178,6 @@ def parse_and_validate(response: str) -> dict[str, str]:
             val = validate_free_text(raw_value)
             if val:
                 validated[gt_key] = val
+    if "waktu_selesai_pelaksanaan" not in validated and "waktu_mulai_pelaksanaan" in validated:
+        validated["waktu_selesai_pelaksanaan"] = validated["waktu_mulai_pelaksanaan"]
     return validated
