@@ -23,7 +23,7 @@ from tests.evaluation_framework import (
     load_csv,
     print_report,
 )
-from tests.ner_extractor import load_ner_model, extract_entities
+from tests.ner_extractor import load_ner_model, extract_entities, normalize_for_ner
 from tests.ner_to_fields import map_entities_to_fields
 from tests.post_processors import filter_signer_roles
 
@@ -100,6 +100,8 @@ def run_hybrid_benchmark():
         if row is None:
             continue
 
+        normalized_text = normalize_for_ner(raw_text)
+
         try:
             regex_fields = extract_certificate_fields(raw_text)
         except Exception:
@@ -107,14 +109,14 @@ def run_hybrid_benchmark():
 
         try:
             entities = extract_entities(raw_text, ner_pipe)
-            ner_fields = map_entities_to_fields(entities, full_text=raw_text)
+            ner_fields = map_entities_to_fields(entities, full_text=normalized_text)
         except Exception:
             entities = []
             ner_fields = {}
 
         try:
             filtered_entities = filter_signer_roles(entities, raw_text)
-            ner_pp_fields = map_entities_to_fields(filtered_entities, full_text=raw_text)
+            ner_pp_fields = map_entities_to_fields(filtered_entities, full_text=normalized_text)
         except Exception:
             ner_pp_fields = {}
 
