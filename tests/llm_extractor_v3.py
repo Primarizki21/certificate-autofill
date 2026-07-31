@@ -51,6 +51,8 @@ MINIMIZE_CONFIG = {
         "BEM", "BADAN EKSEKUTIF", "HIMA", "HIMPUNAN", "UKM",
         "UNIT KEGIATAN", "AIESEC", "REKTORAT", "DIREKTORAT",
         "KEMAHASISWAAN", "FAKULTAS", "DEPARTEMEN", "PRODI",
+        "DEPT", "DEPARTMENT", "STUDY PROGRAM", "PROGRAM STUDI",
+        "FACULTY", "SCHOOL OF",
         "SEMA", "SENAT", "LEMBAGA", "UNIVERSITAS",
         "ORGANIZING COMMITTEE", "ORGANIZER",
     ],
@@ -60,7 +62,7 @@ MINIMIZE_CONFIG = {
     "scale_keywords": [
         "NASIONAL", "INTERNASIONAL", "INTERNATIONAL", "NATIONAL",
         "LOMBA", "KOMPETISI", "COMPETITION", "OLIMPIADE",
-        "KONFERENSI", "CONFERENCE",
+        "KONFERENSI", "CONFERENCE", "CHALLENGE", "FAIR",
     ],
     "tingkat_pattern": r"TINGKAT\s+[A-Z/ ]{3,}",
     "role_keywords": [
@@ -90,13 +92,15 @@ def _looks_garbled(line: str) -> bool:
     s = line.strip()
     if not s or len(s) < 3:
         return True
+    # Only merged no-space runs are OCR noise; spaced lines are structured
+    # (e.g. English all-caps headers like "INFORMATION SYSTEMS DEPT.").
+    if " " in s:
+        return False
     letters = [c for c in s if c.isalpha()]
     if not letters:
         return False
     upper_ratio = sum(c.isupper() for c in letters) / len(letters)
-    if " " not in s:
-        return upper_ratio > 0.5 and len(s) > 8
-    return upper_ratio > 0.95 and len(s) > 20
+    return upper_ratio > 0.5 and len(s) > 8
 
 
 def score_line(line: str, cfg: dict | None = None) -> int:
@@ -193,6 +197,20 @@ def _context_block(known_fields: dict[str, str]) -> list[str]:
     return lines
 
 
+# Shared PETUNJUK TINGKAT block for both prompt variants.
+# Order matters: specific dept/prodi signal beats faculty beats university.
+_TINGKAT_HEURISTICS = [
+    "PETUNJUK TINGKAT:",
+    "- Jika sertifikat menyebut DEPARTMENT/DEPT/STUDY PROGRAM (bahasa Inggris), maka == Departemen/Prodi",
+    "- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas",
+    "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Prodi",
+    "- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas",
+    "- Jika kegiatan berskala nasional, maka == Nasional",
+    "- Jika kegiatan berskala internasional, maka == Internasional",
+    "- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat",
+]
+
+
 def build_prompt_tingkat_context(known_fields: dict[str, str]) -> str:
     """Variant A — context-only, no raw text."""
     lines = [
@@ -203,13 +221,7 @@ def build_prompt_tingkat_context(known_fields: dict[str, str]) -> str:
         "- JANGAN jawab selain opsi ini",
         "- Jika tidak yakin, pilih yang paling mendekati",
         "",
-        "PETUNJUK TINGKAT:",
-        "- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas",
-        "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Program Studi",
-        "- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas",
-        "- Jika kegiatan berskala nasional, maka == Nasional",
-        "- Jika kegiatan berskala internasional, maka == Internasional",
-        "- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat",
+        *_TINGKAT_HEURISTICS,
         "",
         "Opsi yang diizinkan:",
     ]
@@ -240,13 +252,7 @@ def build_prompt_tingkat_minimized(
         "- JANGAN jawab selain opsi ini",
         "- Jika tidak yakin, pilih yang paling mendekati",
         "",
-        "PETUNJUK TINGKAT:",
-        "- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas",
-        "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Program Studi",
-        "- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas",
-        "- Jika kegiatan berskala nasional, maka == Nasional",
-        "- Jika kegiatan berskala internasional, maka == Internasional",
-        "- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat",
+        *_TINGKAT_HEURISTICS,
         "",
         "Opsi yang diizinkan:",
     ]
@@ -286,6 +292,18 @@ NIP. 196202281989112001
 """
 
 
+_SAMPLE_EN = """CERTIFICATE OF APPRECIATION
+Ananda Aqeel Fathur Rahman
+UNIVERSITAS AIRLANGGA
+FACULTY OF SCIENCE AND TECHNOLOGY
+INFORMATION SYSTEMS DEPT.
+as Participant
+in the online seminar entitled
+"Leveraging AI Intervention for Digital Services"
+on 25 October 2024
+"""
+
+
 def _demo():
     minimized = minimize_text(_SAMPLE_RAW)
     kept = minimized.split("\n")
@@ -295,14 +313,24 @@ def _demo():
     assert not any("NIP" in l for l in kept), "noise kept"
     assert len(minimized) <= MINIMIZE_CONFIG["max_chars"], "budget exceeded"
 
+    mini_en = minimize_text(_SAMPLE_EN)
+    upper = mini_en.upper()
+    assert "INFORMATION SYSTEMS DEPT." in upper, "dept line dropped"
+    assert "FACULTY OF SCIENCE AND TECHNOLOGY" in upper, "faculty line dropped"
+
     known = {"penyelenggara_kegiatan": "BEM FEB UNAIR", "raw_role": "PESERTA"}
     prompt_a = build_prompt_tingkat_context(known)
     assert "BEM FEB UNAIR" in prompt_a
+    assert "DEPARTMENT/DEPT/STUDY PROGRAM" in prompt_a
+    assert "Departemen/Prodi" in prompt_a
     prompt_b, mini = build_prompt_tingkat_minimized(_SAMPLE_RAW, known)
     assert "diselenggarakan oleh Badan Eksekutif" in prompt_b
 
-    print("minimize_text kept lines:")
+    print("minimize_text kept lines (ID):")
     for l in minimized.split("\n"):
+        print(f"  | {l}")
+    print("minimize_text kept lines (EN dept cert):")
+    for l in mini_en.split("\n"):
         print(f"  | {l}")
     print("ok: minimize_text + prompt builders")
     return minimized, prompt_a, prompt_b
