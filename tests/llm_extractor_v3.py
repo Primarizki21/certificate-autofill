@@ -201,9 +201,9 @@ def _context_block(known_fields: dict[str, str]) -> list[str]:
 # Order matters: specific dept/prodi signal beats faculty beats university.
 _TINGKAT_HEURISTICS = [
     "PETUNJUK TINGKAT:",
-    "- Jika sertifikat menyebut DEPARTMENT/DEPT/STUDY PROGRAM (bahasa Inggris), maka == Departemen/Prodi",
+    "- Jika sertifikat menyebut DEPARTMENT/DEPT/STUDY PROGRAM (bahasa Inggris), maka == Departemen/Program Studi",
     "- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas",
-    "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Prodi",
+    "- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Program Studi",
     "- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas",
     "- Jika kegiatan berskala nasional, maka == Nasional",
     "- Jika kegiatan berskala internasional, maka == Internasional",
@@ -322,7 +322,7 @@ def _demo():
     prompt_a = build_prompt_tingkat_context(known)
     assert "BEM FEB UNAIR" in prompt_a
     assert "DEPARTMENT/DEPT/STUDY PROGRAM" in prompt_a
-    assert "Departemen/Prodi" in prompt_a
+    assert "Departemen/Program Studi" in prompt_a
     prompt_b, mini = build_prompt_tingkat_minimized(_SAMPLE_RAW, known)
     assert "diselenggarakan oleh Badan Eksekutif" in prompt_b
 
