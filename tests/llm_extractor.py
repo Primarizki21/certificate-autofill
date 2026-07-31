@@ -18,12 +18,13 @@ TINGKAT_OPTIONS = [
     "Nasional",
     "Universitas",
     "Fakultas",
-    "Departemen/Prodi",
+    "Departemen/Program Studi",
     "Lainnya",
 ]
 
-# GT already uses the same labels as TINGKAT_OPTIONS — no translation needed.
-TINGKAT_GT_MAP = {}
+TINGKAT_GT_MAP = {
+    "Departemen/Prodi": "Departemen/Program Studi",
+}
 
 
 @dataclass
@@ -159,7 +160,7 @@ def validate_tingkat(value: str) -> str | None:
         if opt_u in clean_upper or clean_upper in opt_u:
             return opt
     if "DEPARTEMEN" in clean_upper or "PRODI" in clean_upper:
-        return "Departemen/Prodi"
+        return "Departemen/Program Studi"
     if "NASIONAL" in clean_upper:
         return "Nasional"
     if "UNIVERSITAS" in clean_upper:

@@ -20,7 +20,7 @@ The project targets ~10,000 users. Current methods send raw certificate text to 
 | Variant C (confidence ≥ 0.7 gate) | **Dropped** | Same reason — hardcoded `0.7` had no justification. |
 | Raw text in prompt | **`minimize_text()`** instead of full text | OCR noise (~40% of lines) actively confuses the LLM and costs tokens. Score-based line selection keeps only tingkat-relevant lines. |
 | JSON input/output | **Rejected** | JSON adds ~20-30 structural tokens (braces/quotes) and doesn't improve LLM accuracy. Plain `field: value` output stays. |
-| Tingkat label | **Match GT exactly** | Real form is a dropdown — LLM must output the exact dropdown value. `TINGKAT_OPTIONS` now uses `Departemen/Prodi` (was `Departemen/Program Studi`); `TINGKAT_GT_MAP` is empty (no translation). **Note:** `backend/app/master_data.py` still lists `Departemen/Program Studi` — reconcile if the form dropdown differs from GT. |
+| Tingkat label | **Match GT exactly** | Real form is a dropdown — LLM must output the exact dropdown value. `TINGKAT_OPTIONS` uses `Departemen/Program Studi` (matching GT and `master_data.py`). `TINGKAT_GT_MAP` translates old `Departemen/Prodi` values if encountered. |
 
 ### `minimize_text()` — robust by design
 - **Keyword scoring, not field extraction.** Lines scored for organizer/scale/role/date/cert relevance; noise (NIM/NIP, garbled OCR) penalized.
@@ -80,7 +80,7 @@ The project targets ~10,000 users. Current methods send raw certificate text to 
 |------|--------|-------|
 | `tests/llm_extractor_v3.py` | **New** | `minimize_text()`, `score_line()`, `debug_minimize()`, 2 prompt builders (shared `_TINGKAT_HEURISTICS`), `MINIMIZE_CONFIG`, self-check `_demo()` |
 | `tests/benchmark_llm_v3.py` | **New** | Runs hybrid+PP once, then Variant A+B for tingkat only. Outputs report.md, summaries, token_usage, minimize_stats, config.json, results.xlsx. `--limit N` for smoke tests. |
-| `tests/llm_extractor.py` | **Modified** | `TINGKAT_OPTIONS[4]` = `Departemen/Prodi`; `TINGKAT_GT_MAP` emptied; `validate_tingkat` fallback returns `Departemen/Prodi` |
+| `tests/llm_extractor.py` | **Modified** | `TINGKAT_OPTIONS[4]` = `Departemen/Program Studi`; `TINGKAT_GT_MAP` translates old `Departemen/Prodi` → `Departemen/Program Studi`; `validate_tingkat` fallback returns `Departemen/Program Studi` |
 | `docs/handoff_v6.md` | Updated | This document |
 
 ### Reused from existing code
@@ -126,5 +126,5 @@ uv run python -m tests.benchmark_llm              # A1 reference
 3. **`EVAL_FIELDS` double-patch trap:** `tests/benchmark_llm.py` mutates `ev_fw.EVAL_FIELDS` at import time. In v3 the patch is guarded (`if "tingkat" not in ev_fw.EVAL_FIELDS`) and the report dedupes fields.
 4. **EVAL_FIELDS aliasing:** `from tests.evaluation_framework import EVAL_FIELDS` is the *same list object* as `ev_fw.EVAL_FIELDS` — mutating one mutates the other.
 5. **`benchmark_runs/` is gitignored** — results are local-only.
-6. **Tingkat labels match GT exactly** — `TINGKAT_OPTIONS` and GT both use `Departemen/Prodi`; `TINGKAT_GT_MAP` is empty. `backend/app/master_data.py` still lists `Departemen/Program Studi` — reconcile with the real form if needed.
+6. **Tingkat labels match GT and form** — `TINGKAT_OPTIONS` uses `Departemen/Program Studi` (canonical). `TINGKAT_GT_MAP` translates old `Departemen/Prodi` → `Departemen/Program Studi`. All benchmark scripts and `backend/app/master_data.py` use the same canonical label.
 7. **Heuristic order matters.** The English DEPT/DEPARTMENT/STUDY PROGRAM rule must stay above the BEM-Fakultas rule — moving it below costs ~2.7pp (exp3 vs exp4).
