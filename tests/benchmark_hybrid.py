@@ -22,6 +22,8 @@ from tests.evaluation_framework import (
     evaluate_row,
     load_csv,
     print_report,
+    save_mismatch_report,
+    save_summary_json,
 )
 from tests.ner_extractor import load_ner_model, extract_entities, normalize_for_ner
 from tests.ner_to_fields import map_entities_to_fields
@@ -141,6 +143,8 @@ def run_hybrid_benchmark():
     _save_results(run_dir, summary_ner, "ner_only")
     _save_results(run_dir, summary_hybrid, "hybrid")
     _save_results(run_dir, summary_hybrid_pp, "hybrid_pp")
+    save_summary_json(summary_hybrid_pp, run_dir)
+    save_mismatch_report(all_hybrid_pp, run_dir, source="hybrid_pp")
 
     _write_diff_report(run_dir, summary_ner, summary_hybrid, summary_hybrid_pp)
 

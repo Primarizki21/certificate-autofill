@@ -31,6 +31,8 @@ from tests.evaluation_framework import (
     evaluate_row,
     load_csv,
     print_report,
+    save_mismatch_report,
+    save_summary_json,
 )
 from tests.ner_extractor import load_ner_model, extract_entities, normalize_for_ner
 from tests.ner_to_fields import map_entities_to_fields
@@ -241,6 +243,11 @@ def run_benchmark(limit: int | None = None):
         s = aggregate_results(results)
         summaries[name] = s
         _save_summary(run_dir, s, f"variant_{name}")
+
+    # Canonical summary.json (best variant)
+    best = summaries.get("b_minimized", summaries.get("a_context", summary_pp))
+    save_summary_json(best, run_dir)
+    save_mismatch_report(results_by_variant.get("b_minimized", []), run_dir, source="llm_v3")
 
     # Token summaries
     token_summaries = {}
