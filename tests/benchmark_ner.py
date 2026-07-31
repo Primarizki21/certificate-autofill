@@ -1,4 +1,3 @@
-import csv
 import json
 import os
 import sys
@@ -6,7 +5,6 @@ import time
 from collections import Counter
 from datetime import datetime
 
-import openpyxl
 from tqdm import tqdm
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
@@ -21,6 +19,8 @@ from tests.evaluation_framework import (
     evaluate_row,
     load_csv,
     print_report,
+    save_mismatch_report,
+    save_summary_json,
 )
 from tests.ner_extractor import load_ner_model, extract_entities
 from tests.ner_to_fields import map_entities_to_fields
@@ -160,10 +160,9 @@ def run_benchmark():
     with open(os.path.join(run_dir, "results.json"), "w") as f:
         json.dump(payload, f, indent=2, default=str)
 
-    _write_mismatches_csv(run_dir, all_results)
-    _write_extracted_fields_csv(run_dir, all_results)
+    save_mismatch_report(all_results, run_dir, source="ner_indobert")
+    save_summary_json(summary, run_dir)
     _write_summary_md(run_dir, summary, all_results, engine_counts)
-    _write_excel_files(run_dir)
 
     prev_summary = _load_previous_summary()
     if prev_summary:
@@ -232,53 +231,6 @@ def print_diff(prev_summary: dict, curr_summary: dict):
     print()
 
 
-def _write_mismatches_csv(run_dir: str, all_results: list):
-    path = os.path.join(run_dir, "mismatches.csv")
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["filename", "field", "expected", "actual", "confidence", "error_type"])
-        for result in all_results:
-            meta = result.get("_meta", {})
-            fname = meta.get("filename", "")
-            for field in EVAL_FIELDS:
-                r = result.get(field, {})
-                if not r:
-                    continue
-                exp = r.get("expected", "")
-                act = r.get("actual")
-                conf = r.get("confidence", 0)
-                if r.get("exact"):
-                    continue
-                if not exp or exp == "-":
-                    continue
-                error_type = "null" if act is None else "mismatch"
-                writer.writerow([fname, field, exp, act or "", f"{conf:.2f}", error_type])
-
-
-def _write_extracted_fields_csv(run_dir: str, all_results: list):
-    path = os.path.join(run_dir, "extracted_fields.csv")
-    with open(path, "w", newline="") as f:
-        writer = csv.writer(f)
-        writer.writerow(["filename", "field", "value", "confidence", "source", "exact_match", "wer", "cer"])
-        for result in all_results:
-            meta = result.get("_meta", {})
-            fname = meta.get("filename", "")
-            for field in EVAL_FIELDS:
-                r = result.get(field, {})
-                if not r:
-                    continue
-                writer.writerow([
-                    fname,
-                    field,
-                    r.get("actual") or "",
-                    f"{r.get('confidence', 0):.2f}",
-                    "ner_indobert",
-                    r.get("exact", False),
-                    f"{r.get('wer', 1.0):.3f}",
-                    f"{r.get('cer', 1.0):.3f}",
-                ])
-
-
 def _write_summary_md(run_dir: str, summary: dict, all_results: list, engine_counts: Counter):
     lines = ["# NER v1 Benchmark Summary\n"]
     lines.append(f"**Experiment:** Pre-trained NER (`treamyracle/indobert-ner-gold`)\n")
@@ -332,21 +284,6 @@ def _write_summary_md(run_dir: str, summary: dict, all_results: list, engine_cou
     with open(os.path.join(run_dir, "summary.md"), "w") as f:
         f.write("\n".join(lines) + "\n")
 
-
-def _write_excel_files(run_dir: str):
-    for csv_name in ("mismatches.csv", "extracted_fields.csv"):
-        csv_path = os.path.join(run_dir, csv_name)
-        if not os.path.exists(csv_path):
-            continue
-        xlsx_path = os.path.join(run_dir, csv_name.replace(".csv", ".xlsx"))
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = csv_name.replace(".csv", "")
-        with open(csv_path) as f:
-            reader = csv.reader(f)
-            for row in reader:
-                ws.append(row)
-        wb.save(xlsx_path)
 
 
 if __name__ == "__main__":

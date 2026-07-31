@@ -22,6 +22,8 @@ from tests.evaluation_framework import (
     evaluate_row,
     load_csv,
     print_report,
+    save_mismatch_report,
+    save_summary_json,
 )
 from tests.ner_extractor import load_ner_model, extract_entities, normalize_for_ner
 from tests.ner_to_fields import map_entities_to_fields
@@ -296,6 +298,10 @@ def run_llm_benchmark():
     # Also save llm-only evaluation for tingkat (not in EVAL_FIELDS)
     _save_summary(run_dir, summary_pp, "hybrid_pp_full", list(summary_pp.keys()))
     _save_summary(run_dir, summary_llm, "hybrid_llm_full", list(summary_llm.keys()))
+
+    # Canonical summary.json (hybrid+pp+llm)
+    save_summary_json(summary_llm, run_dir)
+    save_mismatch_report(all_hybrid_llm, run_dir, source="hybrid_pp_llm")
 
     # Token usage summary
     token_summary = build_token_usage_summary(token_log_path)
