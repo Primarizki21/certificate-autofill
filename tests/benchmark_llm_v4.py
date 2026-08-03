@@ -68,6 +68,7 @@ from tests.llm_extractor_v3 import (
     build_prompt_tingkat_context,
     build_prompt_tingkat_minimized,
 )
+from tests.ocr_cleanup_v4 import dedup_lines
 
 if "tingkat" not in ev_fw.EVAL_FIELDS:
     ev_fw.EVAL_FIELDS[:] = EVAL_FIELDS + ["tingkat"]
@@ -151,7 +152,7 @@ def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str)
     return clean_value
 
 
-def run_benchmark(limit: int | None = None, organizer_variant: str = "regex"):
+def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", dedup: bool = False):
     assert organizer_variant in ORGANIZER_VARIANTS, organizer_variant
     ner_pipe = load_ner_model()
     rows = load_csv(CSV_PATH)
@@ -165,7 +166,7 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex"):
     if limit:
         text_files = text_files[:limit]
     print(f"Loaded {len(rows)} ground truth rows, {len(text_files)} text files")
-    print(f"Model: {DEFAULT_MODEL} | Organizer: {organizer_variant} | Variants: {list(VARIANTS)}")
+    print(f"Model: {DEFAULT_MODEL} | Organizer: {organizer_variant} | Dedup: {dedup} | Variants: {list(VARIANTS)}")
 
     run_dir = create_run_dir("llm_v4")
     calls_paths = {
@@ -182,6 +183,8 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex"):
 
     for txt_file in tqdm(text_files, desc="Benchmarking"):
         stem, raw_text = read_text_file(os.path.join(TEXTS_DIR, txt_file))
+        if dedup:
+            raw_text = dedup_lines(raw_text)
         row = filename_to_row.get(stem)
         if row is None:
             continue
@@ -265,6 +268,7 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex"):
             "prompt_version": PROMPT_VERSION,
             "variants": list(VARIANTS),
             "organizer_variant": organizer_variant,
+            "dedup": dedup,
             "minimize_config": MINIMIZE_CONFIG,
             "csv_path": CSV_PATH,
             "texts_dir": TEXTS_DIR,
@@ -376,5 +380,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--organizer-variant", default="regex", choices=ORGANIZER_VARIANTS)
+    parser.add_argument("--dedup", action="store_true")
     args = parser.parse_args()
-    run_benchmark(limit=args.limit, organizer_variant=args.organizer_variant)
+    run_benchmark(limit=args.limit, organizer_variant=args.organizer_variant, dedup=args.dedup)
