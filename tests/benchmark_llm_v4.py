@@ -68,6 +68,11 @@ from tests.llm_extractor_v3 import (
     build_prompt_tingkat_context,
     build_prompt_tingkat_minimized,
 )
+from tests.llm_extractor_v4 import (
+    build_prompt_tingkat_adaptive,
+    build_prompt_tingkat_hybrid,
+    build_prompt_tingkat_mid,
+)
 from tests.ocr_cleanup_v4 import dedup_lines
 
 if "tingkat" not in ev_fw.EVAL_FIELDS:
@@ -80,6 +85,18 @@ VARIANTS = {
     },
     "b_minimized": {
         "builder": build_prompt_tingkat_minimized,
+        "uses_text": True,
+    },
+    "c_adaptive": {
+        "builder": build_prompt_tingkat_adaptive,
+        "uses_text": True,
+    },
+    "d_mid": {
+        "builder": build_prompt_tingkat_mid,
+        "uses_text": True,
+    },
+    "e_hybrid": {
+        "builder": build_prompt_tingkat_hybrid,
         "uses_text": True,
     },
 }
