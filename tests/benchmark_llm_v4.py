@@ -152,8 +152,9 @@ def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str)
     return clean_value
 
 
-def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", dedup: bool = False):
+def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", dedup: bool = False, router: str = "none"):
     assert organizer_variant in ORGANIZER_VARIANTS, organizer_variant
+    assert router in ("none", "shadow", "on"), router
     ner_pipe = load_ner_model()
     rows = load_csv(CSV_PATH)
     filename_to_row = {}
@@ -166,12 +167,13 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
     if limit:
         text_files = text_files[:limit]
     print(f"Loaded {len(rows)} ground truth rows, {len(text_files)} text files")
-    print(f"Model: {DEFAULT_MODEL} | Organizer: {organizer_variant} | Dedup: {dedup} | Variants: {list(VARIANTS)}")
+    print(f"Model: {DEFAULT_MODEL} | Organizer: {organizer_variant} | Dedup: {dedup} | Router: {router} | Variants: {list(VARIANTS)}")
 
     run_dir = create_run_dir("llm_v4")
     calls_paths = {
         name: os.path.join(run_dir, f"calls_{name}.json") for name in VARIANTS
     }
+    router_rows = []
     print(f"Output: {run_dir}")
 
     per_cert_rows = []
@@ -212,6 +214,20 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
         row_data = {k: v for k, v in base_meta.items() if k != "raw_text"}
         row_data["filename"] = f"{stem}.txt"
 
+        routed_value = None
+        if router != "none":
+            from tests.llm_router_v4 import route_tingkat
+            org = _organizer_from_variant(raw_text, "phrase_v2").get("penyelenggara_kegiatan")
+            routed_value = route_tingkat(raw_text, org.value if org else "")
+            expected = normalize_gt_tingkat(row.get("tingkat", ""))
+            router_rows.append({
+                "certificate": f"{stem}.txt",
+                "decision": routed_value or "",
+                "expected": expected,
+                "exact": routed_value is not None and routed_value == expected,
+                "skipped_call": routed_value is not None and router == "on",
+            })
+
         for name, spec in VARIANTS.items():
             if spec["uses_text"]:
                 prompt, minimized = spec["builder"](raw_text, known)
@@ -226,13 +242,19 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
             else:
                 prompt = spec["builder"](known)
 
-            tingkat = _call_tingkat(
-                prompt, stem, name, row, calls_paths[name]
-            )
-            total_calls += 1
+            tingkat = None
+            if routed_value is not None and router == "on":
+                total_calls += 0
+            else:
+                tingkat = _call_tingkat(
+                    prompt, stem, name, row, calls_paths[name]
+                )
+                total_calls += 1
 
             merged = dict(hybrid_pp)
-            if tingkat:
+            if routed_value is not None and router == "on":
+                merged["tingkat"] = ExtractedValue(routed_value, 0.99, "router_rule")
+            elif tingkat:
                 merged["tingkat"] = ExtractedValue(tingkat, 0.85, "llm_ollama")
             eval_result = evaluate_row(merged, row)
             eval_result["_meta"] = {"filename": f"{stem}.txt"}
@@ -269,12 +291,24 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
             "variants": list(VARIANTS),
             "organizer_variant": organizer_variant,
             "dedup": dedup,
+            "router": router,
             "minimize_config": MINIMIZE_CONFIG,
             "csv_path": CSV_PATH,
             "texts_dir": TEXTS_DIR,
         }, f, indent=2, ensure_ascii=False)
     with open(os.path.join(run_dir, "minimize_stats.json"), "w") as f:
         json.dump(minimize_stats, f, indent=2)
+
+    if router_rows:
+        router_path = os.path.join(run_dir, "router_decisions.json")
+        with open(router_path, "w") as f:
+            json.dump(router_rows, f, indent=2)
+        decisions = [r for r in router_rows if r["decision"]]
+        if decisions:
+            prec = sum(1 for r in decisions if r["exact"]) / len(decisions)
+            skipped = sum(1 for r in decisions if r["skipped_call"])
+            print(f"Router decisions: {len(decisions)}/74 | precision {prec:.1%} | "
+                  f"skipped LLM calls: {skipped} ({100*skipped/max(len(router_rows),1):.1f}%)")
 
     # Summaries
     summary_pp = aggregate_results(all_hybrid_pp)
@@ -381,5 +415,6 @@ if __name__ == "__main__":
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--organizer-variant", default="regex", choices=ORGANIZER_VARIANTS)
     parser.add_argument("--dedup", action="store_true")
+    parser.add_argument("--router", default="none", choices=["none", "shadow", "on"])
     args = parser.parse_args()
-    run_benchmark(limit=args.limit, organizer_variant=args.organizer_variant, dedup=args.dedup)
+    run_benchmark(limit=args.limit, organizer_variant=args.organizer_variant, dedup=args.dedup, router=args.router)
