@@ -171,6 +171,7 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 | NER v1 only | 18.4% | — | ~0.07s | 0 |
 | Hybrid + post-processing | 48.1% | 66.1% | ~0.6s | 0 |
 | **Hybrid + LLM (A2 v2 full-text)** | **58.3%** | **74.5%** | **~2.5s** | 74 |
+| **v4-e hybrid + router (tingkat)** | **77.0%** *(tingkat)* | **54.2%** *(macro)* | **~2.5s** | 39 |
 
 ### Ollama Setup
 ```bash

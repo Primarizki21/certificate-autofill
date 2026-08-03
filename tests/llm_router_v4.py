@@ -16,15 +16,29 @@ Signal = kehadiran keyword di raw text / organizer (bukan lokasi fisik).
 import re
 
 
+_LOMBA_MERGED = re.compile(
+    r"LOMBA|PERLOMBAAN|COMPETITI|CHAMPIONSHIP|KEJUARAAN|OLIMPIADE"
+    r"|KONTES|CHALLENGE|FESTIVAL|SPORT"
+)
+
+
 def _sig(raw_text: str, organizer: str) -> dict:
     u = raw_text.upper()
     o = (organizer or "").upper()
     o2 = re.sub(r"\bKAPRODI\b|\bKETUA PROGRAM STUDI\b", "", o)
+    # Contains-based lomba: menangkap kata tergabung (OCRunion) tanpa spasi,
+    # mis. "ACADEMICWEEKS2026", "INFographicCompetition". CUP word-boundary
+    # saja, karena "DEKANCUPFTMM" (fakultas) bukan kompetisi.
+    lomba_merged = (
+        bool(re.search(r"\bCUP\b", u))
+        or bool(_LOMBA_MERGED.search(re.sub(r"\bCUP\b", "", u)))
+    ) and not re.search(r"PANITIA", u)
     return {
         "lomba": bool(re.search(
             r"\bLOMBA\b|\bKOMPETISI\b|\bCOMPETITION\b|\bOLIMPIADE\b"
             r"|\bCHALLENGE\b|\bTOURNAMENT\b|\bJUARA\b|\bCUP\b"
             r"|\bCHAMPIONSHIP\b|\bOLYMPIAD\b|\bHACKATHON\b", u)),
+        "lomba_merged": lomba_merged,
         "hima": bool(re.search(r"HIMPUNAN|HIMA", o)),
         "dept": bool(re.search(
             r"\bDEPT\b|DEPARTMENT|STUDY PROGRAM|\bPRODI\b|PROGRAM STUDI", o2)),
@@ -46,6 +60,8 @@ def route_tingkat(raw_text: str, organizer: str) -> str | None:
     """Return rule decision, or None untuk route ke LLM."""
     s = _sig(raw_text, organizer)
     if s["lomba"] and (s["hima"] or s["univ"] or s["nasw"] or s["luar"] or s["fak"] or s["bem"]):
+        return "Nasional"
+    if s["lomba_merged"] and (s["hima"] or s["univ"] or s["fak"] or s["bem"]):
         return "Nasional"
     if s["dept"] and s["sem"] and not s["lomba"] and not s["nasw"]:
         return "Departemen/Program Studi"
