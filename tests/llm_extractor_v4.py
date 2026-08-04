@@ -10,7 +10,7 @@ and one-value output are preserved, just worded tighter.
 
 import re
 
-from tests.llm_extractor import TINGKAT_OPTIONS
+from tests.llm_extractor import TINGKAT_OPTIONS, validate_tingkat
 from tests.llm_extractor_v3 import (
     _context_block,
     build_prompt_tingkat_minimized,
@@ -63,6 +63,31 @@ PETUNJUK:
 
 _GARBLE_RE = re.compile(r"[a-z]{23,}")
 _MIXED_CASE_RE = re.compile(r"[A-Z][a-z]{2,}[A-Z]")
+
+# v8 Phase 2 (f_bias): aturan tambahan untuk mengoreksi bias bahasa Inggris.
+# Versi verbose terukur menang (82.4%) vs versi terkompresi (78.4%);
+# token 214/doc sedikit di atas gate 200, akurasi didahulukan.
+_BIAS_LINES = [
+    "- NAMA ACARA ATAU TEKS BAHASA INGGRIS TIDAK OTOMATIS berarti Internasional",
+    "- Internasional HANYA jika penyelenggara/lembaganya asing (di luar Indonesia)",
+    "- aturan BEM/HIMA/fakultas/universitas di atas TETAP berlaku dan diutamakan",
+    "- tanpa bukti skala sama sekali, JANGAN menebak Internasional;",
+    "  pilih Fakultas atau Nasional yang paling masuk akal dari konteks",
+]
+
+# v8 Phase 2 (g_evidence): format jawaban dua baris evidence + tingkat.
+_EVIDENCE_OUT = [
+    "",
+    "Jawab persis dalam dua baris:",
+    "Evidence: <satu kalimat bukti singkat dari teks, atau 'tidak ada'>",
+    "Tingkat: <satu opsi dari daftar>",
+    "",
+]
+
+
+def _bias_instr() -> str:
+    """Sisipkan aturan bias ke instruksi e_hybrid (mid untuk garble, compact lain)."""
+    return "\n".join(_BIAS_LINES)
 
 
 def _needs_full_tingkat_prompt(raw_text: str, organizer: str | None) -> bool:
@@ -161,6 +186,92 @@ def build_prompt_tingkat_hybrid(
     return build_prompt_tingkat_adaptive(raw_text, known_fields)
 
 
+def build_prompt_tingkat_bias(
+    raw_text: str, known_fields: dict[str, str]
+) -> tuple[str, str]:
+    """Variant F — e_hybrid + aturan bias bahasa Inggris (v8 Phase 2).
+
+    Menambahkan: English != International, konteks institusi Indonesia menang,
+    sparse-evidence guard (jangan menebak Internasional tanpa bukti).
+    Returns (prompt, minimized_text).
+    """
+    organizer = (known_fields or {}).get("penyelenggara_kegiatan")
+    if _needs_full_tingkat_prompt(raw_text, organizer):
+        prompt, minimized = build_prompt_tingkat_minimized(raw_text, known_fields)
+        prompt = prompt.replace(
+            "Jawaban (satu opsi, tanpa penjelasan):",
+            _bias_instr() + "\nJawaban (satu opsi, tanpa penjelasan):",
+        )
+        return prompt, minimized
+    difficulty = _difficulty(raw_text)
+    budget = _budget_for(difficulty)
+    minimized = minimize_text(raw_text, max_chars=budget)
+    lines = [
+        _INSTR.format(options=" / ".join(TINGKAT_OPTIONS)),
+        _bias_instr(),
+        "Teks sertifikat (bagian relevan):",
+        minimized,
+        "",
+        *_context_block(known_fields),
+        "",
+        "Jawaban (satu opsi, tanpa penjelasan):",
+    ]
+    return "\n".join(lines), minimized
+
+
+def build_prompt_tingkat_evidence(
+    raw_text: str, known_fields: dict[str, str]
+) -> tuple[str, str]:
+    """Variant G — e_hybrid + output evidence (FaR-style, arXiv 2504.02190).
+
+    Meminta satu baris bukti singkat sebelum jawaban tingkat. Response mentah
+    disimpan di calls_*.json untuk debug; value diambil dari baris 'Tingkat:'.
+    Returns (prompt, minimized_text).
+    """
+    organizer = (known_fields or {}).get("penyelenggara_kegiatan")
+    if _needs_full_tingkat_prompt(raw_text, organizer):
+        prompt, minimized = build_prompt_tingkat_minimized(raw_text, known_fields)
+        prompt = prompt.replace(
+            "Jawaban (satu opsi, tanpa penjelasan):",
+            "Jawab persis dalam dua baris:\nEvidence: <bukti singkat, atau 'tidak ada'>\nTingkat: <satu opsi>",
+        )
+        return prompt, minimized
+    difficulty = _difficulty(raw_text)
+    budget = _budget_for(difficulty)
+    minimized = minimize_text(raw_text, max_chars=budget)
+    lines = [
+        _INSTR.format(options=" / ".join(TINGKAT_OPTIONS)),
+        "Teks sertifikat (bagian relevan):",
+        minimized,
+        "",
+        *_context_block(known_fields),
+        "",
+        *_EVIDENCE_OUT,
+    ]
+    return "\n".join(lines), minimized
+
+
+_EVIDENCE_VALUE_RE = re.compile(r"Tingkat\s*[:\-]\s*([^\n]+)", re.IGNORECASE)
+_EVIDENCE_LINE_RE = re.compile(r"Evidence\s*[:\-]\s*(.*)", re.IGNORECASE)
+
+
+def parse_evidence_response(response: str) -> tuple[str | None, str | None]:
+    """Parse 'Evidence: ... / Tingkat: X'. Returns (evidence, validated_value)."""
+    response = (response or "").strip()
+    m = _EVIDENCE_VALUE_RE.search(response)
+    if m:
+        value = validate_tingkat(m.group(1).strip())
+        if value:
+            ev = _EVIDENCE_LINE_RE.search(response)
+            evidence = ev.group(1).strip() if ev else ""
+            return evidence, value
+    # fallback: validasi seluruh response
+    value = validate_tingkat(response)
+    if value:
+        return "", value
+    return "", None
+
+
 if __name__ == "__main__":
     cases = [
         ("SEMINAR NASIONAL ...", "strong"),
@@ -199,4 +310,19 @@ if __name__ == "__main__":
         "somebrokenwordsacrosstheline\nSEMINAR\nBEM FEB UNAIR\nPESERTA", known
     )
     assert prompt_hyb2 != prompt  # garble -> full
+    prompt_bias, mini_bias = build_prompt_tingkat_bias(
+        "SERTIFIKAT\nENGLISH SEMINAR\nBEM FEB UNAIR\nPESERTA", known
+    )
+    assert "TIDAK OTOMATIS" in prompt_bias
+    assert len(mini_bias) <= BUDGET_NORMAL
+    prompt_ev, mini_ev = build_prompt_tingkat_evidence(
+        "SERTIFIKAT\nSEMINAR NASIONAL\nBEM FEB UNAIR\nPESERTA", known
+    )
+    assert "Evidence:" in prompt_ev and "Tingkat:" in prompt_ev
+    ev, val = parse_evidence_response("Evidence: LOMBA NASIONAL\nTingkat: Nasional")
+    assert ev == "LOMBA NASIONAL" and val == "Nasional", (ev, val)
+    ev2, val2 = parse_evidence_response("Tingkat: Fakultas")
+    assert ev2 == "" and val2 == "Fakultas", (ev2, val2)
+    ev3, val3 = parse_evidence_response("Departemen/Program Studi")
+    assert val3 == "Departemen/Program Studi", val3
     print("ok: adaptive builder")
