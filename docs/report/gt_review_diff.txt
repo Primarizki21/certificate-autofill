@@ -1,0 +1,20 @@
+GROUND TRUTH REVIEW DIFF (raw -> v8-final)
+============================================================
+
+1966887_221065_skp.pdf
+  Tingkat: 'Lainnya' -> 'Nasional'
+
+1981676_219642_skp.pdf
+  Tingkat: 'Fakultas' -> 'Nasional'
+
+2954283_219642_skp.pdf
+  Tingkat: 'Fakultas' -> 'Internasional'
+
+2030325_219642_skp.pdf
+  Nama Kegiatan Sertifikasi: 'Magang Universitas Airlangga' -> 'Magang UKM Universitas Airlangga'
+
+2071996_221065_skp.pdf
+  Nama Kegiatan Sertifikasi: 'Magang Universitas Airlangga' -> 'Magang UKM Universitas Airlangga'
+
+Sertif sinem_vene_magang UKM.pdf
+  Nama Kegiatan Sertifikasi: 'Magang Universitas Airlangga' -> 'Magang UKM Universitas Airlangga'
