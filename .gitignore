@@ -48,8 +48,8 @@ docs/handoff_v3.md
 docs/handoff_v4.md
 docs/ground_truth_checklist.txt
 docs/gt_verification_report.txt
-docs/phase_v4_methodology.docx
-docs/phase_v4_results_summary.xlsx
+docs/report/phase_v4_methodology.docx
+docs/report/phase_v4_results_summary.xlsx
 README_RUN_FIXED.md
 FRONTEND_INCLUDED.md
 RUN_BACKEND.ps1

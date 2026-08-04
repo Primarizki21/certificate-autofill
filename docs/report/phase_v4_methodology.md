@@ -209,10 +209,12 @@ A2 v2 is more token-efficient because the raw text (largest token cost) is sent 
 | `tests/benchmark_llm.py` | Benchmark runner for approach 1 (per-field LLM) |
 | `tests/llm_extractor_v2.py` | Full-text prompt, multi-field parser, post-processing (approach 2) |
 | `tests/benchmark_llm_v2.py` | Benchmark runner for approach 2 (full-text LLM) |
-| `docs/phase_v4_results_summary.xlsx` | Visual results with 4 sheets |
-| `docs/phase_v4_results_summary.md` | Results in markdown |
-| `docs/phase_v4_methodology.md` | This document |
-| `docs/phase_v4_methodology.docx` | Methodology in DOCX format |
+| `phase_v4_results_summary.xlsx` | Visual results with 4 sheets |
+| `phase_v4_results_summary.md` | Results in markdown |
+| `phase_v4_methodology.md` | This document |
+| `phase_v4_methodology.docx` | Methodology in DOCX format |
+| `benchmark_methods.{docx,md}` | Per-method extraction descriptions |
+| `evaluation_methodology.{docx,md}` | Metrics, formulas, and evaluation caveats |
 
 ### Modified files
 

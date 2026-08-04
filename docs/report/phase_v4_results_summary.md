@@ -51,7 +51,7 @@
 
 ## Per-File Results
 
-See `docs/phase_v4_results_summary.xlsx` → Sheet "Per-File Results" for per-certificate comparison across A1 and A2 v2 methods. Each cert has two rows (A2 v2 top, A1 bottom).
+See `phase_v4_results_summary.xlsx` → Sheet "Per-File Results" for per-certificate comparison across A1 and A2 v2 methods. Each cert has two rows (A2 v2 top, A1 bottom).
 
 ## Key Takeaways
 

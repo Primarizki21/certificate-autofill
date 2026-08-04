@@ -148,14 +148,15 @@ certs.
 
 Generate/update with `python-docx` + `openpyxl` (both installed):
 
-- `docs/phase_v4_methodology.md` + `.docx` — append v8 methodology: phases,
-  router rules, prompt fixes, layout representation, literature citations
-  (LayIE-LLM / EMNLP 2025, Hybrid LLM routing arXiv 2404.14618, FaR
+- `docs/report/phase_v4_methodology.md` + `.docx` — append v8 methodology:
+  phases, router rules, prompt fixes, layout representation, literature
+  citations (LayIE-LLM / EMNLP 2025, Hybrid LLM routing arXiv 2404.14618, FaR
   arXiv 2504.02190).
-- `docs/phase_v4_results_summary.md` + `.xlsx` — new rows: v7 P4 (77.0% / 54.2%
-  / 202 tok / 39 calls) → v8 final variant; per-file results sheet; progression
-  table (v2 → v8).
-- `.docx`/`.xlsx` are gitignored; committed surface is the `.md` files.
+- `docs/report/phase_v4_results_summary.md` + `.xlsx` — new rows: v7 P4 (77.0%
+  / 54.2% / 202 tok / 39 calls) → v8 final variant; per-file results sheet;
+  progression table (v2 → v8).
+- Report workspace: `docs/report/` (`.docx` + pasangan `.md` mirror). Lihat
+  `docs/report/README.md`.
 
 ---
 
@@ -198,7 +199,8 @@ uv run python -m pytest tests/ -v
 - A v8 baseline report on fixed GT (raw + ceiling-adjusted).
 - `f_bias` / `g_evidence` / layout variants benchmarked.
 - Decision on which variant wins the production gate (budget ≤200 tok/cert).
-- Updated `phase_v4_methodology.{md,docx}` + `phase_v4_results_summary.{md,xlsx}`.
+- Updated `docs/report/phase_v4_methodology.{md,docx}` +
+  `docs/report/phase_v4_results_summary.{md,xlsx}` + pasangan `.md` mirror.
 
 Do not integrate changes into `backend/app/services/extraction_pipeline.py`
 until the final ship gate passes.
