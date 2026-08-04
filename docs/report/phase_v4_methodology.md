@@ -245,3 +245,35 @@ uv run python -m tests.benchmark_llm
 # Approach 2 v2 (full-text LLM) — winner
 uv run python -m tests.benchmark_llm_v2
 ```
+
+---
+
+## 11. Handoff v7 Addendum — Cost-Aware Hybrid Extraction
+
+v7 replaced full-text LLM extraction with a cost-aware hybrid that routes
+high-confidence certificates through a rule-based tingkat router (0 tokens) and
+calls the LLM only for the remaining certificates. Variant e_hybrid (full
+prompt for risky categories, compact elsewhere) won at **77.0% tingkat exact**,
+**54.2% MACRO**, **202.2 eff tokens/cert**, **39 LLM calls**. Router precision:
+35/35 (100%).
+
+## 12. Handoff v8 Addendum — GT Audit, Router Fix, LLM Bias, Layout
+
+v8 executed in order: GT audit, router contains-match fix, prompt bias
+variants, and layout experiments. Ground truth received 3 audited tingkat
+corrections (`Ground_Truth_Sertifikat_v8.csv`). The router gained contains-based
+BEM/HIMA matching and the `TINGKAT NASIONAL` rule (39/74 decisions, 100%
+precision, -53% calls). Variant **f_bias** (English != International bias) is
+the winner at **82.4% tingkat exact**, **55.2% MACRO**, **214 eff tokens/cert**.
+g_evidence and layout representations regressed and were rejected. The winner
+was integrated into production behind `ENABLE_LLM_TINGKAT`.
+
+| Metric | v7 P4 e_hybrid | v8 f_bias |
+|--------|:-------------:|:---------:|
+| Tingkat exact | 77.0% | **82.4%** |
+| MACRO exact | 54.2% | **55.2%** |
+| Eff. tokens/cert | 202 | 214 |
+| LLM calls / 74 | 39 | **35** |
+| GT | raw | fixed_v8 |
+
+Best run: `tests/benchmark_runs/run_llm_v4_20260804_095412/` (7 variants, router on, GT v8).

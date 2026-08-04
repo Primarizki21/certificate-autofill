@@ -767,3 +767,126 @@ The table below lists all functions referenced in this document. Functions are l
 | aggregate_results() | evaluation_framework.py:66 | Aggregate per-field metrics |
 | save_mismatch_report() | evaluation_framework.py:142 | Generate mismatch CSV/XLSX |
 
+Method 7: Cost-Aware Hybrid Extraction (Handoff v7)
+
+Overview
+
+Handoff v7 moves from full-text LLM extraction to a cost-aware hybrid that extracts only the tingkat field with an LLM while every other field stays on the deterministic hybrid (NER + regex + post-processing). The goal is the best accuracy/cost Pareto point, not minimum tokens at any cost.
+
+Input
+
+Same 74 certificates. Ground truth: Ground_Truth_Sertifikat.csv.
+
+Process
+
+•  Run hybrid + post-processing once per certificate (regex + NER + phrase-v2 organizer).
+
+•  Run the rule-based tingkat router: high-precision rules decide tingkat at 0 tokens.
+
+•  For certificates the router does not decide, call the local LLM with a compact tingkat prompt.
+
+•  Validate the LLM answer against the 6 form options; keep the value empty when invalid.
+
+Config
+
+| Key | Value |
+|---|---|
+| Prompt | v3 minimized / v4 adaptive (variants a-e) |
+| Router | rule-based, 35/74 decisions at 100% precision |
+| Model | llama3.1:8b (Ollama) |
+| Token budget | minimize_text(), ~202 eff tokens/cert |
+
+Results (v7 P4 e_hybrid)
+
+| Metric | Value |
+|---|---|
+| Tingkat exact | 77.0% (57/74) |
+| MACRO exact | 54.2% |
+| Eff. tokens/cert | 202.2 |
+| LLM calls | 39 of 74 (router: 35, 100% precision) |
+| Run | tests/benchmark_runs/run_llm_v4_20260803_113310/ |
+
+Strengths
+
+•  Router removes ~47% of LLM calls at 0 tokens and 100% precision.
+
+•  Best accuracy-per-token in the v4+v6+v7 family (0.082 acc/token).
+
+Limitations
+
+•  Word-boundary router misses OCR-merged tokens (BEMFKM, BEMFEBUNAIR, HIMATESDA).
+
+•  Ground truth had un-audited tingkat labels.
+
+•  LLM biased English certificate text toward Internasional.
+
+Code Reference
+
+•  tests/benchmark_llm_v4.py, tests/llm_extractor_v3.py, tests/llm_extractor_v4.py
+
+•  tests/llm_router_v4.py, tests/organizer_extractor_v2.py, tests/mismatch_taxonomy.py
+
+Method 8: v8 Router Fix + LLM Bias + Layout (Handoff v8)
+
+Overview
+
+Handoff v8 repairs the v7 router, audits ground truth, and tests two accuracy levers: a bias-corrected LLM prompt and layout-aware input. Winner: contains-match router + f_bias prompt at 82.4% tingkat exact.
+
+Input
+
+Same 74 certificates. Versioned ground truth: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat label corrections).
+
+Process
+
+•  GT audit: 1966887->Nasional, 1981676->Nasional, 2954283->Internasional; 2030372 stays Nasional.
+
+•  Router contains-match: BEM/HIMA detected in uppercase alnum runs (BEMFKM, SERT2128BEM2026) with a guard.
+
+•  New rule: explicit TINGKAT/LOMBA NASIONAL text -> Nasional.
+
+•  f_bias prompt: English text is not automatically Internasional; Indonesian-institution context wins.
+
+•  Layout experiment (markdown / annotated from PyMuPDF dict) measured and rejected.
+
+Config
+
+| Key | Value |
+|---|---|
+| Prompt | f_bias (e_hybrid + bias rules) |
+| Router | contains-match, 39/74 decisions at 100% precision |
+| GT | fixed_v8 (Ground_Truth_Sertifikat_v8.csv) |
+| Model | llama3.1:8b (Ollama) |
+
+Results
+
+| Variant | Tingkat exact | MACRO exact | Eff. tokens/cert |
+|---|---|---|---|
+| b_minimized | 78.4% | 54.4% | 221 |
+| e_hybrid | 79.7% | 54.7% | 182 |
+| f_bias (winner) | 82.4% | 55.2% | 214 |
+| g_evidence | 75.7% | 53.9% | 194 |
+| layout_md (f_bias) | 77.0% | 50.8% | 235 |
+| layout_ann (f_bias) | 78.4% | 51.3% | - |
+
+Strengths
+
+•  Contains-match router routes 39/74 at 100% precision (-53% LLM calls).
+
+•  f_bias fixes English-name scale bias (data slayer, 2955331, IRIS) without breaking BEM-fakultas.
+
+Limitations
+
+•  g_evidence (FaR-style) regresses accuracy and adds completion tokens -> rejected.
+
+•  Layout does not help: only 25/74 PDFs have embedded text, and markers disturb deterministic extractors.
+
+•  f_bias is 214 eff tokens/cert, slightly over the 200 gate.
+
+Code Reference
+
+•  tests/llm_router_v4.py, tests/llm_extractor_v4.py, tests/benchmark_llm_v4.py
+
+•  tests/layout_repr.py, tests/verify_ground_truth.py
+
+•  Production: backend/app/services/{tingkat_router,llm_tingkat,organizer_v2}.py
+

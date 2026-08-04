@@ -60,3 +60,76 @@ See `phase_v4_results_summary.xlsx` → Sheet "Per-File Results" for per-certifi
 3. **Biggest improvements** — waktu_mulai 81.8%→94.5%, waktu_selesai 81.8%→94.5%, nomor 59.6%→73.1%.
 4. **Approach 1 still better at tingkat** — per-field prompt with heuristics (47.3% vs 36.5%).
 5. **Full context helps** — LLM extracts nama_kegiatan (43.2%) and penyelenggara (31.1%) much better when it sees the whole text.
+
+---
+
+## Handoff v7 Results — Cost-Aware Hybrid (Tingkat-Only)
+
+| Variant | Tingkat exact | MACRO exact | Eff. tok/cert | LLM calls |
+|---------|:-----------:|:----------:|:-------------:|:---------:|
+| Hybrid+PP (no LLM) | 0% | 39.3% | 0 | 0 |
+| b_minimized | 74.3% | 53.6% | 249 | 39 |
+| c_adaptive | 68.9% | 52.6% | 167 | 39 |
+| d_mid | 71.6% | 53.1% | 191 | 39 |
+| **e_hybrid** | **77.0%** | **54.2%** | **202** | **39** |
+
+Router: 35/74 decisions at 100% precision. Baseline run:
+`tests/benchmark_runs/run_llm_v4_20260803_113310/` (GT raw).
+
+## Handoff v8 Results — Router Fix + LLM Bias + Layout
+
+Fixed GT: `Ground_Truth_Sertifikat_v8.csv` (3 audited tingkat corrections).
+Best run: `tests/benchmark_runs/run_llm_v4_20260804_095412/`.
+
+| Variant | Tingkat exact | MACRO exact | Eff. tok/cert | LLM calls |
+|---------|:-----------:|:----------:|:-------------:|:---------:|
+| a_context | 71.6% | 53.1% | 196 | 35 |
+| b_minimized | 78.4% | 54.4% | 221 | 35 |
+| c_adaptive | 71.6% | 53.1% | 149 | 35 |
+| d_mid | 75.7% | 53.9% | 169 | 35 |
+| e_hybrid | 79.7% | 54.7% | 182 | 35 |
+| **f_bias** | **82.4%** | **55.2%** | **214** | **35** |
+| g_evidence | 75.7% | 53.9% | 194 | 35 |
+
+Router v8: 39/74 decisions at 100% precision, LLM calls 35 (-53% vs no-router).
+
+### Layout experiments (f_bias prompt)
+
+| Input | Tingkat exact | MACRO exact |
+|-------|:-----------:|:----------:|
+| plain text (baseline) | **82.4%** | **55.2%** |
+| layout markdown | 77.0% | 50.8% |
+| layout annotated | 78.4% | 51.3% |
+
+Layout rejected — only 25/74 PDFs have embedded text; markers disturb the
+deterministic extractors.
+
+### GT audit effect (e_hybrid, router on)
+
+| GT | Tingkat exact | MACRO exact | Ceiling-adjusted |
+|----|:-----------:|:----------:|:----------------:|
+| raw | 57/74 (77.0%) | 54.2% | 56/71 (78.9%) |
+| fixed_v8 | 57/74 (77.0%) | 54.2% | 56/71 (78.9%) |
+
+Net-zero on raw count because 1981676 went correct->wrong while 2954283 went
+wrong->correct; the label corrections make the evaluation honest, not higher.
+
+### Ship gate check
+
+| Metric | Target | Actual | Status |
+|--------|:------:|:------:|:------:|
+| Tingkat exact | >= 45% | 82.4% | PASS |
+| MACRO exact | >= 50% | 55.2% | PASS |
+| Eff. tokens/doc | <= 200 | 214 | MARGINAL |
+| 100K-request tokens | <= 20M | 21.4M | MARGINAL |
+| LLM call reduction | >= 40% | 53% | PASS |
+| Rule precision | >= 95% | 100% | PASS |
+| Date / number regression | none | none | PASS |
+
+### Progression (tingkat exact, router on)
+
+| Phase | Method | Tingkat | MACRO |
+|-------|--------|:-------:|:-----:|
+| v7 P3 | router rule-based | 71.6% | 53.1% |
+| v7 P4 | e_hybrid + router | 77.0% | 54.2% |
+| v8 | router fix + f_bias | **82.4%** | **55.2%** |

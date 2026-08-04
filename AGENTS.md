@@ -234,7 +234,7 @@ Yang mungkin berubah ke depannya:
 ---
 
 ## Dokumen Referensi
-- **Status eksperimen terbaru:** [docs/handoff_v8.md](docs/handoff_v8.md) — GT audit, router fix, LLM bias, layout experiments
+- **Status eksperimen terbaru:** [docs/handoff_v9.md](docs/handoff_v9.md) — v8 executed (router fix, f_bias winner, layout rejected, production integration)
 - **Laporan eksperimen:** [docs/report/README.md](docs/report/README.md) — benchmark_methods, evaluation_methodology, phase_v4_methodology, phase_v4_results_summary (`.docx` + mirror `.md`)
 - **Improvement tracking:** [docs/improvements.md](docs/improvements.md) — checklist perbaikan teridentifikasi
 - **Paper keywords:** [docs/paper_keywords.md](docs/paper_keywords.md) — keyword pencarian paper per topik

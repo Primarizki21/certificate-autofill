@@ -314,3 +314,48 @@ WER/CER are computed on normalized text, which may not reflect the true edit dis
 
 LLM evaluation uses temperature=0 for determinism, but Ollama's quantized model may produce different results across runs.
 
+10. Handoff v7/v8 Evaluation Addendum
+
+10.1 Ground Truth Versioning
+
+Starting from v8, evaluation runs state which ground truth they used. Ground_Truth_Sertifikat.csv is the raw historical CSV (unchanged). Ground_Truth_Sertifikat_v8.csv applies 3 audited tingkat corrections: 1966887 Lainnya->Nasional, 1981676 Fakultas->Nasional, 2954283 Fakultas->Internasional. 2030372 stays Nasional (consistent with the identical-template 1981676).
+
+Metrics are reported three ways: (a) raw-GT accuracy, (b) fixed-GT accuracy, (c) ceiling-adjusted accuracy with the disputed certificates excluded, so label noise is separated from method quality.
+
+10.2 Tingkat Scale-Evidence Check
+
+verify_ground_truth.py now scans the raw text for scale evidence (TINGKAT NASIONAL, LOMBA, INTERNASIONAL, INTERNATIONAL, foreign-institution hints) and flags ground-truth labels that contradict the text. Pre-v8 this check did not exist, which is why label noise survived.
+
+10.3 Router Precision and Call Reduction
+
+| Metric | v7 (P4) | v8 |
+|---|---|---|
+| Router decisions | 35/74 | 39/74 |
+| Router precision | 100% | 100% |
+| LLM calls / 74 | 39 | 35 |
+| Call reduction vs no-router | 47% | 53% |
+
+v8 adds contains-based BEM/HIMA matching for OCR-merged tokens and the explicit TINGKAT NASIONAL rule. Precision stays at 100% on the fixed ground truth.
+
+10.4 Token Accounting
+
+Effective tokens per document = total tokens (prompt + completion) across all LLM calls, amortized over all 74 certificates. Certificates routed by rules contribute 0 tokens. This is reported per variant in token_usage_*.json. v8 final: f_bias = 214 eff tokens/cert (21.4M tokens per 100K requests), slightly above the 200 gate; per the handoff rule, the accuracy floor is preserved first.
+
+10.5 Layout Representation Evaluation
+
+Markdown (## title) and annotated ([TITLE]/[BODY]/[SMALL]) representations built from PyMuPDF page.get_text('dict') were compared against the plain-text baseline at matched token budgets. Only 25/74 certificates contain embedded text; the rest are scanned and fall back to OCR text. Both layout variants underperformed the plain baseline (77.0% / 78.4% vs 82.4% tingkat), so layout is rejected. Input quality is bound by OCR, not layout, on this dataset.
+
+10.6 Final v8 Ship Gate
+
+| Metric | Target | Actual | Status |
+|---|---|---|---|
+| Tingkat exact | >= 45% | 82.4% | PASS |
+| MACRO exact | >= 50% | 55.2% | PASS |
+| Eff. tokens/doc | <= 200 | 214 | MARGINAL |
+| 100K-request tokens | <= 20M | 21.4M | MARGINAL |
+| LLM call reduction | >= 40% | 53% | PASS |
+| Rule precision | >= 95% | 100% | PASS |
+| Date / number regression | none | none | PASS |
+
+Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not held-out; Ollama quantization adds run-to-run variance of about +/-1-2pp; the macro_avg label is a micro-average (see Section 4.2).
+
