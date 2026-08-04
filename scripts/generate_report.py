@@ -220,10 +220,15 @@ def render_xlsx(data: dict, path: str):
     for r in p["r"]:
         ws2.append([str(v).replace("**", "") for v in r])
 
-    # Per-file sheet from the v8 winner run (if present)
-    run = "tests/benchmark_runs/run_llm_v4_20260804_095412/results.xlsx"
-    run_path = os.path.join(REPO, run)
-    if os.path.exists(run_path):
+    # Per-file sheet from the winning experiment's run dir (if present).
+    # Source run didefinisikan di report_data.json (field `run_dir`), bukan
+    # hardcoded di sini — mencegah drift ke run yang bukan otoritatif.
+    # Ambil winner TERAKHIR (array eksperimen kronologis; bisa ada >1 winner).
+    winners = [e for e in data["experiments"] if e.get("is_winner")]
+    winner = winners[-1] if winners else None
+    run_rel = (winner or {}).get("run_dir", "")
+    run_path = os.path.join(REPO, run_rel, "results.xlsx") if run_rel else ""
+    if run_path and os.path.exists(run_path):
         src = openpyxl.load_workbook(run_path).active
         ws3 = wb.create_sheet("v8 Per-File f_bias")
         hdr = [c.value for c in src[1]]

@@ -29,7 +29,7 @@ disinkronkan agar agen dapat membaca isinya tanpa tool khusus.
 
 ## Alur Referensi
 
-- Status eksperimen & langkah berikutnya: `docs/handoff_v8.md`
+- Status eksperimen & langkah berikutnya: `docs/handoff_v9.md`
 - Checklist perbaikan: `docs/improvements.md`
 - Hasil mentah benchmark: `tests/benchmark_runs/` (gitignored, lokal)
 - Ground truth: `Ground_Truth_Sertifikat.csv` (raw) + varian versi di `docs/`/`tests/`

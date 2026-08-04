@@ -88,7 +88,7 @@ Gunakan LLM lokal untuk field yang tidak bisa diekstrak NER/regex (tingkat, kelo
 ```bash
 # 1. Install & jalankan Ollama
 curl -fsSL https://ollama.com/install.sh | sh
-ollama pull llama3.2:8b
+ollama pull llama3.1:8b
 
 # 2. Jalankan benchmark LLM
 uv run python -m tests.benchmark_llm

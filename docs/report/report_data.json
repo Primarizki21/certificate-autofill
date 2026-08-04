@@ -78,6 +78,7 @@
       "phase": "v8",
       "label": "v8 f_bias + router",
       "variant": "f_bias",
+      "run_dir": "tests/benchmark_runs/run_llm_v4_20260804_115212",
       "tingkat": "82.4%",
       "macro": "55.2%",
       "tokens_cert": 214,
