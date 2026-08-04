@@ -77,6 +77,7 @@ def _get_rapid():
 
 
 _paddle_engine = None
+_easy_engine = None
 
 # Knob global utk probe (tests/paddle_probe_safe.py): set SEBELUM pemakaian
 # paddle pertama. Bisa diganti antar versi paddleocr (2.x vs 3.x).
@@ -201,11 +202,29 @@ def merge_unique_lines(texts: list[str]) -> str:
     return "\n".join(lines)
 
 
+def _get_easy():
+    global _easy_engine
+    if _easy_engine is None:
+        import easyocr
+        _easy_engine = easyocr.Reader(["en"], gpu=False, verbose=False)
+    return _easy_engine
+
+
+def ocr_easy(image_bytes: bytes) -> str:
+    """EasyOCR (torch) — engine berbeda dari baseline RapidOCR/Tesseract."""
+    import numpy as np
+    reader = _get_easy()
+    img = np.array(_read_image(image_bytes))
+    result = reader.readtext(img, detail=0, paragraph=False)
+    return "\n".join(str(t) for t in result if str(t).strip())
+
+
 # engine key -> fungsi OCR per PNG
 ENGINES: dict[str, Callable[[bytes], str]] = {
     "rapid": ocr_rapid,
     "tess": ocr_tess,
     "paddle": ocr_paddle,
+    "easy": ocr_easy,
 }
 
 

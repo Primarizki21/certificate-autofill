@@ -123,10 +123,12 @@ def _child(args) -> int:
             report["per_page_s"] = [report["total_s"]]
             full = text
         else:
-            # model init (lazy) diukur eksplisit
-            t0 = time.perf_counter()
-            oe._get_paddle()
-            report["model_init_s"] = round(time.perf_counter() - t0, 2)
+            # model init (lazy) diukur eksplisit (hanya untuk paddle; engine
+            # lain init saat ocr_engine pertama dipanggil)
+            if args.engine == "paddle":
+                t0 = time.perf_counter()
+                oe._get_paddle()
+                report["model_init_s"] = round(time.perf_counter() - t0, 2)
             texts = []
             for png in _render_pages(pdf_bytes, args.zoom):
                 if args.max_side > 0:
@@ -152,6 +154,22 @@ def _child(args) -> int:
     finally:
         print(json.dumps(report))  # compact single-line — parent parse per-baris
     return 0 if report["status"] == "ok" else 42
+
+
+def _extract_json(text: str) -> dict | None:
+    """Ambil objek JSON utuh dari teks yang mungkin mengandung noise
+    (progress bar \r / multi-line). Ambil `{` pertama s/d `}` terakhir."""
+    if not text:
+        return None
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def _parent(args) -> int:
@@ -199,15 +217,7 @@ def _parent(args) -> int:
     finally:
         stderr = proc.stderr.read().decode(errors="replace")
     child_out = b"".join(out_chunks).decode(errors="replace").strip()
-    result: dict = {}
-    for line in child_out.splitlines():
-        try:
-            parsed = json.loads(line)
-            if isinstance(parsed, dict):
-                result = parsed
-                break
-        except json.JSONDecodeError:
-            continue
+    result: dict = _extract_json(child_out) or {}
     if not result:
         result = {"status": "no_json", "error": child_out[:500] or "child tidak output JSON"}
     result["parent_peak_rss_kb"] = peak_kb
@@ -223,7 +233,7 @@ def _parent(args) -> int:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--path", required=True, help="file PDF/PNG utk di-probe")
-    p.add_argument("--engine", default="paddle", choices=["paddle", "rapid", "rapid_tess", "tess"])
+    p.add_argument("--engine", default="paddle", choices=["paddle", "rapid", "rapid_tess", "tess", "easy"])
     p.add_argument("--zoom", type=float, default=3.0)
     p.add_argument("--max-side", type=int, default=0, help="0 = tanpa downscale; >0 = cap sisi terpanjang px")
     p.add_argument("--threads", type=int, default=4)
