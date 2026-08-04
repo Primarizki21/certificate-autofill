@@ -68,6 +68,15 @@ def run_extraction_pipeline(
             parser_engine = "ocr_fallback" if len(raw_text.strip()) < settings.min_text_length else f"{parser_engine}+ocr_date_check"
             extracted = extract_certificate_fields(raw_text)
 
+    # v8: ekstraktor organizer phrase-anchored (v7 P1) — memperbaiki field
+    # penyelenggara dan memberi sinyal lebih baik ke router tingkat.
+    from app.services.field_extractor import ExtractedValue
+    from app.services.organizer_v2 import extract_organizer_v2
+
+    v2_org = extract_organizer_v2(raw_text)
+    if v2_org:
+        extracted["penyelenggara_kegiatan"] = ExtractedValue(v2_org, 0.84, "organizer_v2")
+
     mapped = map_fields_to_form(extracted, tahun_akademik=tahun_akademik, bukti_fisik=bukti_fisik)
 
     return PipelineResult(

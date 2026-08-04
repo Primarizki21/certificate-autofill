@@ -1,5 +1,6 @@
 import re
 
+from app.config import settings
 from app.master_data import BUMN_KEYWORDS, FOREIGN_UNIVERSITY_HINTS, FORM_OPTIONS, PTN_KEYWORDS, PTS_KEYWORDS
 from app.services.field_extractor import ExtractedValue
 
@@ -20,8 +21,8 @@ def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str
     mapped["kelompok_kegiatan"] = ExtractedValue(kelompok, 0.86, "rule_mapper")
     mapped["jenis_kegiatan"] = ExtractedValue(jenis, 0.86, "rule_mapper")
 
-    tingkat = map_tingkat(upper)
-    mapped["tingkat"] = ExtractedValue(tingkat, 0.88 if tingkat in ["Fakultas", "Universitas", "Departemen/Program Studi", "UKM"] else 0.70, "rule_mapper")
+    tingkat, tingkat_conf = map_tingkat_v8(full_text, organizer, upper, activity, raw_role)
+    mapped["tingkat"] = ExtractedValue(tingkat, tingkat_conf, "rule_mapper")
 
     jabatan = map_jabatan(raw_role)
     mapped["prestasi_partisipasi_jabatan"] = ExtractedValue(jabatan, 0.84 if jabatan else 0.0, "rule_mapper")
@@ -96,10 +97,46 @@ def map_tingkat(upper_text: str) -> str:
     if any(k in upper_text for k in ["DEKAN", "DEAN", "FAKULTAS", "FACULTY", "FTMM", "FAKULTAS TEKNOLOGI MAJU"]):
         return "Fakultas"
     if any(k in upper_text for k in ["UKM", "UNIT KEGIATAN MAHASISWA"]):
-        return "UKM"
+        return "Lainnya"
     if any(k in upper_text for k in ["UNIVERSITAS", "UNIVERSITY", "UNAIR", "AIRLANGGA"]):
         return "Universitas"
     return "Nasional"
+
+
+def map_tingkat_v8(
+    full_text: str,
+    organizer: str | None,
+    upper_text: str,
+    activity: str = "",
+    raw_role: str = "",
+) -> tuple[str, float]:
+    """v8 tingkat pipeline: router rule-based -> LLM f_bias (opsional) -> legacy.
+
+    Router berprecision >=95% (diukur pada 74 cert GT v8). LLM hanya dipakai
+    bila ENABLE_LLM_TINGKAT=true; tanpa Ollama pipeline tetap deterministik.
+    Returns (label, confidence).
+    """
+    from app.services.tingkat_router import route_tingkat
+
+    routed = route_tingkat(full_text or "", organizer or "")
+    if routed:
+        return routed, 0.99
+
+    if settings.enable_llm_tingkat:
+        from app.services.llm_tingkat import infer_tingkat
+
+        known = {
+            "nama_kegiatan_sertifikasi": activity,
+            "penyelenggara_kegiatan": organizer,
+            "raw_role": raw_role,
+        }
+        llm_val = infer_tingkat(full_text or "", known)
+        if llm_val:
+            return llm_val, 0.85
+
+    return map_tingkat(upper_text), (
+        0.88 if map_tingkat(upper_text) in ["Fakultas", "Universitas", "Departemen/Program Studi", "Lainnya"] else 0.70
+    )
 
 
 def has_airlangga_affiliation_context(upper_text: str) -> bool:
@@ -184,9 +221,9 @@ def map_jenis_penyelenggara(upper_text: str, tingkat: str | None = None) -> str:
     tingkat = tingkat or ""
 
     # Aturan ketat dari kebutuhan form:
-    # - Tingkat Fakultas / Departemen / UKM adalah kegiatan internal kampus -> PTN Indonesia.
+    # - Tingkat Fakultas / Departemen / Lainnya (UKM) adalah kegiatan internal kampus -> PTN Indonesia.
     # - Tingkat Internasional -> PT di luar negeri.
-    if tingkat in {"Fakultas", "Departemen/Program Studi", "UKM", "Universitas"}:
+    if tingkat in {"Fakultas", "Departemen/Program Studi", "Lainnya", "Universitas"}:
         return "PTN di Indonesia"
     if tingkat == "Internasional":
         return "PT di luar negeri"

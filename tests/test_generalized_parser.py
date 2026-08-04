@@ -88,3 +88,33 @@ def test_hima_signature_without_airlangga_affiliation_maps_to_national():
     Pembina HIMA Ketua HIMA Ketua Pelaksana"""
     m = mapped(text)
     assert m["tingkat"].value == "Nasional"
+
+
+def test_tingkat_nasional_router_rule():
+    text = """SERTIFIKAT
+    TINGKAT NASIONAL
+    Bincang Santai Intelektual 2
+    yang diselenggarakan oleh BEM FEB UNAIR
+    pada tanggal 26 November 2023
+    PESERTA"""
+    m = mapped(text)
+    assert m["tingkat"].value == "Nasional"
+
+
+def test_bem_fakultas_router_rule():
+    text = """SERTIFIKAT
+    PESERTA
+    Workshop Data Science yang diselenggarakan oleh BEM FKM Universitas Airlangga
+    pada tanggal 24 September 2023"""
+    m = mapped(text)
+    assert m["tingkat"].value == "Fakultas"
+
+
+def test_ukm_maps_to_lainnya_not_ukm():
+    text = """SERTIFIKAT
+    Universitas Airlangga
+    UKM Tari dan Karawitan
+    Magang UKM Universitas Airlangga
+    Surabaya, 27 Desember 2023"""
+    m = mapped(text)
+    assert m["tingkat"].value == "Lainnya"
