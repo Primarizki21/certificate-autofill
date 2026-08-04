@@ -22,43 +22,92 @@ on, GT v8 final).
 
 ---
 
-## What Was Executed
+## Context & Quick Reference
 
-### Phase 0 — Harness repair
-`c337b12` — `results.xlsx` populated, taxonomy tied to explicit
-`TAXONOMY_VARIANT` (e_hybrid), report lists all variants, eff. tokens/cert
-amortized over 74, GT/text paths overridable via env, router rule traced in
-`router_decisions.json`. Baseline reproduced within 1pp.
+> Status: **eksperimental** — pendekatan ini bisa dikembangkan lebih lanjut
+> (OCR, model GPU setelah ada data label, LLM API routing, dll). Handoff ini
+> adalah referensi otoritatif; tabel benchmark di AGENTS.md belum diperbarui.
 
-### Phase 1 — GT audit
-`8d5578f` — `Ground_Truth_Sertifikat_v8.csv` (3 audited corrections) +
-tingkat scale-evidence check in `verify_ground_truth.py`. Effect was net-zero
-on the count (1981676 correct->wrong, 2954283 wrong->correct) but makes the
-evaluation honest. Ceiling-adjusted (excl. 3 disputed): 56/71 = 78.9%.
+### A. Peta file kunci
 
-### Phase 2 — Router contains-match + TINGKAT NASIONAL
-`a2d0600` — BEM/HIMA detected in uppercase alnum runs with a guard; explicit
-`TINGKAT/LOMBA NASIONAL` rule. Routed 39/74 at 100% precision, LLM calls
-35 (-53%). e_hybrid on fixed GT: 60/74 = 81.08%.
+| Area | File | Peran |
+|---|---|---|
+| Korpus teks | `tests/benchmark_runs/run_20260728_131835/extracted_texts/*.txt` | Input semua benchmark (74 stem) |
+| Manifest PDF | `tests/layout_manifest.json` | stem → path PDF (74) |
+| Benchmark runner | `tests/benchmark_llm_v4.py` | 7 variant (a–g), `--router on --organizer-variant phrase_v2` |
+| Render OCR | `app/services/pdf_fast_path.py` `render_pdf_pages_to_png_bytes(zoom=3.0)` | PNG untuk OCR |
+| OCR lama | `app/services/ocr_fallback.py` | RapidOCR + Tesseract (JANGAN sentuh sebelum pemenang OCR) |
+| LLM client | `app/services/llm_tingkat.py` | Ollama + prompt f_bias; `ENABLE_LLM_TINGKAT` (default off) |
+| Router | `app/services/tingkat_router.py` | rule-based tingkat, 39/74 @100% |
+| Report | `docs/report/report_data.json` + `scripts/generate_report.py` | laporan data-driven |
 
-### Phase 3 — Prompt variants f_bias / g_evidence
-`0aa9679` — `f_bias` (English != International, Indonesian context wins) won at
-**82.4%**; fixed data-slayer, 2955331, IRIS without regressions. `g_evidence`
-(FaR-style evidence output) regressed to 75.7% and was rejected. A compressed
-bias version cut tokens to 197 but lost accuracy (78.4%) and was rejected —
-accuracy floor takes precedence per v8 rules.
+### B. Environment & command benchmark
 
-### Phase 4 — Layout-aware input
-`514b81f` — markdown (`##` title) and annotated (`[TITLE]`) representations
-from PyMuPDF dict. **Rejected**: only 25/74 PDFs have embedded text (rest are
-scanned); both variants underperformed plain text (77.0% / 78.4% vs 82.4%) and
-markers disturbed the deterministic extractors. Input quality is OCR-bound.
+```bash
+# Ollama (bila belum jalan)
+setsid bash scripts/start_ollama.sh > /tmp/ollama.log 2>&1 &
 
-### Phase 5 — Production integration
-`b19d1c0` — `backend/app/services/` gained `tingkat_router.py`,
-`llm_tingkat.py`, `organizer_v2.py` (ports, no tests dependency).
-`form_mapper.map_tingkat_v8` = router -> LLM (if `ENABLE_LLM_TINGKAT`) ->
-legacy rules. UKM now maps to `Lainnya`. Full suite: **30 passed**.
+# Benchmark (GT + korpus ditentukan via env)
+GT_CSV_PATH=Ground_Truth_Sertifikat_v8.csv GT_TEXTS_DIR=tests/benchmark_runs/<korpus> \
+  uv run python -m tests.benchmark_llm_v4 --organizer-variant phrase_v2 --router on
+```
+
+- `GT_VERSION` auto-derive dari nama CSV; `tests/benchmark_runs/` gitignored (hasil lokal).
+
+### C. Korpus teks & membangun korpus OCR
+
+- Format korpus: `stem.txt` (stem = nama PDF tanpa ekstensi); baris `#` diabaikan `read_text_file`.
+- Scan vs teks: 25 PDF berteks embedded (pymupdf ≥60 char), 49 scan → fallback OCR.
+- Bangun korpus baru: manifest `layout_manifest.json` → PDF bytes →
+  `render_pdf_pages_to_png_bytes(pdf_bytes, zoom=3.0)` → OCR tiap PNG → tulis `stem.txt`.
+- Ukur improvement: field accuracy subset scan (organizer/nomor/tingkat) + CER/WER antar korpus.
+
+### D. Baca hasil benchmark
+
+- `<run>/summary_variant_f_bias.json` — tingkat/macro exact
+- `<run>/token_usage_f_bias.json` — tokens, calls, latency
+- `<run>/router_decisions.json` — keputusan rule + precision
+- `<run>/report.md` — ringkasan semua variant
+
+### E. Update laporan (eksperimen baru)
+
+1. Tambah entry ke `experiments[]` di `report_data.json`:
+```json
+{"id":"ocr_a","phase":"ocr","label":"OCR Trial A (PaddleOCR 3.0)","variant":"f_bias",
+ "tingkat":"82.4%","macro":"55.2%","tokens_cert":214,"calls":35,
+ "router":"39/74 @100%","gt":"fixed_v8","date":"Aug 4","notes":"..."}
+```
+2. `uv run python scripts/generate_report.py` → docx+md+xlsx dirakit ulang (tidak append).
+
+### F. Gotchas
+
+- Model Ollama: `llama3.1:8b` (bukan 3.2).
+- `benchmark_runs/` gitignored — angka otoritatif di `report_data.json`/handoff.
+- `EVAL_FIELDS` dipatch in-place di benchmark (mutasi list module).
+
+### G. Jangan lakukan
+
+- Ubah `Ground_Truth_Sertifikat.csv` (raw = history; `v8` = final).
+- Jalankan ulang `scripts/generate_gt_review.py` (menimpa keputusan di `gt_review.xlsx`).
+- Sentuh `ocr_fallback.py` produksi sebelum gate OCR lulus.
+- Mulai model GPU (LayoutLMv3/DocParser/Donut/PaddleOCR-VL) sebelum ada 200–500 label.
+- Ubah file v3 (`tests/llm_extractor_v3.py`) selama eksperimen.
+
+---
+
+## What Was Executed (history — ringkas; tidak wajib dibaca bila hanya eksekusi OCR)
+
+| Phase | Commit | Ringkasan |
+|---|---|---|
+| P0 Harness | `c337b12` | repair benchmark (xlsx rows, taxonomy, metadata); baseline ±1pp |
+| P1 GT audit | `8d5578f` | v8 CSV (3 koreksi) + tingkat evidence check; ceiling-adj 78.9% |
+| P2 Router | `a2d0600` | contains-match + TINGKAT NASIONAL; 39/74 @100%, calls -53% |
+| P3 Prompt | `0aa9679` | `f_bias` menang 82.4%; `g_evidence` regresi → ditolak |
+| P4 Layout | `514b81f` | ditolak — OCR-bound (25/74 berteks embedded) |
+| P5 Produksi | `b19d1c0` | `tingkat_router` + `llm_tingkat` + `organizer_v2`; UKM→Lainnya; 30 test pass |
+| R1 Report gen | `e1ebb98` | `report_data.json` + `scripts/generate_report.py` |
+| R2 GT review | `cc9a6b8` | `gt_review.xlsx` |
+| G1 GT final | `8ba2561` | terapkan keputusan user ke v8 CSV |
 
 ---
 

@@ -165,13 +165,15 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 
 ### Hasil Benchmark (74 sertifikat)
 
-| Method | MACRO exact | MACRO fuzzy | Latency/cert | LLM calls |
-|--------|:--------:|:---------:|:----------:|:--------:|
-| Regex baseline | 42.2% | — | ~0.1s | 0 |
-| NER v1 only | 18.4% | — | ~0.07s | 0 |
-| Hybrid + post-processing | 48.1% | 66.1% | ~0.6s | 0 |
-| **Hybrid + LLM (A2 v2 full-text)** | **58.3%** | **74.5%** | **~2.5s** | 74 |
-| **v4-e hybrid + router (tingkat)** | **77.0%** *(tingkat)* | **54.2%** *(macro)* | **~2.5s** | 39 |
+| Method | MACRO exact | MACRO fuzzy | LLM calls | Catatan |
+|--------|:--------:|:---------:|:----------:|--------|
+| Regex baseline | 42.2% | — | 0 | v2 |
+| Hybrid + post-processing | 48.1% | 66.1% | 0 | v3 |
+| Hybrid + LLM (A2 v2 full-text) | 58.3% | 74.5% | 74 | v4 |
+| v7 P4 e_hybrid + router | 54.2% | — | 39 | tingkat 77.0% |
+| **v8 f_bias + router (current)** | **55.2%** | — | **35** | **tingkat 82.4%**, 214 eff tok/cert |
+
+> **Angka otoritatif:** [docs/handoff_v9.md](docs/handoff_v9.md) + `docs/report/report_data.json`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
 
 ### Ollama Setup
 ```bash
