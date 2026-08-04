@@ -59,6 +59,8 @@ def _run_dir(label: str) -> str:
 
 
 def cmd_build(args) -> None:
+    import gc
+
     manifest = _load_manifest()
     classification = classify_manifest(manifest)
     # `--out` = root run dir; teks selalu di `<root>/extracted_texts`.
@@ -66,18 +68,26 @@ def cmd_build(args) -> None:
     texts_dir = os.path.join(run_root, "extracted_texts")
     os.makedirs(texts_dir, exist_ok=True)
 
+    stems = sorted(manifest)
+    if args.subset != "all":
+        stems = [s for s in stems if classification[s]["scan"] == (args.subset == "scan")]
+    n_total = len(stems)
+    if args.offset:
+        stems = stems[args.offset:]
+    if args.limit:
+        stems = stems[: args.limit]
+
     total_chars = 0
     n_ok = 0
     n_err = 0
     latency: list[dict] = []
     errors: list[dict] = []
 
-    stems = sorted(manifest)
     for stem in tqdm(stems, desc=f"OCR [{args.engine}]"):
         path = os.path.join(REPO, manifest[stem])
         t0 = time.perf_counter()
         try:
-            text = ocr_path(args.engine, path)
+            text = ocr_path(args.engine, path, zoom=args.zoom)
             elapsed = round(time.perf_counter() - t0, 3)
         except Exception as e:  # noqa: BLE001
             n_err += 1
@@ -89,8 +99,9 @@ def cmd_build(args) -> None:
             n_ok += 1
             with open(os.path.join(texts_dir, f"{stem}.txt"), "w") as f:
                 f.write(f"# Engine: {args.engine}\n# Seconds: {elapsed}\n\n{text}")
+        del text
+        gc.collect()  # WSL 7GB: rilis memori model/runtime tiap sertifikat
 
-    # Validasi: semua stem harus punya file teks (jangan pernah skip diam-diam)
     missing = [s for s in stems if not os.path.exists(os.path.join(texts_dir, f"{s}.txt"))]
     if missing:
         print(f"WARN: {len(missing)} stem tanpa output: {missing[:5]} ...")
@@ -100,12 +111,16 @@ def cmd_build(args) -> None:
         "engine": args.engine,
         "created": datetime.now().isoformat(),
         "manifest": MANIFEST,
-        "stems_total": len(stems),
+        "subset": args.subset,
+        "offset": args.offset,
+        "limit": args.limit,
+        "zoom": args.zoom,
+        "stems_selected": n_total,
+        "stems_this_run": len(stems),
         "stems_ok": n_ok,
         "stems_error": n_err,
         "stems_missing_output": len(missing),
         "scan_count": n_scans,
-        "embedded_count": len(stems) - n_scans,
         "total_chars": total_chars,
         "errors": errors,
     }
@@ -118,10 +133,11 @@ def cmd_build(args) -> None:
             "max_seconds": round(max(lats), 3),
             "n": len(lats),
         }
-    with open(os.path.join(run_root, "ocr_meta.json"), "w") as f:
+    meta_name = f"ocr_meta_{args.offset:04d}.json" if (args.offset or args.limit) else "ocr_meta.json"
+    with open(os.path.join(run_root, meta_name), "w") as f:
         json.dump(meta, f, indent=2)
-    print(f"\nEngine [{args.engine}]: ok={n_ok} err={n_err} total_chars={total_chars}")
-    print(f"Scan={meta['scan_count']} Embedded={meta['embedded_count']} (from {len(stems)} manifest)")
+    print(f"\nEngine [{args.engine}] subset={args.subset} zoom={args.zoom}: "
+          f"ok={n_ok} err={n_err} of {len(stems)} (run ini) / {n_total} (subset)")
     if latency:
         print("Latency:", meta["latency"])
     print(f"Output: {texts_dir}")
@@ -219,7 +235,15 @@ def main() -> None:
     b.add_argument("--engine", required=True,
                    choices=sorted(ocr_engine.ENGINES) + ["rapid_tess"],
                    help="engine OCR (rapid/tess/paddle/rapid_tess)")
-    b.add_argument("--out", default=None, help="direktori output korpus")
+    b.add_argument("--out", default=None, help="direktori root output korpus")
+    b.add_argument("--subset", default="all", choices=["all", "scan", "embedded"],
+                   help="batasi ke subset (scan = teks embedded <=60 char + PNG)")
+    b.add_argument("--limit", type=int, default=None,
+                   help="maks jumlah sertifikat di run ini (chunking)")
+    b.add_argument("--offset", type=int, default=0,
+                   help="lewati N sertifikat pertama (chunking)")
+    b.add_argument("--zoom", type=float, default=3.0,
+                   help="render zoom untuk PDF (default 3.0, konsisten baseline)")
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("eval", help="evaluasi korpus terhadap GT v8")

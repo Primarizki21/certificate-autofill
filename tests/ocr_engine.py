@@ -92,8 +92,9 @@ def _get_paddle():
             use_doc_unwarping=False,
             use_textline_orientation=True,
             enable_mkldnn=False,
-            # CPU-only host 7GB: batasi thread agar tidak membanjiri memori/WSL.
+            # CPU-only host 7GB: batasi thread + batch agar tidak OOM di WSL.
             cpu_threads=4,
+            text_recognition_batch_size=4,
         )
     return _paddle_engine
 
@@ -206,21 +207,36 @@ def pdf_to_page_images(pdf_bytes: bytes) -> list[bytes]:
     return render_pdf_pages_to_png_bytes(pdf_bytes, zoom=ZOOM)
 
 
-def ocr_pdf(key: str, pdf_bytes: bytes) -> str:
-    """OCR seluruh PDF: render tiap halaman lalu OCR, gabung antar halaman."""
-    pages = pdf_to_page_images(pdf_bytes)
-    texts = [ocr_engine(key, p) for p in pages]
-    return "\n".join(t for t in texts if t.strip()).strip()
+def ocr_pdf(key: str, pdf_bytes: bytes, zoom: float = ZOOM) -> str:
+    """OCR seluruh PDF: render halaman SATU PER SATU lalu OCR, free tiap
+    halaman. WSL 7GB — jangan pernah menahan semua page image sekaligus
+    (OOM). Antar halaman tetap digabung."""
+    import fitz
+    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    texts: list[str] = []
+    try:
+        matrix = fitz.Matrix(zoom, zoom)
+        for page in doc:
+            pix = page.get_pixmap(matrix=matrix, alpha=False)
+            png = pix.tobytes("png")
+            del pix
+            t = ocr_engine(key, png)
+            del png
+            if t.strip():
+                texts.append(t)
+    finally:
+        doc.close()
+    return "\n".join(texts).strip()
 
 
-def ocr_path(key: str, path: str) -> str:
+def ocr_path(key: str, path: str, zoom: float = ZOOM) -> str:
     """OCR file path; PNG diteruskan, selain itu dianggap PDF."""
     ext = os.path.splitext(path)[1].lower()
     if ext == ".png":
         with open(path, "rb") as f:
             return ocr_engine(key, f.read())
     with open(path, "rb") as f:
-        return ocr_pdf(key, f.read())
+        return ocr_pdf(key, f.read(), zoom=zoom)
 
 
 def embedded_char_count(path: str) -> int:
