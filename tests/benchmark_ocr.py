@@ -58,8 +58,47 @@ def _run_dir(label: str) -> str:
     return os.path.join(RUNS_DIR, f"{label}_{stamp}")
 
 
+def _ocr_per_cert(args, stem: str, path: str) -> str:
+    """OCR 1 sertifikat di SUBPROCESS fresh (lewat paddle_probe_safe --full-text).
+
+    Proses fresh membebaskan semua memori C++ engine tiap cert — mencegah
+    akumulasi RSS paddle yang bisa membekukan WSL. Mengembalikan teks OCR."""
+    import subprocess
+    proc = subprocess.run(
+        [
+            sys.executable, "-m", "tests.paddle_probe_safe",
+            "--path", os.path.join(REPO, path),
+            "--engine", args.engine,
+            "--zoom", str(args.zoom),
+            "--threads", str(args.threads),
+            "--batch", str(args.batch),
+            "--mem-cap-gb", str(args.mem_cap_gb),
+            "--full-text",
+        ],
+        capture_output=True, text=True, timeout=600,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(f"probe exit {proc.returncode}: {proc.stderr[-500:]}")
+    for line in proc.stdout.splitlines():
+        try:
+            data = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if isinstance(data, dict) and "text" in data:
+            return data["text"]
+    raise RuntimeError("probe tidak mengembalikan JSON text")
+
+
 def cmd_build(args) -> None:
     import gc
+    import resource
+
+    # KAPUR BARIS DARURAT: batasi virtual memory proses sehingga kalau engine
+    # OCR (paddle) kehabisan memori, proses melempar MemoryError & mati bersih
+    # — TIDAK PERNAH membekukan WSL (lihat tests/paddle_probe_safe.py).
+    if args.mem_cap_gb:
+        cap = int(args.mem_cap_gb * 1024 ** 3)
+        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
 
     manifest = _load_manifest()
     classification = classify_manifest(manifest)
@@ -84,10 +123,21 @@ def cmd_build(args) -> None:
     errors: list[dict] = []
 
     for stem in tqdm(stems, desc=f"OCR [{args.engine}]"):
+        out_file = os.path.join(texts_dir, f"{stem}.txt")
+        if args.skip_existing and os.path.exists(out_file):
+            continue
         path = os.path.join(REPO, manifest[stem])
         t0 = time.perf_counter()
         try:
-            text = ocr_path(args.engine, path, zoom=args.zoom)
+            if args.per_cert_process:
+                text = _ocr_per_cert(args, stem, manifest[stem])
+            else:
+                text = ocr_path(args.engine, path, zoom=args.zoom)
+            if args.prepend_embedded:
+                # Mirip produksi: teks embedded (bila ada) + OCR.
+                emb = ocr_engine.embedded_text(manifest[stem])
+                if emb.strip():
+                    text = f"{emb}\n{text}".strip()
             elapsed = round(time.perf_counter() - t0, 3)
         except Exception as e:  # noqa: BLE001
             n_err += 1
@@ -134,6 +184,10 @@ def cmd_build(args) -> None:
             "n": len(lats),
         }
     meta_name = f"ocr_meta_{args.offset:04d}.json" if (args.offset or args.limit) else "ocr_meta.json"
+    try:
+        meta["peak_rss_kb"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except Exception:
+        meta["peak_rss_kb"] = None
     with open(os.path.join(run_root, meta_name), "w") as f:
         json.dump(meta, f, indent=2)
     print(f"\nEngine [{args.engine}] subset={args.subset} zoom={args.zoom}: "
@@ -244,6 +298,19 @@ def main() -> None:
                    help="lewati N sertifikat pertama (chunking)")
     b.add_argument("--zoom", type=float, default=3.0,
                    help="render zoom untuk PDF (default 3.0, konsisten baseline)")
+    b.add_argument("--mem-cap-gb", type=float, default=10.0,
+                   help="batas virtual memory proses (RLIMIT_AS). VA tinggi aman "
+                        "(RSS tetap terbatas karena per-cert subprocess fresh); "
+                        "containment WSL dari process-per-cert, bukan dari cap")
+    b.add_argument("--skip-existing", action="store_true",
+                   help="lewati stem yang sudah punya file teks (perbaikan chunk)")
+    b.add_argument("--per-cert-process", action="store_true",
+                   help="OCR tiap cert di subprocess fresh (wajib utk paddle — "
+                        "cegah akumulasi RSS yang membekukan WSL)")
+    b.add_argument("--threads", type=int, default=4, help="CPU thread (paddle)")
+    b.add_argument("--batch", type=int, default=4, help="batch size rec (paddle)")
+    b.add_argument("--prepend-embedded", action="store_true",
+                   help="awali teks embedded PyMuPDF sebelum OCR (mirip produksi)")
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("eval", help="evaluasi korpus terhadap GT v8")
