@@ -56,12 +56,29 @@ from tests.llm_extractor import (
 from tests.benchmark_llm import (
     read_text_file,
     combine_hybrid,
-    CSV_PATH,
-    TEXTS_DIR,
     RUNS_DIR,
     create_run_dir,
     save_xlsx,
 )
+
+REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+CSV_PATH = os.environ.get(
+    "GT_CSV_PATH", os.path.join(REPO_ROOT, "Ground_Truth_Sertifikat.csv")
+)
+TEXTS_DIR = os.environ.get(
+    "GT_TEXTS_DIR",
+    os.path.join(REPO_ROOT, "tests", "benchmark_runs", "run_20260728_131835", "extracted_texts"),
+)
+GT_VERSION = os.environ.get("GT_VERSION", "raw")
+BENCHMARK_PROMPT_VERSION = "v4_variants"
+
+# Variant yang menjadi sumber taxonomy mismatch (ditetapkan eksplisit,
+# bukan "variant terakhir yang diloop").
+TAXONOMY_VARIANT = "e_hybrid"
+
+# Total sertifikat dalam dataset — dipakai untuk menghitung token efektif
+# per dokumen (amortized), bukan per-call.
+N_CERTS = 74
 from tests.llm_extractor_v3 import (
     PROMPT_VERSION,
     MINIMIZE_CONFIG,
@@ -82,22 +99,27 @@ VARIANTS = {
     "a_context": {
         "builder": build_prompt_tingkat_context,
         "uses_text": False,
+        "prompt_version": "v3_tingkat_only",
     },
     "b_minimized": {
         "builder": build_prompt_tingkat_minimized,
         "uses_text": True,
+        "prompt_version": "v3_tingkat_only",
     },
     "c_adaptive": {
         "builder": build_prompt_tingkat_adaptive,
         "uses_text": True,
+        "prompt_version": "v4_adaptive",
     },
     "d_mid": {
         "builder": build_prompt_tingkat_mid,
         "uses_text": True,
+        "prompt_version": "v4_adaptive",
     },
     "e_hybrid": {
         "builder": build_prompt_tingkat_hybrid,
         "uses_text": True,
+        "prompt_version": "v4_adaptive",
     },
 }
 
@@ -133,7 +155,7 @@ def _known_fields(hybrid_pp: dict, regex_fields: dict) -> dict[str, str]:
     return known
 
 
-def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str):
+def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str, prompt_version: str = BENCHMARK_PROMPT_VERSION):
     response, ollama_data = call_ollama(prompt)
     clean_value = validate_tingkat(response)
     eval_count = ollama_data.get("eval_count", 0)
@@ -157,7 +179,7 @@ def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str)
         eval_duration_ns=eval_dur,
         total_duration_ns=total_dur,
         tokens_per_second=round(tps, 1),
-        prompt_version=PROMPT_VERSION,
+        prompt_version=prompt_version,
         response=response,
         valid=clean_value is not None,
         expected=expected or None,
@@ -232,14 +254,16 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
         row_data["filename"] = f"{stem}.txt"
 
         routed_value = None
+        routed_rule = ""
         if router != "none":
-            from tests.llm_router_v4 import route_tingkat
+            from tests.llm_router_v4 import route_tingkat_trace
             org = _organizer_from_variant(raw_text, "phrase_v2").get("penyelenggara_kegiatan")
-            routed_value = route_tingkat(raw_text, org.value if org else "")
+            routed_value, routed_rule = route_tingkat_trace(raw_text, org.value if org else "")
             expected = normalize_gt_tingkat(row.get("tingkat", ""))
             router_rows.append({
                 "certificate": f"{stem}.txt",
                 "decision": routed_value or "",
+                "rule": routed_rule,
                 "expected": expected,
                 "exact": routed_value is not None and routed_value == expected,
                 "skipped_call": routed_value is not None and router == "on",
@@ -264,7 +288,8 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
                 total_calls += 0
             else:
                 tingkat = _call_tingkat(
-                    prompt, stem, name, row, calls_paths[name]
+                    prompt, stem, name, row, calls_paths[name],
+                    prompt_version=spec["prompt_version"],
                 )
                 total_calls += 1
 
@@ -283,9 +308,12 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
             row_data[f"{name}_tingkat_exact"] = 1 if t_ev.get("exact") else 0
             row_data[f"{name}_tingkat_fuzzy"] = 1 if t_ev.get("fuzzy") else 0
 
-        # Taxonomy only on the winning variant (b_minimized).
+        per_cert_rows.append(row_data)
+
+        # Taxonomy hanya dari variant pemenang yang ditetapkan eksplisit.
+        taxonomy_result = results_by_variant[TAXONOMY_VARIANT][-1]
         for field in ("penyelenggara_kegiatan", "tingkat"):
-            r = eval_result.get(field, {})
+            r = taxonomy_result.get(field, {})
             if not r or r.get("exact"):
                 continue
             expected = r.get("expected", "")
@@ -304,14 +332,21 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
     with open(os.path.join(run_dir, "config.json"), "w") as f:
         json.dump({
             "model": DEFAULT_MODEL,
+            "benchmark_prompt_version": BENCHMARK_PROMPT_VERSION,
             "prompt_version": PROMPT_VERSION,
-            "variants": list(VARIANTS),
+            "variants": {
+                name: {"uses_text": spec["uses_text"], "prompt_version": spec["prompt_version"]}
+                for name, spec in VARIANTS.items()
+            },
+            "taxonomy_variant": TAXONOMY_VARIANT,
             "organizer_variant": organizer_variant,
             "dedup": dedup,
             "router": router,
             "minimize_config": MINIMIZE_CONFIG,
             "csv_path": CSV_PATH,
             "texts_dir": TEXTS_DIR,
+            "gt_version": GT_VERSION,
+            "n_certs": N_CERTS,
         }, f, indent=2, ensure_ascii=False)
     with open(os.path.join(run_dir, "minimize_stats.json"), "w") as f:
         json.dump(minimize_stats, f, indent=2)
@@ -336,9 +371,9 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
         summaries[name] = s
         _save_summary(run_dir, s, f"variant_{name}")
 
-    best = summaries.get("b_minimized", summaries.get("a_context", summary_pp))
+    best = summaries.get(TAXONOMY_VARIANT, summaries.get("b_minimized", summary_pp))
     save_summary_json(best, run_dir)
-    save_mismatch_report(results_by_variant.get("b_minimized", []), run_dir, source="llm_v4")
+    save_mismatch_report(results_by_variant.get(TAXONOMY_VARIANT, []), run_dir, source=f"llm_v4_{TAXONOMY_VARIANT}")
 
     # Taxonomy artifacts
     taxonomy_path = os.path.join(run_dir, "mismatch_taxonomy.csv")
@@ -372,7 +407,7 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
     for name, ts in token_summaries.items():
         print(f"  [{name}] calls={ts['total_calls']} tokens={ts['total_tokens']} "
               f"(prompt {ts['total_prompt_tokens']} / completion {ts['total_completion_tokens']})")
-    print("\n=== Taxonomy (b_minimized) ===")
+    print(f"\n=== Taxonomy ({TAXONOMY_VARIANT}) ===")
     report = build_taxonomy_report(taxonomy_rows)
     print(json.dumps(report["by_field"], indent=2, ensure_ascii=False))
 
@@ -388,30 +423,37 @@ def _write_report(run_dir: str, summaries: dict, token_summaries: dict, total_ca
     lines = ["# Handoff v7 — LLM v4 Benchmark\n"]
     lines.append(f"**Date:** {datetime.now().isoformat()}\n")
     lines.append(f"**Model:** {DEFAULT_MODEL}\n")
-    lines.append(f"**Prompt version:** {PROMPT_VERSION}\n\n")
+    lines.append(f"**Prompt version:** {BENCHMARK_PROMPT_VERSION}\n")
+    lines.append(f"**GT version:** {GT_VERSION}\n")
+    lines.append(f"**Run dir:** {os.path.basename(run_dir)}\n\n")
 
     fields = list(dict.fromkeys(ev_fw.EVAL_FIELDS + ["tingkat"]))
     lines.append("## Tingkat Exact Accuracy\n\n")
-    lines.append("| Variant | Tingkat exact | MACRO exact | Tokens/cert |\n")
-    lines.append("|---------|--------------|-------------|-------------|\n")
+    lines.append("| Variant | Tingkat exact | MACRO exact | Eff. tokens/cert |\n")
+    lines.append("|---------|--------------|-------------|------------------|\n")
     pp_macro = summaries["hybrid_pp"].get("macro_avg", {}).get("exact_acc", 0) * 100
     lines.append(f"| Hybrid+PP | 0.0% | {pp_macro:.1f}% | 0 |\n")
-    for name in ("a_context", "b_minimized"):
+    for name in VARIANTS:
         s = summaries.get(name, {})
         t = s.get("tingkat", {}).get("exact_acc", 0) * 100
         m = s.get("macro_avg", {}).get("exact_acc", 0) * 100
         ts = token_summaries.get(name, {})
-        per_cert = ts.get("total_tokens", 0) / ts.get("total_calls", 1) if ts else 0
+        # Token efektif per dokumen: total token di-amortisasi ke N_CERTS
+        # (sertifikat yang di-route ke rule = 0 token).
+        per_cert = ts.get("total_tokens", 0) / N_CERTS if ts else 0
         lines.append(f"| {name} | {t:.1f}% | {m:.1f}% | {per_cert:.0f} |\n")
 
     lines.append("\n## Per-field Exact Accuracy\n\n")
-    lines.append("| Field | Hybrid+PP | A | B |\n")
-    lines.append("|-------|-----------|---|---|\n")
+    lines.append("| Field | Hybrid+PP | " + " | ".join(v.upper() for v in VARIANTS) + " |\n")
+    lines.append("|-------|--------" + "|---" * len(VARIANTS) + "|\n")
     for field in fields:
         pp = summaries["hybrid_pp"].get(field, {}).get("exact_acc", 0) * 100
-        a = summaries.get("a_context", {}).get(field, {}).get("exact_acc", 0) * 100
-        b = summaries.get("b_minimized", {}).get(field, {}).get("exact_acc", 0) * 100
-        lines.append(f"| `{field}` | {pp:.1f}% | {a:.1f}% | {b:.1f}% |\n")
+        row = [f"| `{field}` | {pp:.1f}%"]
+        for name in VARIANTS:
+            v = summaries.get(name, {}).get(field, {}).get("exact_acc", 0) * 100
+            row.append(f" {v:.1f}%")
+        row.append(" |")
+        lines.append(" ".join(row) + "\n")
 
     if taxonomy_rows:
         report = build_taxonomy_report(taxonomy_rows)

@@ -56,28 +56,38 @@ def _sig(raw_text: str, organizer: str) -> dict:
     }
 
 
+def _decide(s: dict) -> tuple[str | None, str]:
+    """Return (rule_decision, rule_name). None -> route ke LLM."""
+    if s["lomba"] and (s["hima"] or s["univ"] or s["nasw"] or s["luar"] or s["fak"] or s["bem"]):
+        return "Nasional", "lomba+org"
+    if s["lomba_merged"] and (s["hima"] or s["univ"] or s["fak"] or s["bem"]):
+        return "Nasional", "lomba_merged+org"
+    if s["dept"] and s["sem"] and not s["lomba"] and not s["nasw"]:
+        return "Departemen/Program Studi", "dept+sem"
+    if s["hima"] and s["luar"]:
+        return "Nasional", "hima+luar"
+    if s["univ"] and s["luar"] and not s["fak"]:
+        return "Nasional", "univ+luar"
+    if s["dept"] and s["fak"]:
+        return "Departemen/Program Studi", "dept+fak"
+    if s["dept"] and s["hima"] and s["univ"]:
+        return "Departemen/Program Studi", "dept+hima+univ"
+    if s["fak"] and s["univ"] and not s["sem"] and not s["nasw"] and not s["lomba"]:
+        return "Fakultas", "fak+univ"
+    if s["bem"] and s["sem"] and not s["lomba"] and not s["hima"] and not s["nasw"]:
+        return "Fakultas", "bem+sem"
+    return None, ""
+
+
 def route_tingkat(raw_text: str, organizer: str) -> str | None:
     """Return rule decision, or None untuk route ke LLM."""
-    s = _sig(raw_text, organizer)
-    if s["lomba"] and (s["hima"] or s["univ"] or s["nasw"] or s["luar"] or s["fak"] or s["bem"]):
-        return "Nasional"
-    if s["lomba_merged"] and (s["hima"] or s["univ"] or s["fak"] or s["bem"]):
-        return "Nasional"
-    if s["dept"] and s["sem"] and not s["lomba"] and not s["nasw"]:
-        return "Departemen/Program Studi"
-    if s["hima"] and s["luar"]:
-        return "Nasional"
-    if s["univ"] and s["luar"] and not s["fak"]:
-        return "Nasional"
-    if s["dept"] and s["fak"]:
-        return "Departemen/Program Studi"
-    if s["dept"] and s["hima"] and s["univ"]:
-        return "Departemen/Program Studi"
-    if s["fak"] and s["univ"] and not s["sem"] and not s["nasw"] and not s["lomba"]:
-        return "Fakultas"
-    if s["bem"] and s["sem"] and not s["lomba"] and not s["hima"] and not s["nasw"]:
-        return "Fakultas"
-    return None
+    value, _ = _decide(_sig(raw_text, organizer))
+    return value
+
+
+def route_tingkat_trace(raw_text: str, organizer: str) -> tuple[str | None, str]:
+    """Return (rule decision, rule name) untuk traceability benchmark."""
+    return _decide(_sig(raw_text, organizer))
 
 
 if __name__ == "__main__":
@@ -88,4 +98,6 @@ if __name__ == "__main__":
     for text, org, want in cases:
         got = route_tingkat(text, org)
         assert got == want, (text, org, got, want)
+        got_t, rule = route_tingkat_trace(text, org)
+        assert got_t == want and (rule or want is None), (text, org, got_t, rule)
     print("self-check ok")
