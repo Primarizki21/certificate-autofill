@@ -87,8 +87,11 @@ from tests.llm_extractor_v3 import (
 )
 from tests.llm_extractor_v4 import (
     build_prompt_tingkat_adaptive,
+    build_prompt_tingkat_bias,
+    build_prompt_tingkat_evidence,
     build_prompt_tingkat_hybrid,
     build_prompt_tingkat_mid,
+    parse_evidence_response,
 )
 from tests.ocr_cleanup_v4 import dedup_lines
 
@@ -120,6 +123,17 @@ VARIANTS = {
         "builder": build_prompt_tingkat_hybrid,
         "uses_text": True,
         "prompt_version": "v4_adaptive",
+    },
+    "f_bias": {
+        "builder": build_prompt_tingkat_bias,
+        "uses_text": True,
+        "prompt_version": "v4_bias",
+    },
+    "g_evidence": {
+        "builder": build_prompt_tingkat_evidence,
+        "uses_text": True,
+        "prompt_version": "v4_evidence",
+        "parse_evidence": True,
     },
 }
 
@@ -155,9 +169,12 @@ def _known_fields(hybrid_pp: dict, regex_fields: dict) -> dict[str, str]:
     return known
 
 
-def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str, prompt_version: str = BENCHMARK_PROMPT_VERSION):
+def _call_tingkat(prompt: str, stem: str, method: str, row: dict, log_path: str, prompt_version: str = BENCHMARK_PROMPT_VERSION, parse_evidence: bool = False):
     response, ollama_data = call_ollama(prompt)
-    clean_value = validate_tingkat(response)
+    if parse_evidence:
+        _, clean_value = parse_evidence_response(response)
+    else:
+        clean_value = validate_tingkat(response)
     eval_count = ollama_data.get("eval_count", 0)
     prompt_eval_count = ollama_data.get("prompt_eval_count", 0)
     eval_dur = ollama_data.get("eval_duration", 0)
@@ -290,6 +307,7 @@ def run_benchmark(limit: int | None = None, organizer_variant: str = "regex", de
                 tingkat = _call_tingkat(
                     prompt, stem, name, row, calls_paths[name],
                     prompt_version=spec["prompt_version"],
+                    parse_evidence=spec.get("parse_evidence", False),
                 )
                 total_calls += 1
 
