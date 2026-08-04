@@ -83,11 +83,18 @@ optimization is a follow-up, not a blocker.
 ## Docs / Reports
 
 - Report workspace: `docs/report/` (see `README.md` for the docx/md convention).
-- `benchmark_methods.{docx,md}` — Methods 7 & 8 appended.
-- `evaluation_methodology.{docx,md}` — section 10 (GT versioning, router,
-  tokens, layout, ship gate) appended.
-- `phase_v4_methodology.{docx,md}` — sections 11 & 12 appended.
-- `phase_v4_results_summary.{md,xlsx}` — v7/v8 results + v8 sheets appended.
+- **Data-driven generator** (since `e1ebb98`):
+  - Source: `docs/report/report_data.json` (meta, `experiments[]`, document blocks).
+  - `scripts/generate_report.py` rebuilds all 4 reports **in full** (no append):
+    `benchmark_methods`, `evaluation_methodology`, `phase_v4_methodology`,
+    `phase_v4_results_summary` (docx + md + xlsx), tables auto-derived from
+    `experiments[]`.
+  - `scripts/build_report_data.py` — one-time migration of pre-append content.
+    Do NOT need to run again; edit `report_data.json` directly.
+  - **Workflow for a new experiment:** add one entry to `experiments[]` in
+    `report_data.json` → `uv run python scripts/generate_report.py` → the new
+    experiment lands in the correct section/table automatically.
+- `docs/report/gt_review.xlsx` — manual GT review sheet (see Next Session).
 - `docs/gt_verification_report.txt` — regenerated with tingkat evidence checks.
 
 ## Commits
@@ -101,14 +108,97 @@ optimization is a follow-up, not a blocker.
 | `0aa9679` | P3: f_bias / g_evidence, f_bias wins |
 | `514b81f` | P4: layout representation — rejected |
 | `b19d1c0` | P5: production integration + UKM->Lainnya |
+| `e1ebb98` | R1: data-driven report generator (report_data.json + scripts) |
+| `cc9a6b8` | R2: gt_review.xlsx generator + review sheet |
 
-## Next Steps (future sessions)
+## Next Session — Execution Plan (sesi berikutnya)
 
-- Token optimization for f_bias (target <=200 eff tok/cert) — trim instructions
-  without the accuracy drop observed in the compressed-bias attempt.
-- Better OCR (PaddleOCR) — the real input-quality ceiling (organizer 16.2%).
-- Collect 200-500 corrected certs before any fine-tuning/classifier work.
-- Measure duplicate-traffic (content-hash reuse) and Ollama concurrency before
-  scaling decisions.
-- A2 v2 full-field LLM integration remains deferred until tingkat path is stable
-  in production.
+### 1. GT review (menunggu keputusan user)
+
+- User mengisi kolom **keputusan** di `docs/report/gt_review.xlsx` (4 sheet).
+  **Jangan jalankan ulang `scripts/generate_gt_review.py` setelah diisi** — itu
+  akan menimpa keputusan user.
+- Sheet yang sudah dikonfirmasi user: `Airno_Faiz` (Nasional, event lintas-PTN),
+  `FIT_Faiz` (Internasional, ada peserta asing), 3× Magang UKM (tanggal tetap
+  kosong — 27 Des = tanggal tanda tangan).
+- Setelah keputusan lengkap: terapkan ke `Ground_Truth_Sertifikat_v8.csv`
+  (raw CSV dibiarkan sebagai history). Bila label tingkat berubah, re-run
+  benchmark (`GT_CSV_PATH=Ground_Truth_Sertifikat_v8.csv ... benchmark_llm_v4`)
+  lalu regenerate report.
+
+### 2. Eksperimen OCR — PaddleOCR 3.0 (keputusan user: ganti OCR)
+
+**Alasan:** contoh garbled telah dikonfirmasi manual (Girifest `NOM0R:06/001/E`,
+Venedict `UoinersitasAirlangga`, KARSA tanggal terserap). Hanya 25/74 PDF
+berteks embedded; input quality = OCR-bound (organizer exact 16.2%).
+
+**Riset (bahan referensi):**
+| Paper | Relevansi |
+|---|---|
+| [2507.05595] PaddleOCR 3.0 Technical Report | Toolkit OCR+layout+table, PP-OCRv5, Apache, CPU-capable → **pilihan utama** |
+| [2510.14528] PaddleOCR-VL (0.9B VLM) | Parsing dokumen langsung, 94.5% OmniDocBench → GPU, **tunda** |
+| [2601.21957] PaddleOCR-VL-1.5 | Multi-task 0.9B VLM, robust in-the-wild → GPU, **tunda** |
+| [2407.11985] Marksheet Parser pakai PaddleOCR | Preceden langsung: parsing form/sertifikat |
+| [2505.20429] PreP-OCR | Restoration + post-OCR correction, CER -63.9~70.3% |
+| [2508.21693] Line-Level OCR (Kraken+PARSeq) | Lebih baik untuk teks rapat sertifikat |
+| [2508.14557] Internal Document Redundancy | OCR lebih baik via redundansi internal |
+| [2508.06988] TADoc | Dewarping (CER 0.172 saat gagal) |
+| [2509.11720] RT-DETR layout detection | Deteksi region header/body/signature |
+| [2304.12484] DocParser / [2403.07553] Donut | OCR-free (skip OCR) → GPU, **tunda** |
+
+**Trial structure** (setiap percobaan = 1 eksperimen terstruktur, bukan append):
+1. Baseline: korpus RapidOCR+Tesseract saat ini (sudah ada).
+2. **Trial A:** PaddleOCR 3.0 default (PP-OCRv5) pada semua cert.
+3. **Trial B:** PaddleOCR + normalisasi line-merge (target token tergabung
+   `BEMFKM`, `SERT2128BEM2026`).
+4. **Trial C** (bila perlu): + preprocessing (binarize/contrast).
+
+Tiap trial: bangun korpus baru (`GT_TEXTS_DIR=...`), jalankan benchmark → run
+dir baru, tambah 1 entri `experiments[]` di `report_data.json`, commit.
+Ukur per trial: CER/WER pada subset garbled, organizer/nomor/tingkat exact,
+latency.
+
+**Files:** `tests/ocr_engine.py` (seam ganti engine), `tests/benchmark_ocr.py`;
+`backend/app/services/ocr_fallback.py` hanya disentuh setelah pemenang.
+Dependency baru: `paddleocr`/`paddlepaddle` (pip) — eksperimen dulu di `tests/`.
+**Gate:** organizer/nomor naik pada subset scan, tanpa regresi pada cert
+berteks, latency < 2×.
+
+### 3. Referensi biaya produksi (LLM API — untuk pilih model sesuai cost)
+
+**Pricing per 1M token (USD, Agustus 2026):**
+
+| Model | Input | Output | Cached | Tier |
+|---|---|---|---|---|
+| GPT-oss 20B (OpenAI open-weight) | **$0.08** | $0.35 | — | budget |
+| Gemini 2.5 Flash-Lite | **$0.10** | $0.40 | $0.01 | budget |
+| **DeepSeek V4 Flash** | **$0.14** | **$0.28** | $0.0028 | budget — best value |
+| GPT-4o-mini | $0.15 | $0.60 | $0.075 | budget |
+| GPT-4.1-nano | ~$0.10 | ~$0.40 | — | budget |
+| Gemini 3.5 Flash-Lite | $0.30 | $2.50 | $0.15 | mid |
+| DeepSeek V4 Pro | $0.435 | $0.87 | $0.0036 | mid reasoning |
+| Claude Haiku 3.5 | $0.80 | $4.00 | — | mid |
+
+> Catatan: Gemini 2.0 Flash deprecated (shut down Juni 2026). DeepSeek
+> mengumumkan harga 2× saat peak window (09:00–12:00 & 14:00–18:00 WIB) —
+> status: belum aktif. Angka harga bisa berubah; cek dokumen resmi provider.
+
+**Estimasi workload kita** (f_bias, router on, ~214 eff tok/cert, ~99% input,
+100K sertifikat ≈ 21.4M token):
+- DeepSeek V4 Flash ≈ **$3.0** / 100K certs
+- Gemini 2.5 Flash-Lite ≈ **$2.2** / 100K certs
+- GPT-oss 20B ≈ **$1.8** / 100K certs
+
+**Kesimpulan arsitektur termurah:** OCR CPU (RapidOCR → PaddleOCR 3.0, ~0
+biaya) + rule/router (0 compute) + LLM API hanya untuk cert ambigu (router
+sudah -53%). Model GPU (LayoutLMv3 126M, DocParser 70M, Donut 200M,
+PaddleOCR-VL 0.9B) = GPU + fine-tune → **tunda** sampai ada 200–500 sertifikat
+berlabel yang membenarkan biayanya.
+
+### 4. Lanjutan lain (masih dari v9 sebelumnya)
+
+- Token optimization f_bias (target ≤200 eff tok/cert).
+- Kumpulkan 200–500 sertifikat terkoreksi sebelum fine-tune/classifier.
+- Ukur duplicate-traffic (content-hash reuse) & Ollama concurrency sebelum
+  keputusan scaling.
+- A2 v2 full-field LLM integration tetap ditunda sampai path tingkat stabil.

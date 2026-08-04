@@ -17,9 +17,15 @@ disinkronkan agar agen dapat membaca isinya tanpa tool khusus.
 
 - `.docx`/`.xlsx` adalah **sumber visual**. `.md` adalah **mirror teks** untuk
   agen — bukan dokumen terpisah yang boleh divergen.
-- Setiap pembaruan `.docx` harus diikuti regenerasi `.md` pasangannya.
-- Validasi: buka ulang `.docx` (bukan hanya patch XML), render ke PDF untuk cek
-  tabel/overflow, lalu bandingkan paragraf & tabel dengan `.md`.
+- **Semua dokumen dihasilkan ulang penuh oleh generator** (bukan append):
+  - Sumber data: `report_data.json` (meta, `experiments[]`, document blocks).
+  - `uv run python scripts/generate_report.py` → `benchmark_methods`,
+    `evaluation_methodology`, `phase_v4_methodology`, `phase_v4_results_summary`
+    (docx + md + xlsx) — docx & md sinkron by construction.
+- **Eksperimen baru:** tambah 1 entri ke `experiments[]` di `report_data.json`
+  (baca angka dari run dir), lalu jalankan generator. Eksperimen otomatis masuk
+  ke seksi/tabel yang benar (comparison, progression, results).
+- Validasi: buka ulang `.docx`, render ke PDF untuk cek tabel/overflow.
 
 ## Alur Referensi
 
