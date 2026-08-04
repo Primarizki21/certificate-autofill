@@ -1,3 +1,7 @@
+# Benchmark Methods
+
+*Input, Process, and Output - Certificate Autofill Prototype*
+
 Benchmark Methods
 
 Input, Process, and Output
@@ -6,7 +10,7 @@ Certificate Autofill Prototype
 
 July 2026
 
-# 1. Introduction
+## 1. Introduction
 
 This document describes six benchmark methods for certificate field extraction.
 
@@ -16,7 +20,7 @@ LLM methods also include a Prompt subsection. This subsection shows the full pro
 
 This document is a companion to evaluation_methodology.docx. That document describes how to measure accuracy. This document describes what each method does.
 
-# 2. Pipeline Overview
+## 2. Pipeline Overview
 
 The diagram below shows how each method builds on the previous one.
 
@@ -58,19 +62,19 @@ v
 
 Each method produces the same output format: a dict of ExtractedValue objects for the five evaluation fields.
 
-# 3. Method 1: Regex Baseline
+## 3. Method 1: Regex Baseline
 
-## 3.1 Overview
+### 3.1 Overview
 
 The regex baseline extracts text from PDF files with multiple parser engines. It then uses regex patterns to find each field. This method has no machine learning components.
 
-## 3.2 Input
+### 3.2 Input
 
 PDF files from Sertifikat_Ground_Truth/<folder>/<filename>.pdf
 
 Ground truth CSV (Ground_Truth_Sertifikat.csv) for evaluation
 
-## 3.3 Process
+### 3.3 Process
 
 Extract text from the PDF. The system tries a fast text extractor first. This extractor opens the PDF and reads text from each page. It works on most certificates but produces short results on image-heavy or scanned PDFs.
 
@@ -82,7 +86,7 @@ Check if dates were found. If dates are missing or text is very short, run OCR a
 
 Map the extracted fields to form dropdown values. The mapper determines the activity level (tingkat) from organizer and role keywords. It determines the category (kelompok) and type (jenis) from the document structure. All fields are validated to ensure required values exist.
 
-## 3.4 Output
+### 3.4 Output
 
 PipelineResult with parser_engine, raw_text, and mapped_fields
 
@@ -90,7 +94,7 @@ Five ExtractedValue objects: nama_kegiatan_sertifikasi, waktu_mulai_pelaksanaan,
 
 Optional: tingkat from rule-based mapping in form_mapper.py
 
-## 3.5 Configuration
+### 3.5 Configuration
 
 | Parameter | Value | Description |
 |---|---|---|
@@ -99,7 +103,7 @@ Optional: tingkat from rule-based mapping in form_mapper.py
 | zoom | 3.0 | PDF render resolution for OCR |
 | tahun_akademik | 2024/2025 | Academic year passed to form mapper |
 
-## 3.6 Strengths
+### 3.6 Strengths
 
 Fast: ~0.1 seconds per certificate
 
@@ -107,7 +111,7 @@ No GPU or external model required
 
 Deterministic: same input produces same output
 
-## 3.7 Limitations
+### 3.7 Limitations
 
 Regex patterns are fragile and hard to maintain
 
@@ -117,7 +121,7 @@ OCR errors propagate through extraction
 
 Tingkat mapping depends on keyword rules, not document understanding
 
-## 3.8 Code Reference
+### 3.8 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -129,13 +133,13 @@ The table below maps each process step to the corresponding code.
 | 3 | extract_text_with_ocr() | ocr_fallback.py:8 | RapidOCR + Tesseract OCR |
 | 4 | map_fields_to_form() | form_mapper.py:7 | Map fields to form dropdowns |
 
-# 4. Method 2: NER v1
+## 4. Method 2: NER v1
 
-## 4.1 Overview
+### 4.1 Overview
 
 The NER method uses an IndoBERT model to extract named entities from certificate text. It then maps entity types to form fields. This method handles varied text formats better than regex.
 
-## 4.2 Input
+### 4.2 Input
 
 Pre-extracted text files from a previous regex baseline run
 
@@ -143,7 +147,7 @@ Text files have header lines (# Method:, # Time:) which are stripped
 
 Ground truth CSV for evaluation
 
-## 4.3 Process
+### 4.3 Process
 
 Load the NER model into memory. The model is a pre-trained Indonesian language model from HuggingFace. It runs on GPU if available, otherwise on CPU. The model is cached globally so it loads only once.
 
@@ -157,7 +161,7 @@ Merge consecutive entities of the same type. Entities that are close together (w
 
 Map entities to form fields. Organizations become the organizer field. Events become the activity name. Dates become start and end dates. Numbers become the certificate number. Each entity is scored for relevance and the best one is selected.
 
-## 4.4 Output
+### 4.4 Output
 
 Dict of ExtractedValue objects for the five evaluation fields
 
@@ -165,7 +169,7 @@ Each value includes the source (which entity type produced it)
 
 No tingkat extraction (NER does not determine activity level)
 
-## 4.5 Configuration
+### 4.5 Configuration
 
 | Parameter | Value | Description |
 |---|---|---|
@@ -174,7 +178,7 @@ No tingkat extraction (NER does not determine activity level)
 | Merge gap | <= 3 chars | Merge consecutive entities within this gap |
 | NOR min length | 8 chars | Minimum length for NOR entity fallback |
 
-## 4.6 Strengths
+### 4.6 Strengths
 
 Handles varied text formats better than regex
 
@@ -182,7 +186,7 @@ No rule maintenance needed for new certificate layouts
 
 Fast: ~0.07 seconds per certificate
 
-## 4.7 Limitations
+### 4.7 Limitations
 
 Only extracts 4 of 5 fields (no tingkat)
 
@@ -192,7 +196,7 @@ Struggles with OCR noise and unusual formatting
 
 Requires GPU for acceptable speed
 
-## 4.8 Code Reference
+### 4.8 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -205,19 +209,19 @@ The table below maps each process step to the corresponding code.
 | 5 | map_entities_to_fields() | ner_to_fields.py:13 | Map ORG/EVT/DAT/NUM to fields |
 | 5 | score_entity_for_field() | post_processors.py:11 | Rank entities by relevance |
 
-# 5. Method 3: Hybrid (NER + Regex)
+## 5. Method 3: Hybrid (NER + Regex)
 
-## 5.1 Overview
+### 5.1 Overview
 
 The hybrid method combines NER and regex extraction. NER handles text fields. Regex handles structured fields. This combines the strengths of both approaches.
 
-## 5.2 Input
+### 5.2 Input
 
 Same pre-extracted text files as NER v1
 
 Same ground truth CSV
 
-## 5.3 Process
+### 5.3 Process
 
 Run regex extraction. This extracts all five fields using pattern matching. Regex works well for structured data like dates and certificate numbers.
 
@@ -225,20 +229,20 @@ Run NER extraction. This extracts entity-based fields. NER works well for free-t
 
 Combine results using priority rules. Text fields (activity name, organizer) prefer NER results. Structured fields (dates, certificate number) prefer regex results. If the preferred source has no value, the other source is used as fallback.
 
-## 5.4 Output
+### 5.4 Output
 
 Dict of ExtractedValue objects for the five evaluation fields
 
 Each field has a source from either NER or regex
 
-## 5.5 Configuration
+### 5.5 Configuration
 
 | Aspect | NER Priority | Regex Priority |
 |---|---|---|
 | Text fields | nama_kegiatan_sertifikasi, penyelenggara_kegiatan | Fallback only |
 | Structured fields | Fallback only | waktu_mulai, waktu_selesai, nomor_bukti_fisik |
 
-## 5.6 Strengths
+### 5.6 Strengths
 
 Best of both approaches
 
@@ -246,7 +250,7 @@ NER handles text fields where regex is weak
 
 Regex handles structured fields where NER is weak
 
-## 5.7 Limitations
+### 5.7 Limitations
 
 Still cannot extract tingkat
 
@@ -254,7 +258,7 @@ Depends on both NER model and regex patterns
 
 No error handling between methods
 
-## 5.8 Code Reference
+### 5.8 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -264,19 +268,19 @@ The table below maps each process step to the corresponding code.
 | 2 | extract_entities() + map_entities_to_fields() | ner_extractor.py:52, ner_to_fields.py:13 | NER extraction |
 | 3 | combine_hybrid() | benchmark_hybrid.py:63 | Merge with priority rules |
 
-# 6. Method 4: Hybrid + Post-Processing
+## 6. Method 4: Hybrid + Post-Processing
 
-## 6.1 Overview
+### 6.1 Overview
 
 The hybrid+PP method adds a post-processing step to the hybrid method. This step filters signer-related entities from the NER results. Signers are common false positives in organizer extraction.
 
-## 6.2 Input
+### 6.2 Input
 
 Same pre-extracted text files as NER v1
 
 Raw text passed to the signer filter for context
 
-## 6.3 Process
+### 6.3 Process
 
 Run NER extraction. The model identifies all entities in the text, including signer names and organizations.
 
@@ -288,13 +292,13 @@ Safety check. If filtering removed all organization entities, the filter reverts
 
 Run field mapping and hybrid combination. The cleaned entities are mapped to fields. The results are combined with regex using the same priority rules as the hybrid method.
 
-## 6.4 Output
+### 6.4 Output
 
 Dict of ExtractedValue objects for the five evaluation fields
 
 Cleaner organizer values (fewer signer false positives)
 
-## 6.5 Configuration
+### 6.5 Configuration
 
 | Check | Look-behind | Look-ahead | Trigger |
 |---|---|---|---|
@@ -303,7 +307,7 @@ Cleaner organizer values (fewer signer false positives)
 | Position | N/A | N/A | Entity past 70% of text length |
 | Safety | N/A | N/A | Revert if all ORGs removed |
 
-## 6.6 Strengths
+### 6.6 Strengths
 
 Reduces false positive organizer extractions
 
@@ -311,7 +315,7 @@ Handles common certificate layout patterns
 
 Safety revert prevents data loss
 
-## 6.7 Limitations
+### 6.7 Limitations
 
 Heuristic-based: may incorrectly filter valid organizers
 
@@ -319,7 +323,7 @@ Position thresholds are tuned for this dataset
 
 Does not handle all signer patterns
 
-## 6.8 Code Reference
+### 6.8 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -331,13 +335,13 @@ The table below maps each process step to the corresponding code.
 | 5 | map_entities_to_fields() | ner_to_fields.py:13 | Map filtered entities to fields |
 | 5 | combine_hybrid() | benchmark_hybrid.py:63 | Merge with regex results |
 
-# 7. Method 5: LLM A1 (Per-Field)
+## 7. Method 5: LLM A1 (Per-Field)
 
-## 7.1 Overview
+### 7.1 Overview
 
 The LLM A1 method adds Ollama inference to the hybrid+PP baseline. It calls the language model for tingkat (always) and for other fields when confidence is low. This is the first LLM-based method.
 
-## 7.2 Input
+### 7.2 Input
 
 Same pre-extracted text files
 
@@ -345,7 +349,7 @@ Hybrid+PP results as context (known fields)
 
 Full raw text for each certificate
 
-## 7.3 Process
+### 7.3 Process
 
 Build the hybrid+PP baseline. This is the same as Method 4. The result is a dict of field values with confidence scores.
 
@@ -363,11 +367,11 @@ Validate the response. For tingkat, the response is checked against the approved
 
 Merge valid results into the hybrid+PP dict. Valid language model values replace the original field values. Each merged value gets a confidence of 0.85 and source 'llm_ollama'.
 
-## 7.4 Prompt
+### 7.4 Prompt
 
 The prompt tells the language model exactly what to extract. Each prompt contains instructions, rules, heuristic guidance, approved options, the certificate text (or context), and the answer format.
 
-### Tingkat Prompt
+#### Tingkat Prompt
 
 Tentukan TINGKAT KEGIATAN dari sertifikat berikut.
 
@@ -429,7 +433,7 @@ Field yang sudah diketahui:
 
 Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):
 
-### Free Text Prompt (for other fields)
+#### Free Text Prompt (for other fields)
 
 Ekstrak <field_label> dari sertifikat berikut.
 
@@ -455,7 +459,7 @@ Field yang sudah diketahui:
 
 Jawaban:
 
-## 7.5 Output
+### 7.5 Output
 
 Six ExtractedValue objects (5 from hybrid+PP + tingkat from LLM)
 
@@ -463,7 +467,7 @@ Token usage log (calls.json) with prompt tokens, completion tokens, and latency
 
 Two summaries: hybrid_pp (baseline) and hybrid_llm (with LLM)
 
-## 7.6 Configuration
+### 7.6 Configuration
 
 | Parameter | Value | Description |
 |---|---|---|
@@ -474,7 +478,7 @@ Two summaries: hybrid_pp (baseline) and hybrid_llm (with LLM)
 | CONFIDENCE_THRESHOLD | 0.7 | Trigger LLM if below this |
 | LLM confidence | 0.85 | Hardcoded when merging |
 
-## 7.7 Strengths
+### 7.7 Strengths
 
 Adds tingkat extraction (hybrid alone gives 0%)
 
@@ -482,7 +486,7 @@ Conditional LLM calls: only when confidence is low
 
 Full raw text gives LLM maximum context
 
-## 7.8 Limitations
+### 7.8 Limitations
 
 1-4 LLM calls per certificate (slow, ~2 seconds each)
 
@@ -492,7 +496,7 @@ Confidence threshold (0.7) is a design choice, not optimal
 
 LLM may hallucinate fields where regex and NER both failed
 
-## 7.9 Code Reference
+### 7.9 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -505,13 +509,13 @@ The table below maps each process step to the corresponding code.
 | 5 | validate_tingkat() | llm_extractor.py:149 | Validate tingkat response |
 | 5 | validate_free_text() | llm_extractor.py:175 | Validate free-text response |
 
-# 8. Method 6: LLM v3 (Tingkat Only)
+## 8. Method 6: LLM v3 (Tingkat Only)
 
-## 8.1 Overview
+### 8.1 Overview
 
 The LLM v3 method calls the language model only for tingkat. It does not re-extract other fields. It has two variants: context-only (A) and context + minimized text (B). This method minimizes token usage.
 
-## 8.2 Input
+### 8.2 Input
 
 Same pre-extracted text files
 
@@ -519,7 +523,7 @@ Hybrid+PP results as context
 
 Full raw text (Variant B only, processed by minimize_text())
 
-## 8.3 Process
+### 8.3 Process
 
 Build the hybrid+PP baseline. Same as Method 4.
 
@@ -535,11 +539,11 @@ Call the Ollama API for each variant. Same settings as Method 5.
 
 Validate and merge. Same as Method 5. Each variant produces its own tingkat result.
 
-## 8.4 Prompt
+### 8.4 Prompt
 
 The prompt tells the language model exactly what to extract. Each prompt contains instructions, rules, heuristic guidance, approved options, the certificate text (or context), and the answer format.
 
-### Variant A: Context-Only Prompt
+#### Variant A: Context-Only Prompt
 
 Tentukan tingkat kegiatan dari informasi berikut.
 
@@ -599,7 +603,7 @@ Field yang sudah diketahui (dari pipeline):
 
 Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):
 
-### Variant B: Minimized-Text Prompt
+#### Variant B: Minimized-Text Prompt
 
 Tentukan tingkat kegiatan dari sertifikat berikut.
 
@@ -663,7 +667,7 @@ Field yang sudah diketahui (dari pipeline):
 
 Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):
 
-## 8.5 Output
+### 8.5 Output
 
 Six ExtractedValue objects (5 from hybrid+PP + tingkat from LLM)
 
@@ -673,7 +677,7 @@ Minimize stats (minimize_stats.json) with compression ratios
 
 Config dump (config.json) with model and weights
 
-## 8.6 Configuration
+### 8.6 Configuration
 
 | Aspect | Variant A | Variant B |
 |---|---|---|
@@ -683,7 +687,7 @@ Config dump (config.json) with model and weights
 | Acc/token | 0.059 | 0.082 (best in family) |
 | Compression | N/A | 70% (42K -> 12K chars) |
 
-## 8.7 Strengths
+### 8.7 Strengths
 
 Lowest token usage: 479 tokens per certificate (Variant B)
 
@@ -693,7 +697,7 @@ minimize_text() removes OCR noise before the LLM sees it
 
 Single LLM call per certificate (deterministic cost)
 
-## 8.8 Limitations
+### 8.8 Limitations
 
 Only extracts tingkat (other fields stay from hybrid+PP)
 
@@ -705,7 +709,7 @@ English dept certs still problematic (LLM picks Fakultas over DEPT)
 
 25 Nasional certs have no text signal (unsolvable by any text method)
 
-## 8.9 Code Reference
+### 8.9 Code Reference
 
 The table below maps each process step to the corresponding code.
 
@@ -718,7 +722,114 @@ The table below maps each process step to the corresponding code.
 | 6 | call_ollama() | llm_extractor.py:51 | Call Ollama API |
 | 7 | validate_tingkat() | llm_extractor.py:149 | Validate tingkat response |
 
-# 9. Comparison Table
+## 9. Method 7: Cost-Aware Hybrid Extraction (Handoff v7)
+
+### Overview
+
+Handoff v7 moves from full-text LLM extraction to a cost-aware hybrid that extracts only the tingkat field with an LLM while every other field stays on the deterministic hybrid (NER + regex + post-processing). The goal is the best accuracy/cost Pareto point, not minimum tokens at any cost.
+
+### Input
+
+Same 74 certificates. Ground truth: Ground_Truth_Sertifikat.csv (raw).
+
+### Process
+
+- Run hybrid + post-processing once per certificate (regex + NER + phrase-v2 organizer).
+- Run the rule-based tingkat router: high-precision rules decide tingkat at 0 tokens.
+- For certificates the router does not decide, call the local LLM with a compact tingkat prompt.
+- Validate the LLM answer against the 6 form options; keep the value empty when invalid.
+
+### Configuration
+
+| Key | Value |
+|---|---|
+| Prompt | v3 minimized / v4 adaptive (variants a-e) |
+| Router | rule-based, 35/74 decisions at 100% precision |
+| Model | llama3.1:8b (Ollama) |
+| Token budget | minimize_text(), ~202 eff tokens/cert |
+
+### Results (v7 P4 e_hybrid)
+
+| Metric | Value |
+|---|---|
+| Tingkat exact | 77.0% (57/74) |
+| MACRO exact | 54.2% |
+| Eff. tokens/cert | 202.2 |
+| LLM calls | 39 of 74 (router: 35, 100% precision) |
+| Run | tests/benchmark_runs/run_llm_v4_20260803_113310/ |
+
+### Strengths
+
+- Router removes ~47% of LLM calls at 0 tokens and 100% precision.
+- Best accuracy-per-token in the v4+v6+v7 family (0.082 acc/token).
+
+### Limitations
+
+- Word-boundary router misses OCR-merged tokens (BEMFKM, BEMFEBUNAIR, HIMATESDA).
+- Ground truth had un-audited tingkat labels.
+- LLM biased English certificate text toward Internasional.
+
+### Code Reference
+
+- tests/benchmark_llm_v4.py, tests/llm_extractor_v3.py, tests/llm_extractor_v4.py
+- tests/llm_router_v4.py, tests/organizer_extractor_v2.py, tests/mismatch_taxonomy.py
+
+## 10. Method 8: v8 Router Fix + LLM Bias + Layout (Handoff v8)
+
+### Overview
+
+Handoff v8 repairs the v7 router, audits ground truth, and tests two accuracy levers: a bias-corrected LLM prompt and layout-aware input. Winner: contains-match router + f_bias prompt at 82.4% tingkat exact.
+
+### Input
+
+Same 74 certificates. Versioned ground truth: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat label corrections).
+
+### Process
+
+- GT audit: 1966887->Nasional, 1981676->Nasional, 2954283->Internasional; 2030372 stays Nasional.
+- Router contains-match: BEM/HIMA detected in uppercase alnum runs (BEMFKM, SERT2128BEM2026) with a guard.
+- New rule: explicit TINGKAT/LOMBA NASIONAL text -> Nasional.
+- f_bias prompt: English text is not automatically Internasional; Indonesian-institution context wins.
+- Layout experiment (markdown / annotated from PyMuPDF dict) measured and rejected.
+
+### Configuration
+
+| Key | Value |
+|---|---|
+| Prompt | f_bias (e_hybrid + bias rules) |
+| Router | contains-match, 39/74 decisions at 100% precision |
+| GT | fixed_v8 (Ground_Truth_Sertifikat_v8.csv) |
+| Model | llama3.1:8b (Ollama) |
+
+### Results
+
+| Variant | Tingkat exact | MACRO exact | Eff. tokens/cert |
+|---|---|---|---|
+| b_minimized | 78.4% | 54.4% | 221 |
+| e_hybrid | 79.7% | 54.7% | 182 |
+| f_bias (winner) | 82.4% | 55.2% | 214 |
+| g_evidence | 75.7% | 53.9% | 194 |
+| layout_md (f_bias) | 77.0% | 50.8% | 235 |
+| layout_ann (f_bias) | 78.4% | 51.3% | - |
+
+### Strengths
+
+- Contains-match router routes 39/74 at 100% precision (-53% LLM calls).
+- f_bias fixes English-name scale bias (data slayer, 2955331, IRIS) without breaking BEM-fakultas.
+
+### Limitations
+
+- g_evidence (FaR-style) regresses accuracy and adds completion tokens -> rejected.
+- Layout does not help: only 25/74 PDFs have embedded text, and markers disturb deterministic extractors.
+- f_bias is 214 eff tokens/cert, slightly over the 200 gate.
+
+### Code Reference
+
+- tests/llm_router_v4.py, tests/llm_extractor_v4.py, tests/benchmark_llm_v4.py
+- tests/layout_repr.py, tests/verify_ground_truth.py
+- Production: backend/app/services/{tingkat_router,llm_tingkat,organizer_v2}.py
+
+## 11. Comparison Table
 
 The table below compares all six methods across key dimensions.
 
@@ -731,7 +842,7 @@ The table below compares all six methods across key dimensions.
 | LLM A1 | Text | Hybrid+PP + LLM | 1-4 | tingkat (LLM) | LLM=0.85 | ~2s |
 | LLM v3 | Text | Hybrid+PP + LLM | 1 | tingkat (LLM) | LLM=0.85 | ~1s |
 
-# 10. Appendix: Full Function Index
+## 12. Appendix: Full Function Index
 
 The table below lists all functions referenced in this document. Functions are listed in the order they appear in the processing pipeline.
 
@@ -767,126 +878,22 @@ The table below lists all functions referenced in this document. Functions are l
 | aggregate_results() | evaluation_framework.py:66 | Aggregate per-field metrics |
 | save_mismatch_report() | evaluation_framework.py:142 | Generate mismatch CSV/XLSX |
 
-Method 7: Cost-Aware Hybrid Extraction (Handoff v7)
+### Comparison Across Experiments
 
-Overview
+| Experiment | Tingkat | MACRO | Eff tok/cert | LLM calls | Router | GT | Date |
+|---|---|---|---|---|---|---|---|
+| LLM A1 (per-field) | 47.3% | 49.0% | 834 | 125 | - | raw | Jul 30 |
+| LLM A2 v2 (full-text) | 36.5% | 58.3% | 834 | 74 | - | raw | Jul 30 |
+| LLM v3 Variant B | 39.2% | 46.4% | 479 | 74 | - | raw | Jul 31 |
+| v7 P3 router rule-based | 71.6% | 53.1% | 191 | 42 | - | raw | Aug 3 |
+| v7 P4 e_hybrid + router | 77.0% | 54.2% | 202 | 39 | 35/74 @100% | raw | Aug 3 |
+| v8 f_bias + router | 82.4% | 55.2% | 214 | 35 | 39/74 @100% | fixed_v8 | Aug 4 |
 
-Handoff v7 moves from full-text LLM extraction to a cost-aware hybrid that extracts only the tingkat field with an LLM while every other field stays on the deterministic hybrid (NER + regex + post-processing). The goal is the best accuracy/cost Pareto point, not minimum tokens at any cost.
-
-Input
-
-Same 74 certificates. Ground truth: Ground_Truth_Sertifikat.csv.
-
-Process
-
-•  Run hybrid + post-processing once per certificate (regex + NER + phrase-v2 organizer).
-
-•  Run the rule-based tingkat router: high-precision rules decide tingkat at 0 tokens.
-
-•  For certificates the router does not decide, call the local LLM with a compact tingkat prompt.
-
-•  Validate the LLM answer against the 6 form options; keep the value empty when invalid.
-
-Config
-
-| Key | Value |
-|---|---|
-| Prompt | v3 minimized / v4 adaptive (variants a-e) |
-| Router | rule-based, 35/74 decisions at 100% precision |
-| Model | llama3.1:8b (Ollama) |
-| Token budget | minimize_text(), ~202 eff tokens/cert |
-
-Results (v7 P4 e_hybrid)
-
-| Metric | Value |
-|---|---|
-| Tingkat exact | 77.0% (57/74) |
-| MACRO exact | 54.2% |
-| Eff. tokens/cert | 202.2 |
-| LLM calls | 39 of 74 (router: 35, 100% precision) |
-| Run | tests/benchmark_runs/run_llm_v4_20260803_113310/ |
-
-Strengths
-
-•  Router removes ~47% of LLM calls at 0 tokens and 100% precision.
-
-•  Best accuracy-per-token in the v4+v6+v7 family (0.082 acc/token).
-
-Limitations
-
-•  Word-boundary router misses OCR-merged tokens (BEMFKM, BEMFEBUNAIR, HIMATESDA).
-
-•  Ground truth had un-audited tingkat labels.
-
-•  LLM biased English certificate text toward Internasional.
-
-Code Reference
-
-•  tests/benchmark_llm_v4.py, tests/llm_extractor_v3.py, tests/llm_extractor_v4.py
-
-•  tests/llm_router_v4.py, tests/organizer_extractor_v2.py, tests/mismatch_taxonomy.py
-
-Method 8: v8 Router Fix + LLM Bias + Layout (Handoff v8)
-
-Overview
-
-Handoff v8 repairs the v7 router, audits ground truth, and tests two accuracy levers: a bias-corrected LLM prompt and layout-aware input. Winner: contains-match router + f_bias prompt at 82.4% tingkat exact.
-
-Input
-
-Same 74 certificates. Versioned ground truth: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat label corrections).
-
-Process
-
-•  GT audit: 1966887->Nasional, 1981676->Nasional, 2954283->Internasional; 2030372 stays Nasional.
-
-•  Router contains-match: BEM/HIMA detected in uppercase alnum runs (BEMFKM, SERT2128BEM2026) with a guard.
-
-•  New rule: explicit TINGKAT/LOMBA NASIONAL text -> Nasional.
-
-•  f_bias prompt: English text is not automatically Internasional; Indonesian-institution context wins.
-
-•  Layout experiment (markdown / annotated from PyMuPDF dict) measured and rejected.
-
-Config
-
-| Key | Value |
-|---|---|
-| Prompt | f_bias (e_hybrid + bias rules) |
-| Router | contains-match, 39/74 decisions at 100% precision |
-| GT | fixed_v8 (Ground_Truth_Sertifikat_v8.csv) |
-| Model | llama3.1:8b (Ollama) |
-
-Results
-
-| Variant | Tingkat exact | MACRO exact | Eff. tokens/cert |
+| Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
-| b_minimized | 78.4% | 54.4% | 221 |
-| e_hybrid | 79.7% | 54.7% | 182 |
-| f_bias (winner) | 82.4% | 55.2% | 214 |
-| g_evidence | 75.7% | 53.9% | 194 |
-| layout_md (f_bias) | 77.0% | 50.8% | 235 |
-| layout_ann (f_bias) | 78.4% | 51.3% | - |
-
-Strengths
-
-•  Contains-match router routes 39/74 at 100% precision (-53% LLM calls).
-
-•  f_bias fixes English-name scale bias (data slayer, 2955331, IRIS) without breaking BEM-fakultas.
-
-Limitations
-
-•  g_evidence (FaR-style) regresses accuracy and adds completion tokens -> rejected.
-
-•  Layout does not help: only 25/74 PDFs have embedded text, and markers disturb deterministic extractors.
-
-•  f_bias is 214 eff tokens/cert, slightly over the 200 gate.
-
-Code Reference
-
-•  tests/llm_router_v4.py, tests/llm_extractor_v4.py, tests/benchmark_llm_v4.py
-
-•  tests/layout_repr.py, tests/verify_ground_truth.py
-
-•  Production: backend/app/services/{tingkat_router,llm_tingkat,organizer_v2}.py
-
+| v4 | LLM A1 (per-field) | 47.3% | 49.0% |
+| v4 | LLM A2 v2 (full-text) | 36.5% | 58.3% |
+| v6 | LLM v3 Variant B | 39.2% | 46.4% |
+| v7 | v7 P3 router rule-based | 71.6% | 53.1% |
+| v7 | v7 P4 e_hybrid + router ** | 77.0% | 54.2% |
+| v8 | v8 f_bias + router ** | 82.4% | 55.2% |

@@ -1,3 +1,7 @@
+# Evaluation Methodology Report
+
+*Certificate Autofill Prototype - Benchmark Metrics, Formulas, and Analysis*
+
 Evaluation Methodology Report
 
 Certificate Autofill Prototype
@@ -6,7 +10,7 @@ Benchmark Metrics, Formulas, and Analysis
 
 July 2026
 
-# 1. Introduction
+## 1. Introduction
 
 This document describes the evaluation methodology used to assess the accuracy of field extraction from student certificates. The system extracts structured fields (event name, dates, organizer, certification number, activity level) from PDF certificates and maps them to a standardized form.
 
@@ -14,7 +18,7 @@ Scope: 74 ground-truth certificates covering 6 extracted fields, evaluated acros
 
 The evaluation framework is implemented in tests/evaluation_framework.py with matching logic in tests/matchers.py.
 
-# 2. Evaluated Fields
+## 2. Evaluated Fields
 
 The following fields are extracted from each certificate and compared against ground truth:
 
@@ -27,11 +31,11 @@ The following fields are extracted from each certificate and compared against gr
 | nomor_bukti_fisik_nomor_sertifikasi | Structured | Certificate number |
 | tingkat | Categorical | Activity level (L1-L6) |
 
-# 3. Metrics Definitions
+## 3. Metrics Definitions
 
 Each extracted field is evaluated using the following metrics. All string comparisons use normalized values (lowercase, special characters removed).
 
-## 3.1 Exact Match
+### 3.1 Exact Match
 
 Formula:
 
@@ -55,7 +59,7 @@ Does not capture partial correctness.
 
 Two strings differing by one character score 0.
 
-## 3.2 Fuzzy Match
+### 3.2 Fuzzy Match
 
 Formula:
 
@@ -79,7 +83,7 @@ Abbreviation match can produce false positives on short strings.
 
 Bidirectional contains can over-match on very short expected values.
 
-## 3.3 Token Overlap Score
+### 3.3 Token Overlap Score
 
 Formula:
 
@@ -103,7 +107,7 @@ Ignores token ordering.
 
 Can be high for short strings with one matching token.
 
-## 3.4 Word Error Rate (WER)
+### 3.4 Word Error Rate (WER)
 
 Formula:
 
@@ -127,7 +131,7 @@ Does not account for semantic similarity.
 
 A perfect substring match with one extra word can still score high.
 
-## 3.5 Character Error Rate (CER)
+### 3.5 Character Error Rate (CER)
 
 Formula:
 
@@ -151,7 +155,7 @@ Same semantic content with different characterizations scores poorly.
 
 Less interpretable than WER for non-technical audiences.
 
-## 3.6 Contains Match
+### 3.6 Contains Match
 
 Formula:
 
@@ -175,7 +179,7 @@ Does not measure degree of overlap.
 
 Sensitive to normalization differences.
 
-## 3.7 Confidence Score
+### 3.7 Confidence Score
 
 Formula:
 
@@ -199,9 +203,9 @@ Threshold selection is heuristic.
 
 Can be poorly calibrated.
 
-# 4. Aggregation
+## 4. Aggregation
 
-## 4.1 Per-Field Metrics
+### 4.1 Per-Field Metrics
 
 For each field, metrics are aggregated across all certificates:
 
@@ -213,7 +217,7 @@ avg_wer(field) = mean(WER_i) for all certificates
 
 avg_cer(field) = mean(CER_i) for all certificates
 
-## 4.2 Overall Metrics (macro_avg)
+### 4.2 Overall Metrics (macro_avg)
 
 The macro_avg in this codebase is technically a micro-average — it sums correct predictions across all fields and divides by total predictions across all fields:
 
@@ -223,7 +227,7 @@ This weights fields with more certificates (e.g., nama_kegiatan with 74 predicti
 
 Trade-off: Micro-average is more stable (less variance from small fields) but can mask poor performance on rare fields. For this dataset with 74 certificates and relatively balanced field coverage, the difference is small.
 
-# 5. Evaluation Pipeline
+## 5. Evaluation Pipeline
 
 The evaluation follows a 4-step pipeline:
 
@@ -243,7 +247,7 @@ Step 4: Aggregation
 
 aggregate_results() collects per-field counts and computes exact_acc, fuzzy_acc, avg_wer, avg_cer, and the overall micro-average.
 
-# 6. Benchmark Methods
+## 6. Benchmark Methods
 
 The following extraction methods have been benchmarked:
 
@@ -258,7 +262,7 @@ The following extraction methods have been benchmarked:
 | LLM v3 Variant A | Context-only prompt, no raw text | 410 tok/cert, 24.3% tingkat |
 | LLM v3 Variant B | Context + minimize_text() relevant lines | 479 tok/cert, 39.2% tingkat |
 
-# 7. Results Summary
+## 7. Results Summary
 
 Latest benchmark results on 74 certificates (llama3.1:8b for LLM variants):
 
@@ -272,9 +276,9 @@ Latest benchmark results on 74 certificates (llama3.1:8b for LLM variants):
 | LLM v3-A | 410 | 24.3% | 43.5% | 0.059 | ~1s |
 | LLM v3-B | 479 | 39.2% | 46.4% | 0.082 | ~1s |
 
-# 8. Error Analysis
+## 8. Error Analysis
 
-## 8.1 Error Types
+### 8.1 Error Types
 
 The mismatches.csv output categorizes errors into two types:
 
@@ -286,7 +290,7 @@ mismatch — Extractor returned wrong value
 
 A value was extracted but does not match ground truth. Common causes: OCR errors propagated through extraction, incorrect field boundary detection, organizer name abbreviated differently than GT, date format mismatch.
 
-## 8.2 Common Error Patterns
+### 8.2 Common Error Patterns
 
 penyelenggara_kegiatan: Most common errors — organizer names vary significantly between extraction and GT (e.g., BEM FEB vs. full name).
 
@@ -298,7 +302,7 @@ nomor_bukti_fisik: OCR errors in certificate numbers (e.g., 0 vs O, 1 vs I) caus
 
 waktu_mulai/selesai: Date format variations (e.g., 29/09/2024 vs 29 September 2024) are mostly handled by normalize_date, but edge cases remain.
 
-# 9. Limitations and Caveats
+## 9. Limitations and Caveats
 
 The micro-average labeled 'macro_avg' in code is not a true macro-average. See Section 4.2.
 
@@ -314,19 +318,19 @@ WER/CER are computed on normalized text, which may not reflect the true edit dis
 
 LLM evaluation uses temperature=0 for determinism, but Ollama's quantized model may produce different results across runs.
 
-10. Handoff v7/v8 Evaluation Addendum
+## 10. Handoff v7/v8 Evaluation Addendum
 
-10.1 Ground Truth Versioning
+### 10.1 Ground Truth Versioning
 
 Starting from v8, evaluation runs state which ground truth they used. Ground_Truth_Sertifikat.csv is the raw historical CSV (unchanged). Ground_Truth_Sertifikat_v8.csv applies 3 audited tingkat corrections: 1966887 Lainnya->Nasional, 1981676 Fakultas->Nasional, 2954283 Fakultas->Internasional. 2030372 stays Nasional (consistent with the identical-template 1981676).
 
 Metrics are reported three ways: (a) raw-GT accuracy, (b) fixed-GT accuracy, (c) ceiling-adjusted accuracy with the disputed certificates excluded, so label noise is separated from method quality.
 
-10.2 Tingkat Scale-Evidence Check
+### 10.2 Tingkat Scale-Evidence Check
 
 verify_ground_truth.py now scans the raw text for scale evidence (TINGKAT NASIONAL, LOMBA, INTERNASIONAL, INTERNATIONAL, foreign-institution hints) and flags ground-truth labels that contradict the text. Pre-v8 this check did not exist, which is why label noise survived.
 
-10.3 Router Precision and Call Reduction
+### 10.3 Router Precision and Call Reduction
 
 | Metric | v7 (P4) | v8 |
 |---|---|---|
@@ -337,15 +341,15 @@ verify_ground_truth.py now scans the raw text for scale evidence (TINGKAT NASION
 
 v8 adds contains-based BEM/HIMA matching for OCR-merged tokens and the explicit TINGKAT NASIONAL rule. Precision stays at 100% on the fixed ground truth.
 
-10.4 Token Accounting
+### 10.4 Token Accounting
 
 Effective tokens per document = total tokens (prompt + completion) across all LLM calls, amortized over all 74 certificates. Certificates routed by rules contribute 0 tokens. This is reported per variant in token_usage_*.json. v8 final: f_bias = 214 eff tokens/cert (21.4M tokens per 100K requests), slightly above the 200 gate; per the handoff rule, the accuracy floor is preserved first.
 
-10.5 Layout Representation Evaluation
+### 10.5 Layout Representation Evaluation
 
 Markdown (## title) and annotated ([TITLE]/[BODY]/[SMALL]) representations built from PyMuPDF page.get_text('dict') were compared against the plain-text baseline at matched token budgets. Only 25/74 certificates contain embedded text; the rest are scanned and fall back to OCR text. Both layout variants underperformed the plain baseline (77.0% / 78.4% vs 82.4% tingkat), so layout is rejected. Input quality is bound by OCR, not layout, on this dataset.
 
-10.6 Final v8 Ship Gate
+### 10.6 Final v8 Ship Gate
 
 | Metric | Target | Actual | Status |
 |---|---|---|---|
@@ -359,3 +363,13 @@ Markdown (## title) and annotated ([TITLE]/[BODY]/[SMALL]) representations built
 
 Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not held-out; Ollama quantization adds run-to-run variance of about +/-1-2pp; the macro_avg label is a micro-average (see Section 4.2).
 
+### 10.7 Results Summary (experiments)
+
+| Experiment | Tingkat exact | MACRO exact | Eff tok/cert | LLM calls | Router | GT |
+|---|---|---|---|---|---|---|
+| LLM A1 (per-field) | 47.3% | 49.0% | 834 | 125 | - | raw |
+| LLM A2 v2 (full-text) | 36.5% | 58.3% | 834 | 74 | - | raw |
+| LLM v3 Variant B | 39.2% | 46.4% | 479 | 74 | - | raw |
+| v7 P3 router rule-based | 71.6% | 53.1% | 191 | 42 | - | raw |
+| v7 P4 e_hybrid + router | 77.0% | 54.2% | 202 | 39 | 35/74 @100% | raw |
+| v8 f_bias + router | 82.4% | 55.2% | 214 | 35 | 39/74 @100% | fixed_v8 |

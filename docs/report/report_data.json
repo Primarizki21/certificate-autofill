@@ -1,0 +1,4553 @@
+{
+  "meta": {
+    "title": "Certificate Autofill Prototype - Experiment Reports",
+    "date": "August 2026",
+    "model": "llama3.1:8b",
+    "dataset": "74 certificates (Universitas Airlangga)"
+  },
+  "experiments": [
+    {
+      "id": "v4_a1",
+      "phase": "v4",
+      "label": "LLM A1 (per-field)",
+      "variant": "a1",
+      "tingkat": "47.3%",
+      "macro": "49.0%",
+      "tokens_cert": 834,
+      "calls": 125,
+      "gt": "raw",
+      "date": "Jul 30",
+      "notes": "per-field LLM, Phase v4"
+    },
+    {
+      "id": "v4_a2",
+      "phase": "v4",
+      "label": "LLM A2 v2 (full-text)",
+      "variant": "a2v2",
+      "tingkat": "36.5%",
+      "macro": "58.3%",
+      "tokens_cert": 834,
+      "calls": 74,
+      "gt": "raw",
+      "date": "Jul 30",
+      "notes": "full-text LLM, Phase v4"
+    },
+    {
+      "id": "v6_b",
+      "phase": "v6",
+      "label": "LLM v3 Variant B",
+      "variant": "b",
+      "tingkat": "39.2%",
+      "macro": "46.4%",
+      "tokens_cert": 479,
+      "calls": 74,
+      "gt": "raw",
+      "date": "Jul 31",
+      "notes": "context + minimized text"
+    },
+    {
+      "id": "v7_p3",
+      "phase": "v7",
+      "label": "v7 P3 router rule-based",
+      "variant": "e_hybrid",
+      "tingkat": "71.6%",
+      "macro": "53.1%",
+      "tokens_cert": 191,
+      "calls": 42,
+      "gt": "raw",
+      "date": "Aug 3",
+      "notes": "rule-based router, LLM calls -43%"
+    },
+    {
+      "id": "v7_p4",
+      "phase": "v7",
+      "label": "v7 P4 e_hybrid + router",
+      "variant": "e_hybrid",
+      "tingkat": "77.0%",
+      "macro": "54.2%",
+      "tokens_cert": 202,
+      "calls": 39,
+      "router": "35/74 @100%",
+      "gt": "raw",
+      "date": "Aug 3",
+      "is_winner": true,
+      "notes": "merged-lomba router; baseline run run_llm_v4_20260803_113310"
+    },
+    {
+      "id": "v8_final",
+      "phase": "v8",
+      "label": "v8 f_bias + router",
+      "variant": "f_bias",
+      "tingkat": "82.4%",
+      "macro": "55.2%",
+      "tokens_cert": 214,
+      "calls": 35,
+      "router": "39/74 @100%",
+      "gt": "fixed_v8",
+      "date": "Aug 4",
+      "is_winner": true,
+      "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_095412"
+    }
+  ],
+  "documents": {
+    "benchmark_methods": [
+      {
+        "t": "p",
+        "x": "Benchmark Methods"
+      },
+      {
+        "t": "p",
+        "x": "Input, Process, and Output"
+      },
+      {
+        "t": "p",
+        "x": "Certificate Autofill Prototype"
+      },
+      {
+        "t": "p",
+        "x": "July 2026"
+      },
+      {
+        "t": "h1",
+        "x": "1. Introduction"
+      },
+      {
+        "t": "p",
+        "x": "This document describes six benchmark methods for certificate field extraction."
+      },
+      {
+        "t": "p",
+        "x": "Each method section has two layers. The first layer explains the workflow in plain language. The second layer (Code Reference) maps each step to the corresponding code."
+      },
+      {
+        "t": "p",
+        "x": "LLM methods also include a Prompt subsection. This subsection shows the full prompt text that is sent to the language model."
+      },
+      {
+        "t": "p",
+        "x": "This document is a companion to evaluation_methodology.docx. That document describes how to measure accuracy. This document describes what each method does."
+      },
+      {
+        "t": "h1",
+        "x": "2. Pipeline Overview"
+      },
+      {
+        "t": "p",
+        "x": "The diagram below shows how each method builds on the previous one."
+      },
+      {
+        "t": "p",
+        "x": "Arrows show the data flow from one method to the next."
+      },
+      {
+        "t": "p",
+        "x": "PDF files (Sertifikat_Ground_Truth/)"
+      },
+      {
+        "t": "p",
+        "x": "|"
+      },
+      {
+        "t": "p",
+        "x": "v"
+      },
+      {
+        "t": "p",
+        "x": "[1] Regex Baseline -----> extracted text files (.txt)"
+      },
+      {
+        "t": "p",
+        "x": "|                       |"
+      },
+      {
+        "t": "p",
+        "x": "|                       v"
+      },
+      {
+        "t": "p",
+        "x": "|                  [2] NER v1 ---------> NER entities"
+      },
+      {
+        "t": "p",
+        "x": "|                       |"
+      },
+      {
+        "t": "p",
+        "x": "v                       v"
+      },
+      {
+        "t": "p",
+        "x": "[3] Hybrid (NER + Regex) ---> combined fields"
+      },
+      {
+        "t": "p",
+        "x": "|"
+      },
+      {
+        "t": "p",
+        "x": "v"
+      },
+      {
+        "t": "p",
+        "x": "[4] Hybrid+PP -----------> cleaned fields (signer removed)"
+      },
+      {
+        "t": "p",
+        "x": "|"
+      },
+      {
+        "t": "p",
+        "x": "v"
+      },
+      {
+        "t": "p",
+        "x": "[5] LLM A1 -----------> hybrid + LLM (per-field, conditional)"
+      },
+      {
+        "t": "p",
+        "x": "[6] LLM v3 -----------> hybrid + LLM (tingkat only)"
+      },
+      {
+        "t": "p",
+        "x": "Each method produces the same output format: a dict of ExtractedValue objects for the five evaluation fields."
+      },
+      {
+        "t": "h1",
+        "x": "3. Method 1: Regex Baseline"
+      },
+      {
+        "t": "h2",
+        "x": "3.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The regex baseline extracts text from PDF files with multiple parser engines. It then uses regex patterns to find each field. This method has no machine learning components."
+      },
+      {
+        "t": "h2",
+        "x": "3.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "PDF files from Sertifikat_Ground_Truth/<folder>/<filename>.pdf"
+      },
+      {
+        "t": "p",
+        "x": "Ground truth CSV (Ground_Truth_Sertifikat.csv) for evaluation"
+      },
+      {
+        "t": "h2",
+        "x": "3.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Extract text from the PDF. The system tries a fast text extractor first. This extractor opens the PDF and reads text from each page. It works on most certificates but produces short results on image-heavy or scanned PDFs."
+      },
+      {
+        "t": "p",
+        "x": "If the fast extractor produces too little text, a more accurate but slower parser runs. This parser converts the PDF to markdown format, then strips formatting to get plain text. The result replaces or supplements the fast extractor output."
+      },
+      {
+        "t": "p",
+        "x": "Run regex patterns to extract five fields. Each field has its own extractor function. Dates use multiple date format patterns. The organizer uses direct pattern matching and a list of known organizations. The certificate number uses a structured pattern."
+      },
+      {
+        "t": "p",
+        "x": "Check if dates were found. If dates are missing or text is very short, run OCR as a last resort. OCR renders each PDF page as a high-resolution image. Two recognition engines process each image in parallel. Unique lines from both engines are merged. The combined text is then processed by the regex extractors again."
+      },
+      {
+        "t": "p",
+        "x": "Map the extracted fields to form dropdown values. The mapper determines the activity level (tingkat) from organizer and role keywords. It determines the category (kelompok) and type (jenis) from the document structure. All fields are validated to ensure required values exist."
+      },
+      {
+        "t": "h2",
+        "x": "3.4 Output"
+      },
+      {
+        "t": "p",
+        "x": "PipelineResult with parser_engine, raw_text, and mapped_fields"
+      },
+      {
+        "t": "p",
+        "x": "Five ExtractedValue objects: nama_kegiatan_sertifikasi, waktu_mulai_pelaksanaan, waktu_selesai_pelaksanaan, penyelenggara_kegiatan, nomor_bukti_fisik_nomor_sertifikasi"
+      },
+      {
+        "t": "p",
+        "x": "Optional: tingkat from rule-based mapping in form_mapper.py"
+      },
+      {
+        "t": "h2",
+        "x": "3.5 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Parameter",
+            "Value",
+            "Description"
+          ],
+          "r": [
+            [
+              "min_text_length",
+              "config.py",
+              "Threshold to trigger slow parser fallback"
+            ],
+            [
+              "enable_ocr_fallback",
+              "config.py",
+              "Enable or disable OCR step"
+            ],
+            [
+              "zoom",
+              "3.0",
+              "PDF render resolution for OCR"
+            ],
+            [
+              "tahun_akademik",
+              "2024/2025",
+              "Academic year passed to form mapper"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "3.6 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Fast: ~0.1 seconds per certificate"
+      },
+      {
+        "t": "p",
+        "x": "No GPU or external model required"
+      },
+      {
+        "t": "p",
+        "x": "Deterministic: same input produces same output"
+      },
+      {
+        "t": "h2",
+        "x": "3.7 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "Regex patterns are fragile and hard to maintain"
+      },
+      {
+        "t": "p",
+        "x": "Cannot handle varied certificate layouts"
+      },
+      {
+        "t": "p",
+        "x": "OCR errors propagate through extraction"
+      },
+      {
+        "t": "p",
+        "x": "Tingkat mapping depends on keyword rules, not document understanding"
+      },
+      {
+        "t": "h2",
+        "x": "3.8 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "1",
+              "extract_text_with_pymupdf()",
+              "pdf_fast_path.py:11",
+              "Fast text from PDF pages"
+            ],
+            [
+              "1",
+              "parse_with_docling()",
+              "docling_parser.py:16",
+              "Slow fallback parser (markdown)"
+            ],
+            [
+              "2",
+              "extract_certificate_fields()",
+              "field_extractor.py:85",
+              "Regex extraction for 5 fields"
+            ],
+            [
+              "3",
+              "extract_text_with_ocr()",
+              "ocr_fallback.py:8",
+              "RapidOCR + Tesseract OCR"
+            ],
+            [
+              "4",
+              "map_fields_to_form()",
+              "form_mapper.py:7",
+              "Map fields to form dropdowns"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "4. Method 2: NER v1"
+      },
+      {
+        "t": "h2",
+        "x": "4.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The NER method uses an IndoBERT model to extract named entities from certificate text. It then maps entity types to form fields. This method handles varied text formats better than regex."
+      },
+      {
+        "t": "h2",
+        "x": "4.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "Pre-extracted text files from a previous regex baseline run"
+      },
+      {
+        "t": "p",
+        "x": "Text files have header lines (# Method:, # Time:) which are stripped"
+      },
+      {
+        "t": "p",
+        "x": "Ground truth CSV for evaluation"
+      },
+      {
+        "t": "h2",
+        "x": "4.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Load the NER model into memory. The model is a pre-trained Indonesian language model from HuggingFace. It runs on GPU if available, otherwise on CPU. The model is cached globally so it loads only once."
+      },
+      {
+        "t": "p",
+        "x": "Normalize the text for the NER model. This adds spaces around commas, between camelCase words, and between digits and letters. Normalization helps the model recognize entity boundaries correctly."
+      },
+      {
+        "t": "p",
+        "x": "Split the text into 512-character chunks. The NER model has a maximum input length. Longer texts are split at sentence boundaries. Each chunk is processed independently by the model."
+      },
+      {
+        "t": "p",
+        "x": "Run the NER pipeline on each chunk. The model identifies entity types: organizations (ORG), events (EVT), dates (DAT), numbers (NUM), and nominal values (NOR). Non-entity tokens are filtered out."
+      },
+      {
+        "t": "p",
+        "x": "Merge consecutive entities of the same type. Entities that are close together (within 3 characters) are merged into a single entity. This handles cases where the model splits one entity into multiple tokens."
+      },
+      {
+        "t": "p",
+        "x": "Map entities to form fields. Organizations become the organizer field. Events become the activity name. Dates become start and end dates. Numbers become the certificate number. Each entity is scored for relevance and the best one is selected."
+      },
+      {
+        "t": "h2",
+        "x": "4.4 Output"
+      },
+      {
+        "t": "p",
+        "x": "Dict of ExtractedValue objects for the five evaluation fields"
+      },
+      {
+        "t": "p",
+        "x": "Each value includes the source (which entity type produced it)"
+      },
+      {
+        "t": "p",
+        "x": "No tingkat extraction (NER does not determine activity level)"
+      },
+      {
+        "t": "h2",
+        "x": "4.5 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Parameter",
+            "Value",
+            "Description"
+          ],
+          "r": [
+            [
+              "Model",
+              "treamyracle/indobert-ner-gold",
+              "Pre-trained Indonesian NER model"
+            ],
+            [
+              "Chunk size",
+              "512 chars",
+              "Max text length per NER call"
+            ],
+            [
+              "Merge gap",
+              "<= 3 chars",
+              "Merge consecutive entities within this gap"
+            ],
+            [
+              "NOR min length",
+              "8 chars",
+              "Minimum length for NOR entity fallback"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "4.6 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Handles varied text formats better than regex"
+      },
+      {
+        "t": "p",
+        "x": "No rule maintenance needed for new certificate layouts"
+      },
+      {
+        "t": "p",
+        "x": "Fast: ~0.07 seconds per certificate"
+      },
+      {
+        "t": "h2",
+        "x": "4.7 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "Only extracts 4 of 5 fields (no tingkat)"
+      },
+      {
+        "t": "p",
+        "x": "NER model accuracy depends on training data quality"
+      },
+      {
+        "t": "p",
+        "x": "Struggles with OCR noise and unusual formatting"
+      },
+      {
+        "t": "p",
+        "x": "Requires GPU for acceptable speed"
+      },
+      {
+        "t": "h2",
+        "x": "4.8 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "1",
+              "load_ner_model()",
+              "ner_extractor.py:25",
+              "Load IndoBERT NER pipeline"
+            ],
+            [
+              "2",
+              "normalize_for_ner()",
+              "ner_extractor.py:41",
+              "Normalize text for NER input"
+            ],
+            [
+              "3",
+              "extract_entities()",
+              "ner_extractor.py:52",
+              "Chunk text, run NER, filter"
+            ],
+            [
+              "4",
+              "_merge_consecutive()",
+              "ner_to_fields.py:107",
+              "Merge nearby same-type entities"
+            ],
+            [
+              "5",
+              "map_entities_to_fields()",
+              "ner_to_fields.py:13",
+              "Map ORG/EVT/DAT/NUM to fields"
+            ],
+            [
+              "5",
+              "score_entity_for_field()",
+              "post_processors.py:11",
+              "Rank entities by relevance"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "5. Method 3: Hybrid (NER + Regex)"
+      },
+      {
+        "t": "h2",
+        "x": "5.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The hybrid method combines NER and regex extraction. NER handles text fields. Regex handles structured fields. This combines the strengths of both approaches."
+      },
+      {
+        "t": "h2",
+        "x": "5.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "Same pre-extracted text files as NER v1"
+      },
+      {
+        "t": "p",
+        "x": "Same ground truth CSV"
+      },
+      {
+        "t": "h2",
+        "x": "5.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Run regex extraction. This extracts all five fields using pattern matching. Regex works well for structured data like dates and certificate numbers."
+      },
+      {
+        "t": "p",
+        "x": "Run NER extraction. This extracts entity-based fields. NER works well for free-text fields like activity names and organizer names."
+      },
+      {
+        "t": "p",
+        "x": "Combine results using priority rules. Text fields (activity name, organizer) prefer NER results. Structured fields (dates, certificate number) prefer regex results. If the preferred source has no value, the other source is used as fallback."
+      },
+      {
+        "t": "h2",
+        "x": "5.4 Output"
+      },
+      {
+        "t": "p",
+        "x": "Dict of ExtractedValue objects for the five evaluation fields"
+      },
+      {
+        "t": "p",
+        "x": "Each field has a source from either NER or regex"
+      },
+      {
+        "t": "h2",
+        "x": "5.5 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Aspect",
+            "NER Priority",
+            "Regex Priority"
+          ],
+          "r": [
+            [
+              "Text fields",
+              "nama_kegiatan_sertifikasi, penyelenggara_kegiatan",
+              "Fallback only"
+            ],
+            [
+              "Structured fields",
+              "Fallback only",
+              "waktu_mulai, waktu_selesai, nomor_bukti_fisik"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "5.6 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Best of both approaches"
+      },
+      {
+        "t": "p",
+        "x": "NER handles text fields where regex is weak"
+      },
+      {
+        "t": "p",
+        "x": "Regex handles structured fields where NER is weak"
+      },
+      {
+        "t": "h2",
+        "x": "5.7 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "Still cannot extract tingkat"
+      },
+      {
+        "t": "p",
+        "x": "Depends on both NER model and regex patterns"
+      },
+      {
+        "t": "p",
+        "x": "No error handling between methods"
+      },
+      {
+        "t": "h2",
+        "x": "5.8 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "1",
+              "extract_certificate_fields()",
+              "field_extractor.py:85",
+              "Regex extraction for all fields"
+            ],
+            [
+              "2",
+              "extract_entities() + map_entities_to_fields()",
+              "ner_extractor.py:52, ner_to_fields.py:13",
+              "NER extraction"
+            ],
+            [
+              "3",
+              "combine_hybrid()",
+              "benchmark_hybrid.py:63",
+              "Merge with priority rules"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "6. Method 4: Hybrid + Post-Processing"
+      },
+      {
+        "t": "h2",
+        "x": "6.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The hybrid+PP method adds a post-processing step to the hybrid method. This step filters signer-related entities from the NER results. Signers are common false positives in organizer extraction."
+      },
+      {
+        "t": "h2",
+        "x": "6.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "Same pre-extracted text files as NER v1"
+      },
+      {
+        "t": "p",
+        "x": "Raw text passed to the signer filter for context"
+      },
+      {
+        "t": "h2",
+        "x": "6.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Run NER extraction. The model identifies all entities in the text, including signer names and organizations."
+      },
+      {
+        "t": "p",
+        "x": "Filter signer roles. The filter looks for signer patterns. It checks 40 characters before each organization entity for dedication prefixes. It checks 200 characters after for NIP or NIM numbers. It checks if the entity appears in the last 30% of the text."
+      },
+      {
+        "t": "p",
+        "x": "Filter person names. The filter checks 80 characters before each entity for phrases like 'diberikan kepada' (given to) or 'menghargaan kepada' (awarding to). Entities matching these patterns are removed."
+      },
+      {
+        "t": "p",
+        "x": "Safety check. If filtering removed all organization entities, the filter reverts to the original list. This prevents data loss from over-aggressive filtering."
+      },
+      {
+        "t": "p",
+        "x": "Run field mapping and hybrid combination. The cleaned entities are mapped to fields. The results are combined with regex using the same priority rules as the hybrid method."
+      },
+      {
+        "t": "h2",
+        "x": "6.4 Output"
+      },
+      {
+        "t": "p",
+        "x": "Dict of ExtractedValue objects for the five evaluation fields"
+      },
+      {
+        "t": "p",
+        "x": "Cleaner organizer values (fewer signer false positives)"
+      },
+      {
+        "t": "h2",
+        "x": "6.5 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Check",
+            "Look-behind",
+            "Look-ahead",
+            "Trigger"
+          ],
+          "r": [
+            [
+              "Signer role",
+              "40 chars",
+              "200 chars",
+              "A.N./ATAS NAMA prefix or NIP/NIM suffix"
+            ],
+            [
+              "Person name",
+              "80 chars",
+              "N/A",
+              "diberikan kepada / menghargaan kepada"
+            ],
+            [
+              "Position",
+              "N/A",
+              "N/A",
+              "Entity past 70% of text length"
+            ],
+            [
+              "Safety",
+              "N/A",
+              "N/A",
+              "Revert if all ORGs removed"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "6.6 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Reduces false positive organizer extractions"
+      },
+      {
+        "t": "p",
+        "x": "Handles common certificate layout patterns"
+      },
+      {
+        "t": "p",
+        "x": "Safety revert prevents data loss"
+      },
+      {
+        "t": "h2",
+        "x": "6.7 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "Heuristic-based: may incorrectly filter valid organizers"
+      },
+      {
+        "t": "p",
+        "x": "Position thresholds are tuned for this dataset"
+      },
+      {
+        "t": "p",
+        "x": "Does not handle all signer patterns"
+      },
+      {
+        "t": "h2",
+        "x": "6.8 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "2",
+              "filter_signer_roles()",
+              "post_processors.py:85",
+              "Remove signer entities from NER output"
+            ],
+            [
+              "2",
+              "is_signer_role()",
+              "post_processors.py:74",
+              "Check dedication prefix + NIP/NIM"
+            ],
+            [
+              "3",
+              "is_likely_person_name()",
+              "post_processors.py:46",
+              "Check diberikan kepada phrase"
+            ],
+            [
+              "5",
+              "map_entities_to_fields()",
+              "ner_to_fields.py:13",
+              "Map filtered entities to fields"
+            ],
+            [
+              "5",
+              "combine_hybrid()",
+              "benchmark_hybrid.py:63",
+              "Merge with regex results"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "7. Method 5: LLM A1 (Per-Field)"
+      },
+      {
+        "t": "h2",
+        "x": "7.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The LLM A1 method adds Ollama inference to the hybrid+PP baseline. It calls the language model for tingkat (always) and for other fields when confidence is low. This is the first LLM-based method."
+      },
+      {
+        "t": "h2",
+        "x": "7.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "Same pre-extracted text files"
+      },
+      {
+        "t": "p",
+        "x": "Hybrid+PP results as context (known fields)"
+      },
+      {
+        "t": "p",
+        "x": "Full raw text for each certificate"
+      },
+      {
+        "t": "h2",
+        "x": "7.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Build the hybrid+PP baseline. This is the same as Method 4. The result is a dict of field values with confidence scores."
+      },
+      {
+        "t": "p",
+        "x": "Build a context dictionary. This contains the activity name, organizer, and role from the hybrid+PP results. The context helps the language model make better decisions."
+      },
+      {
+        "t": "p",
+        "x": "Decide which fields need the language model. The tingkat field always triggers a call. Other fields trigger only if the hybrid+PP value is missing or has low confidence (below 0.7)."
+      },
+      {
+        "t": "p",
+        "x": "Build the prompt for tingkat. The prompt contains extraction rules, a list of approved options, and heuristic guidance. It also includes the full certificate text and the known fields from step 2."
+      },
+      {
+        "t": "p",
+        "x": "Build the prompt for other fields. The prompt asks the model to extract a specific field. It includes the full certificate text and the known fields. The model must return only the field value or TIDAK_DITEMUKAN."
+      },
+      {
+        "t": "p",
+        "x": "Call the Ollama API. The model runs locally with temperature 0 for deterministic output. Each call uses a 4096-token context window and produces up to 30 tokens. Up to 2 retries are attempted on failure."
+      },
+      {
+        "t": "p",
+        "x": "Validate the response. For tingkat, the response is checked against the approved options. For other fields, the response is checked for length and rejection patterns."
+      },
+      {
+        "t": "p",
+        "x": "Merge valid results into the hybrid+PP dict. Valid language model values replace the original field values. Each merged value gets a confidence of 0.85 and source 'llm_ollama'."
+      },
+      {
+        "t": "h2",
+        "x": "7.4 Prompt"
+      },
+      {
+        "t": "p",
+        "x": "The prompt tells the language model exactly what to extract. Each prompt contains instructions, rules, heuristic guidance, approved options, the certificate text (or context), and the answer format."
+      },
+      {
+        "t": "h3",
+        "x": "Tingkat Prompt"
+      },
+      {
+        "t": "p",
+        "x": "Tentukan TINGKAT KEGIATAN dari sertifikat berikut."
+      },
+      {
+        "t": "p",
+        "x": "ATURAN WAJIB:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jawaban HARUS persis salah satu dari opsi di bawah"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "JANGAN jawab selain opsi ini"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "PETUNJUK TINGKAT:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(HIMATESDA, HIMANO), maka == Departemen/Program Studi"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM Universitas, Rektorat,"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Direktorat Kemahasiswaan, maka == Universitas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala nasional (lomba nasional, webinar nasional),"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "maka == Nasional"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala internasional (konferensi internasional),"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "maka == Internasional"
+      },
+      {
+        "t": "b",
+        "x": [
+          "'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Opsi yang diizinkan:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Internasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Universitas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Fakultas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Departemen/Program Studi"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Lainnya"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Teks sertifikat:"
+      },
+      {
+        "t": "p",
+        "x": "<full raw text of certificate>"
+      },
+      {
+        "t": "p",
+        "x": "Field yang sudah diketahui:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nama Kegiatan: <extracted activity name>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Penyelenggara: <extracted organizer>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Peran: <extracted role>"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):"
+      },
+      {
+        "t": "h3",
+        "x": "Free Text Prompt (for other fields)"
+      },
+      {
+        "t": "p",
+        "x": "Ekstrak <field_label> dari sertifikat berikut."
+      },
+      {
+        "t": "p",
+        "x": "ATURAN:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jawaban HANYA nilai field, tanpa penjelasan"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Maksimal 100 karakter"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika tidak ditemukan, jawab: TIDAK_DITEMUKAN"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Teks sertifikat:"
+      },
+      {
+        "t": "p",
+        "x": "<full raw text of certificate>"
+      },
+      {
+        "t": "p",
+        "x": "Field yang sudah diketahui:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nama Kegiatan: <extracted activity name>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Penyelenggara: <extracted organizer>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Peran: <extracted role>"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Jawaban:"
+      },
+      {
+        "t": "h2",
+        "x": "7.5 Output"
+      },
+      {
+        "t": "p",
+        "x": "Six ExtractedValue objects (5 from hybrid+PP + tingkat from LLM)"
+      },
+      {
+        "t": "p",
+        "x": "Token usage log (calls.json) with prompt tokens, completion tokens, and latency"
+      },
+      {
+        "t": "p",
+        "x": "Two summaries: hybrid_pp (baseline) and hybrid_llm (with LLM)"
+      },
+      {
+        "t": "h2",
+        "x": "7.6 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Parameter",
+            "Value",
+            "Description"
+          ],
+          "r": [
+            [
+              "Model",
+              "llama3.1:8b",
+              "Ollama local model"
+            ],
+            [
+              "max_tokens",
+              "30",
+              "Max completion tokens per call"
+            ],
+            [
+              "num_ctx",
+              "4096",
+              "Context window size"
+            ],
+            [
+              "temperature",
+              "0",
+              "Deterministic output"
+            ],
+            [
+              "CONFIDENCE_THRESHOLD",
+              "0.7",
+              "Trigger LLM if below this"
+            ],
+            [
+              "LLM confidence",
+              "0.85",
+              "Hardcoded when merging"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "7.7 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Adds tingkat extraction (hybrid alone gives 0%)"
+      },
+      {
+        "t": "p",
+        "x": "Conditional LLM calls: only when confidence is low"
+      },
+      {
+        "t": "p",
+        "x": "Full raw text gives LLM maximum context"
+      },
+      {
+        "t": "h2",
+        "x": "7.8 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "1-4 LLM calls per certificate (slow, ~2 seconds each)"
+      },
+      {
+        "t": "p",
+        "x": "High token usage: ~834 tokens per certificate"
+      },
+      {
+        "t": "p",
+        "x": "Confidence threshold (0.7) is a design choice, not optimal"
+      },
+      {
+        "t": "p",
+        "x": "LLM may hallucinate fields where regex and NER both failed"
+      },
+      {
+        "t": "h2",
+        "x": "7.9 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "2",
+              "needs_llm()",
+              "benchmark_llm.py:103",
+              "Check if field needs LLM call"
+            ],
+            [
+              "3",
+              "build_prompt_tingkat()",
+              "llm_extractor.py:80",
+              "Build tingkat prompt (full text)"
+            ],
+            [
+              "3",
+              "build_prompt_free_text()",
+              "llm_extractor.py:121",
+              "Build free-text field prompt"
+            ],
+            [
+              "4",
+              "call_ollama()",
+              "llm_extractor.py:51",
+              "Call Ollama API"
+            ],
+            [
+              "5",
+              "validate_tingkat()",
+              "llm_extractor.py:149",
+              "Validate tingkat response"
+            ],
+            [
+              "5",
+              "validate_free_text()",
+              "llm_extractor.py:175",
+              "Validate free-text response"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "8. Method 6: LLM v3 (Tingkat Only)"
+      },
+      {
+        "t": "h2",
+        "x": "8.1 Overview"
+      },
+      {
+        "t": "p",
+        "x": "The LLM v3 method calls the language model only for tingkat. It does not re-extract other fields. It has two variants: context-only (A) and context + minimized text (B). This method minimizes token usage."
+      },
+      {
+        "t": "h2",
+        "x": "8.2 Input"
+      },
+      {
+        "t": "p",
+        "x": "Same pre-extracted text files"
+      },
+      {
+        "t": "p",
+        "x": "Hybrid+PP results as context"
+      },
+      {
+        "t": "p",
+        "x": "Full raw text (Variant B only, processed by minimize_text())"
+      },
+      {
+        "t": "h2",
+        "x": "8.3 Process"
+      },
+      {
+        "t": "p",
+        "x": "Build the hybrid+PP baseline. Same as Method 4."
+      },
+      {
+        "t": "p",
+        "x": "Build the context dictionary. Same as Method 5."
+      },
+      {
+        "t": "p",
+        "x": "Variant A: Build context-only prompt. The prompt contains extraction rules, approved options, and heuristic guidance. It also includes the known fields. No raw text is included."
+      },
+      {
+        "t": "p",
+        "x": "Variant B: Select relevant lines. The minimize_text function scores each line of the certificate text. It keeps only lines relevant to tingkat determination. Lines with organizer keywords, scale keywords, or role keywords are kept. Noise and garbled text are removed. The result is capped at 300 characters."
+      },
+      {
+        "t": "p",
+        "x": "Variant B: Build prompt with minimized text. The prompt is the same as Variant A, but includes the minimized text section. This gives the model some raw text context while keeping token usage low."
+      },
+      {
+        "t": "p",
+        "x": "Call the Ollama API for each variant. Same settings as Method 5."
+      },
+      {
+        "t": "p",
+        "x": "Validate and merge. Same as Method 5. Each variant produces its own tingkat result."
+      },
+      {
+        "t": "h2",
+        "x": "8.4 Prompt"
+      },
+      {
+        "t": "p",
+        "x": "The prompt tells the language model exactly what to extract. Each prompt contains instructions, rules, heuristic guidance, approved options, the certificate text (or context), and the answer format."
+      },
+      {
+        "t": "h3",
+        "x": "Variant A: Context-Only Prompt"
+      },
+      {
+        "t": "p",
+        "x": "Tentukan tingkat kegiatan dari informasi berikut."
+      },
+      {
+        "t": "p",
+        "x": "ATURAN WAJIB:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jawaban HARUS persis salah satu dari opsi di bawah"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "JANGAN jawab selain opsi ini"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika tidak yakin, pilih yang paling mendekati"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "PETUNJUK TINGKAT:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika sertifikat menyebut DEPARTMENT/DEPT/STUDY PROGRAM"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(bahasa Inggris), maka == Departemen/Program Studi"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(HIMATESDA, HIMANO), maka == Departemen/Program Studi"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM Universitas, Rektorat,"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Direktorat Kemahasiswaan, maka == Universitas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala nasional, maka == Nasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala internasional, maka == Internasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Opsi yang diizinkan:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Internasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Universitas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Fakultas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Departemen/Program Studi"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Lainnya"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Field yang sudah diketahui (dari pipeline):"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nama Kegiatan: <extracted activity name>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Penyelenggara: <extracted organizer>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Peran: <extracted role>"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):"
+      },
+      {
+        "t": "h3",
+        "x": "Variant B: Minimized-Text Prompt"
+      },
+      {
+        "t": "p",
+        "x": "Tentukan tingkat kegiatan dari sertifikat berikut."
+      },
+      {
+        "t": "p",
+        "x": "ATURAN WAJIB:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jawaban HARUS persis salah satu dari opsi di bawah"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "JANGAN jawab selain opsi ini"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika tidak yakin, pilih yang paling mendekati"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "PETUNJUK TINGKAT:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika sertifikat menyebut DEPARTMENT/DEPT/STUDY PROGRAM"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(bahasa Inggris), maka == Departemen/Program Studi"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "(HIMATESDA, HIMANO), maka == Departemen/Program Studi"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika diselenggarakan oleh BEM Universitas, Rektorat,"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Direktorat Kemahasiswaan, maka == Universitas"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala nasional, maka == Nasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Jika kegiatan berskala internasional, maka == Internasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Opsi yang diizinkan:"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Internasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nasional"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Universitas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Fakultas"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Departemen/Program Studi"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Lainnya"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Teks sertifikat (bagian yang relevan):"
+      },
+      {
+        "t": "p",
+        "x": "<minimized text, ~300 chars, only tingkat-relevant lines>"
+      },
+      {
+        "t": "p",
+        "x": "Field yang sudah diketahui (dari pipeline):"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Nama Kegiatan: <extracted activity name>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Penyelenggara: <extracted organizer>"
+        ]
+      },
+      {
+        "t": "b",
+        "x": [
+          "Peran: <extracted role>"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "Jawaban (hanya satu opsi dari daftar, tanpa penjelasan):"
+      },
+      {
+        "t": "h2",
+        "x": "8.5 Output"
+      },
+      {
+        "t": "p",
+        "x": "Six ExtractedValue objects (5 from hybrid+PP + tingkat from LLM)"
+      },
+      {
+        "t": "p",
+        "x": "Per-variant call logs (calls_a_context.json, calls_b_minimized.json)"
+      },
+      {
+        "t": "p",
+        "x": "Minimize stats (minimize_stats.json) with compression ratios"
+      },
+      {
+        "t": "p",
+        "x": "Config dump (config.json) with model and weights"
+      },
+      {
+        "t": "h2",
+        "x": "8.6 Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Aspect",
+            "Variant A",
+            "Variant B"
+          ],
+          "r": [
+            [
+              "Raw text in prompt",
+              "No",
+              "Yes (minimized to ~300 chars)"
+            ],
+            [
+              "Avg tokens/cert",
+              "410",
+              "479"
+            ],
+            [
+              "Tingkat accuracy",
+              "24.3%",
+              "39.2%"
+            ],
+            [
+              "Acc/token",
+              "0.059",
+              "0.082 (best in family)"
+            ],
+            [
+              "Compression",
+              "N/A",
+              "70% (42K -> 12K chars)"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "8.7 Strengths"
+      },
+      {
+        "t": "p",
+        "x": "Lowest token usage: 479 tokens per certificate (Variant B)"
+      },
+      {
+        "t": "p",
+        "x": "Best accuracy-per-token: 0.082 (highest in the family)"
+      },
+      {
+        "t": "p",
+        "x": "minimize_text() removes OCR noise before the LLM sees it"
+      },
+      {
+        "t": "p",
+        "x": "Single LLM call per certificate (deterministic cost)"
+      },
+      {
+        "t": "h2",
+        "x": "8.8 Limitations"
+      },
+      {
+        "t": "p",
+        "x": "Only extracts tingkat (other fields stay from hybrid+PP)"
+      },
+      {
+        "t": "p",
+        "x": "Variant A (context-only) has low accuracy: 24.3%"
+      },
+      {
+        "t": "p",
+        "x": "minimize_text() weights are tuned for this dataset"
+      },
+      {
+        "t": "p",
+        "x": "English dept certs still problematic (LLM picks Fakultas over DEPT)"
+      },
+      {
+        "t": "p",
+        "x": "25 Nasional certs have no text signal (unsolvable by any text method)"
+      },
+      {
+        "t": "h2",
+        "x": "8.9 Code Reference"
+      },
+      {
+        "t": "p",
+        "x": "The table below maps each process step to the corresponding code."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Step",
+            "Function",
+            "File",
+            "What it does"
+          ],
+          "r": [
+            [
+              "4",
+              "minimize_text()",
+              "llm_extractor_v3.py:136",
+              "Select relevant lines for tingkat"
+            ],
+            [
+              "4",
+              "score_line()",
+              "llm_extractor_v3.py:106",
+              "Score a line for tingkat relevance"
+            ],
+            [
+              "3",
+              "build_prompt_tingkat_context()",
+              "llm_extractor_v3.py:214",
+              "Context-only prompt (Variant A)"
+            ],
+            [
+              "5",
+              "build_prompt_tingkat_minimized()",
+              "llm_extractor_v3.py:239",
+              "Minimized-text prompt (Variant B)"
+            ],
+            [
+              "6",
+              "call_ollama()",
+              "llm_extractor.py:51",
+              "Call Ollama API"
+            ],
+            [
+              "7",
+              "validate_tingkat()",
+              "llm_extractor.py:149",
+              "Validate tingkat response"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "9. Method 7: Cost-Aware Hybrid Extraction (Handoff v7)"
+      },
+      {
+        "t": "h2",
+        "x": "Overview"
+      },
+      {
+        "t": "p",
+        "x": "Handoff v7 moves from full-text LLM extraction to a cost-aware hybrid that extracts only the tingkat field with an LLM while every other field stays on the deterministic hybrid (NER + regex + post-processing). The goal is the best accuracy/cost Pareto point, not minimum tokens at any cost."
+      },
+      {
+        "t": "h2",
+        "x": "Input"
+      },
+      {
+        "t": "p",
+        "x": "Same 74 certificates. Ground truth: Ground_Truth_Sertifikat.csv (raw)."
+      },
+      {
+        "t": "h2",
+        "x": "Process"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Run hybrid + post-processing once per certificate (regex + NER + phrase-v2 organizer).",
+          "Run the rule-based tingkat router: high-precision rules decide tingkat at 0 tokens.",
+          "For certificates the router does not decide, call the local LLM with a compact tingkat prompt.",
+          "Validate the LLM answer against the 6 form options; keep the value empty when invalid."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Key",
+            "Value"
+          ],
+          "r": [
+            [
+              "Prompt",
+              "v3 minimized / v4 adaptive (variants a-e)"
+            ],
+            [
+              "Router",
+              "rule-based, 35/74 decisions at 100% precision"
+            ],
+            [
+              "Model",
+              "llama3.1:8b (Ollama)"
+            ],
+            [
+              "Token budget",
+              "minimize_text(), ~202 eff tokens/cert"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Results (v7 P4 e_hybrid)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "Value"
+          ],
+          "r": [
+            [
+              "Tingkat exact",
+              "77.0% (57/74)"
+            ],
+            [
+              "MACRO exact",
+              "54.2%"
+            ],
+            [
+              "Eff. tokens/cert",
+              "202.2"
+            ],
+            [
+              "LLM calls",
+              "39 of 74 (router: 35, 100% precision)"
+            ],
+            [
+              "Run",
+              "tests/benchmark_runs/run_llm_v4_20260803_113310/"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Strengths"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Router removes ~47% of LLM calls at 0 tokens and 100% precision.",
+          "Best accuracy-per-token in the v4+v6+v7 family (0.082 acc/token)."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Limitations"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Word-boundary router misses OCR-merged tokens (BEMFKM, BEMFEBUNAIR, HIMATESDA).",
+          "Ground truth had un-audited tingkat labels.",
+          "LLM biased English certificate text toward Internasional."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Code Reference"
+      },
+      {
+        "t": "b",
+        "x": [
+          "tests/benchmark_llm_v4.py, tests/llm_extractor_v3.py, tests/llm_extractor_v4.py",
+          "tests/llm_router_v4.py, tests/organizer_extractor_v2.py, tests/mismatch_taxonomy.py"
+        ]
+      },
+      {
+        "t": "h1",
+        "x": "10. Method 8: v8 Router Fix + LLM Bias + Layout (Handoff v8)"
+      },
+      {
+        "t": "h2",
+        "x": "Overview"
+      },
+      {
+        "t": "p",
+        "x": "Handoff v8 repairs the v7 router, audits ground truth, and tests two accuracy levers: a bias-corrected LLM prompt and layout-aware input. Winner: contains-match router + f_bias prompt at 82.4% tingkat exact."
+      },
+      {
+        "t": "h2",
+        "x": "Input"
+      },
+      {
+        "t": "p",
+        "x": "Same 74 certificates. Versioned ground truth: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat label corrections)."
+      },
+      {
+        "t": "h2",
+        "x": "Process"
+      },
+      {
+        "t": "b",
+        "x": [
+          "GT audit: 1966887->Nasional, 1981676->Nasional, 2954283->Internasional; 2030372 stays Nasional.",
+          "Router contains-match: BEM/HIMA detected in uppercase alnum runs (BEMFKM, SERT2128BEM2026) with a guard.",
+          "New rule: explicit TINGKAT/LOMBA NASIONAL text -> Nasional.",
+          "f_bias prompt: English text is not automatically Internasional; Indonesian-institution context wins.",
+          "Layout experiment (markdown / annotated from PyMuPDF dict) measured and rejected."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Configuration"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Key",
+            "Value"
+          ],
+          "r": [
+            [
+              "Prompt",
+              "f_bias (e_hybrid + bias rules)"
+            ],
+            [
+              "Router",
+              "contains-match, 39/74 decisions at 100% precision"
+            ],
+            [
+              "GT",
+              "fixed_v8 (Ground_Truth_Sertifikat_v8.csv)"
+            ],
+            [
+              "Model",
+              "llama3.1:8b (Ollama)"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Results"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Variant",
+            "Tingkat exact",
+            "MACRO exact",
+            "Eff. tokens/cert"
+          ],
+          "r": [
+            [
+              "b_minimized",
+              "78.4%",
+              "54.4%",
+              "221"
+            ],
+            [
+              "e_hybrid",
+              "79.7%",
+              "54.7%",
+              "182"
+            ],
+            [
+              "f_bias (winner)",
+              "82.4%",
+              "55.2%",
+              "214"
+            ],
+            [
+              "g_evidence",
+              "75.7%",
+              "53.9%",
+              "194"
+            ],
+            [
+              "layout_md (f_bias)",
+              "77.0%",
+              "50.8%",
+              "235"
+            ],
+            [
+              "layout_ann (f_bias)",
+              "78.4%",
+              "51.3%",
+              "-"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Strengths"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Contains-match router routes 39/74 at 100% precision (-53% LLM calls).",
+          "f_bias fixes English-name scale bias (data slayer, 2955331, IRIS) without breaking BEM-fakultas."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Limitations"
+      },
+      {
+        "t": "b",
+        "x": [
+          "g_evidence (FaR-style) regresses accuracy and adds completion tokens -> rejected.",
+          "Layout does not help: only 25/74 PDFs have embedded text, and markers disturb deterministic extractors.",
+          "f_bias is 214 eff tokens/cert, slightly over the 200 gate."
+        ]
+      },
+      {
+        "t": "h2",
+        "x": "Code Reference"
+      },
+      {
+        "t": "b",
+        "x": [
+          "tests/llm_router_v4.py, tests/llm_extractor_v4.py, tests/benchmark_llm_v4.py",
+          "tests/layout_repr.py, tests/verify_ground_truth.py",
+          "Production: backend/app/services/{tingkat_router,llm_tingkat,organizer_v2}.py"
+        ]
+      },
+      {
+        "t": "h1",
+        "x": "11. Comparison Table"
+      },
+      {
+        "t": "p",
+        "x": "The table below compares all six methods across key dimensions."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Method",
+            "Input",
+            "Extraction",
+            "LLM calls",
+            "Extra fields",
+            "Confidence",
+            "Speed"
+          ],
+          "r": [
+            [
+              "Regex",
+              "PDF",
+              "Regex patterns",
+              "0",
+              "tingkat (rule)",
+              "Fixed",
+              "~0.1s"
+            ],
+            [
+              "NER v1",
+              "Text",
+              "IndoBERT NER",
+              "0",
+              "none",
+              "NER score",
+              "~0.07s"
+            ],
+            [
+              "Hybrid",
+              "Text",
+              "NER + regex",
+              "0",
+              "none",
+              "Best of both",
+              "~0.15s"
+            ],
+            [
+              "Hybrid+PP",
+              "Text",
+              "NER + regex + PP",
+              "0",
+              "none",
+              "Best of both",
+              "~0.6s"
+            ],
+            [
+              "LLM A1",
+              "Text",
+              "Hybrid+PP + LLM",
+              "1-4",
+              "tingkat (LLM)",
+              "LLM=0.85",
+              "~2s"
+            ],
+            [
+              "LLM v3",
+              "Text",
+              "Hybrid+PP + LLM",
+              "1",
+              "tingkat (LLM)",
+              "LLM=0.85",
+              "~1s"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "12. Appendix: Full Function Index"
+      },
+      {
+        "t": "p",
+        "x": "The table below lists all functions referenced in this document. Functions are listed in the order they appear in the processing pipeline."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Function",
+            "File",
+            "Purpose"
+          ],
+          "r": [
+            [
+              "extract_text_with_pymupdf()",
+              "pdf_fast_path.py:11",
+              "Extract text from PDF pages"
+            ],
+            [
+              "parse_with_docling()",
+              "docling_parser.py:16",
+              "Slow fallback parser (markdown)"
+            ],
+            [
+              "extract_text_with_ocr()",
+              "ocr_fallback.py:8",
+              "RapidOCR + Tesseract OCR"
+            ],
+            [
+              "extract_certificate_fields()",
+              "field_extractor.py:85",
+              "Regex extraction for 5 fields"
+            ],
+            [
+              "map_fields_to_form()",
+              "form_mapper.py:7",
+              "Map fields to form dropdowns"
+            ],
+            [
+              "run_extraction_pipeline()",
+              "extraction_pipeline.py:27",
+              "Full pipeline: PDF to fields"
+            ],
+            [
+              "load_ner_model()",
+              "ner_extractor.py:25",
+              "Load IndoBERT NER pipeline"
+            ],
+            [
+              "normalize_for_ner()",
+              "ner_extractor.py:41",
+              "Normalize text for NER input"
+            ],
+            [
+              "extract_entities()",
+              "ner_extractor.py:52",
+              "Chunk text, run NER, filter"
+            ],
+            [
+              "_merge_consecutive()",
+              "ner_to_fields.py:107",
+              "Merge nearby same-type entities"
+            ],
+            [
+              "map_entities_to_fields()",
+              "ner_to_fields.py:13",
+              "Map ORG/EVT/DAT/NUM to fields"
+            ],
+            [
+              "score_entity_for_field()",
+              "post_processors.py:11",
+              "Rank entities by relevance"
+            ],
+            [
+              "filter_signer_roles()",
+              "post_processors.py:85",
+              "Remove signer entities"
+            ],
+            [
+              "is_signer_role()",
+              "post_processors.py:74",
+              "Check dedication prefix + NIP"
+            ],
+            [
+              "is_likely_person_name()",
+              "post_processors.py:46",
+              "Check diberikan kepada phrase"
+            ],
+            [
+              "combine_hybrid()",
+              "benchmark_hybrid.py:63",
+              "Merge NER and regex results"
+            ],
+            [
+              "needs_llm()",
+              "benchmark_llm.py:103",
+              "Check if field needs LLM call"
+            ],
+            [
+              "call_ollama()",
+              "llm_extractor.py:51",
+              "Call Ollama API"
+            ],
+            [
+              "build_prompt_tingkat()",
+              "llm_extractor.py:80",
+              "Build tingkat prompt (full text)"
+            ],
+            [
+              "build_prompt_free_text()",
+              "llm_extractor.py:121",
+              "Build free-text field prompt"
+            ],
+            [
+              "validate_tingkat()",
+              "llm_extractor.py:149",
+              "Validate tingkat response"
+            ],
+            [
+              "validate_free_text()",
+              "llm_extractor.py:175",
+              "Validate free-text response"
+            ],
+            [
+              "minimize_text()",
+              "llm_extractor_v3.py:136",
+              "Select relevant lines for tingkat"
+            ],
+            [
+              "score_line()",
+              "llm_extractor_v3.py:106",
+              "Score a line for tingkat relevance"
+            ],
+            [
+              "build_prompt_tingkat_context()",
+              "llm_extractor_v3.py:214",
+              "Context-only prompt (A)"
+            ],
+            [
+              "build_prompt_tingkat_minimized()",
+              "llm_extractor_v3.py:239",
+              "Minimized-text prompt (B)"
+            ],
+            [
+              "evaluate_row()",
+              "evaluation_framework.py:47",
+              "Evaluate one certificate vs GT"
+            ],
+            [
+              "aggregate_results()",
+              "evaluation_framework.py:66",
+              "Aggregate per-field metrics"
+            ],
+            [
+              "save_mismatch_report()",
+              "evaluation_framework.py:142",
+              "Generate mismatch CSV/XLSX"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Comparison Across Experiments"
+      },
+      {
+        "t": "auto",
+        "x": "comparison"
+      },
+      {
+        "t": "auto",
+        "x": "progression"
+      }
+    ],
+    "evaluation_methodology": [
+      {
+        "t": "p",
+        "x": "Evaluation Methodology Report"
+      },
+      {
+        "t": "p",
+        "x": "Certificate Autofill Prototype"
+      },
+      {
+        "t": "p",
+        "x": "Benchmark Metrics, Formulas, and Analysis"
+      },
+      {
+        "t": "p",
+        "x": "July 2026"
+      },
+      {
+        "t": "h1",
+        "x": "1. Introduction"
+      },
+      {
+        "t": "p",
+        "x": "This document describes the evaluation methodology used to assess the accuracy of field extraction from student certificates. The system extracts structured fields (event name, dates, organizer, certification number, activity level) from PDF certificates and maps them to a standardized form."
+      },
+      {
+        "t": "p",
+        "x": "Scope: 74 ground-truth certificates covering 6 extracted fields, evaluated across multiple extraction methods (regex, NER, hybrid, LLM)."
+      },
+      {
+        "t": "p",
+        "x": "The evaluation framework is implemented in tests/evaluation_framework.py with matching logic in tests/matchers.py."
+      },
+      {
+        "t": "h1",
+        "x": "2. Evaluated Fields"
+      },
+      {
+        "t": "p",
+        "x": "The following fields are extracted from each certificate and compared against ground truth:"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Field",
+            "Type",
+            "Description"
+          ],
+          "r": [
+            [
+              "nama_kegiatan_sertifikasi",
+              "Text",
+              "Event/activity name"
+            ],
+            [
+              "waktu_mulai_pelaksanaan",
+              "Date",
+              "Start date"
+            ],
+            [
+              "waktu_selesai_pelaksanaan",
+              "Date",
+              "End date"
+            ],
+            [
+              "penyelenggara_kegiatan",
+              "Text",
+              "Organizer name"
+            ],
+            [
+              "nomor_bukti_fisik_nomor_sertifikasi",
+              "Structured",
+              "Certificate number"
+            ],
+            [
+              "tingkat",
+              "Categorical",
+              "Activity level (L1-L6)"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "3. Metrics Definitions"
+      },
+      {
+        "t": "p",
+        "x": "Each extracted field is evaluated using the following metrics. All string comparisons use normalized values (lowercase, special characters removed)."
+      },
+      {
+        "t": "h2",
+        "x": "3.1 Exact Match"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "exact = normalize(expected) == normalize(actual)"
+      },
+      {
+        "t": "p",
+        "x": "Binary metric: 1 if normalized strings are identical, 0 otherwise. Normalization lowercases text and strips non-alphanumeric characters (except /). For dates, both sides are first normalized to DD/MM/YYYY format. For certification numbers, whitespace and punctuation are stripped."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Simple and interpretable."
+      },
+      {
+        "t": "p",
+        "x": "Gold standard for structured fields (dates, numbers)."
+      },
+      {
+        "t": "p",
+        "x": "Penalizes minor formatting differences."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Sensitive to OCR errors and abbreviations."
+      },
+      {
+        "t": "p",
+        "x": "Does not capture partial correctness."
+      },
+      {
+        "t": "p",
+        "x": "Two strings differing by one character score 0."
+      },
+      {
+        "t": "h2",
+        "x": "3.2 Fuzzy Match"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "fuzzy = contains OR (token_overlap >= 0.5) OR abbreviation_match"
+      },
+      {
+        "t": "p",
+        "x": "Binary metric: 1 if any of three sub-conditions hold. (a) Contains: expected is a substring of actual or vice versa, after normalization. (b) Token overlap >= 0.5: at least half of the shorter string's tokens appear in the other. (c) Abbreviation match (penyelenggara_kegiatan and nama_kegiatan_sertifikasi only): checks if one string is an acronym of the other (e.g., BEM FEB matches Badan Eksekutif Mahasiswa Fakultas Ekonomi dan Bisnis)."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Tolerates reordering and partial matches."
+      },
+      {
+        "t": "p",
+        "x": "Captures abbreviations common in organizer names."
+      },
+      {
+        "t": "p",
+        "x": "More realistic than exact for free-text fields."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Threshold (0.5) is a design choice, not theoretically derived."
+      },
+      {
+        "t": "p",
+        "x": "Abbreviation match can produce false positives on short strings."
+      },
+      {
+        "t": "p",
+        "x": "Bidirectional contains can over-match on very short expected values."
+      },
+      {
+        "t": "h2",
+        "x": "3.3 Token Overlap Score"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "token_overlap = |expected_tokens ∩ actual_tokens| / min(|expected_tokens|, |actual_tokens|)"
+      },
+      {
+        "t": "p",
+        "x": "Continuous metric [0, 1]. Measures the fraction of tokens from the shorter string that appear in the longer string. Uses set intersection (order-insensitive). Tokens are space-delimited after normalization."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Captures partial correctness numerically."
+      },
+      {
+        "t": "p",
+        "x": "Order-insensitive."
+      },
+      {
+        "t": "p",
+        "x": "Used as input to fuzzy match threshold."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Does not penalize extra tokens in actual."
+      },
+      {
+        "t": "p",
+        "x": "Ignores token ordering."
+      },
+      {
+        "t": "p",
+        "x": "Can be high for short strings with one matching token."
+      },
+      {
+        "t": "h2",
+        "x": "3.4 Word Error Rate (WER)"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "WER = min(Levenshtein(ref_words, hyp_words) / |ref_words|, 1.0)"
+      },
+      {
+        "t": "p",
+        "x": "Continuous metric [0, 1]. Measures the minimum number of word-level edits (insertions, deletions, substitutions) needed to transform the reference into the hypothesis, normalized by reference length. Computed on raw (un-normalized) words for dates, and on normalized words for text fields."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Standard metric in speech recognition and NLP."
+      },
+      {
+        "t": "p",
+        "x": "Captures edit distance at word granularity."
+      },
+      {
+        "t": "p",
+        "x": "Penalizes both missing and extra words."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Sensitive to word boundary differences."
+      },
+      {
+        "t": "p",
+        "x": "Does not account for semantic similarity."
+      },
+      {
+        "t": "p",
+        "x": "A perfect substring match with one extra word can still score high."
+      },
+      {
+        "t": "h2",
+        "x": "3.5 Character Error Rate (CER)"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "CER = min(Levenshtein(ref_chars, hyp_chars) / |ref|, 1.0)"
+      },
+      {
+        "t": "p",
+        "x": "Continuous metric [0, 1]. Same as WER but at character level. More granular than WER — a single typo in one word increases CER but may not affect WER if word boundaries differ."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "More granular than WER."
+      },
+      {
+        "t": "p",
+        "x": "Catches character-level OCR errors."
+      },
+      {
+        "t": "p",
+        "x": "Useful for short fields (dates, numbers)."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Can be noisy for long text fields."
+      },
+      {
+        "t": "p",
+        "x": "Same semantic content with different characterizations scores poorly."
+      },
+      {
+        "t": "p",
+        "x": "Less interpretable than WER for non-technical audiences."
+      },
+      {
+        "t": "h2",
+        "x": "3.6 Contains Match"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "contains = (normalize(expected) in normalize(actual)) OR (normalize(actual) in normalize(expected))"
+      },
+      {
+        "t": "p",
+        "x": "Binary metric: 1 if one normalized string is a substring of the other. Bidirectional — checks both directions. Useful when the extractor returns a superset of the expected value (e.g., full name vs. abbreviation)."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Simple bidirectional substring check."
+      },
+      {
+        "t": "p",
+        "x": "Catches partial matches (e.g., organizer name truncated)."
+      },
+      {
+        "t": "p",
+        "x": "Used as input to fuzzy match."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Bidirectional can over-match on short strings."
+      },
+      {
+        "t": "p",
+        "x": "Does not measure degree of overlap."
+      },
+      {
+        "t": "p",
+        "x": "Sensitive to normalization differences."
+      },
+      {
+        "t": "h2",
+        "x": "3.7 Confidence Score"
+      },
+      {
+        "t": "p",
+        "x": "Formula:"
+      },
+      {
+        "t": "p",
+        "x": "confidence = extractor_confidence (range: 0.0 to 1.0)"
+      },
+      {
+        "t": "p",
+        "x": "Not a comparison metric — measures the extractor's self-reported confidence in its output. Used for thresholding in hybrid pipelines (e.g., fields with confidence < 0.7 are sent to LLM for re-extraction). Range and interpretation depend on the extraction method (regex: pattern match quality; NER: model probability; LLM: heuristic-based)."
+      },
+      {
+        "t": "p",
+        "x": "Pros:"
+      },
+      {
+        "t": "p",
+        "x": "Enables selective LLM invocation."
+      },
+      {
+        "t": "p",
+        "x": "Useful for identifying uncertain extractions."
+      },
+      {
+        "t": "p",
+        "x": "Method-dependent — not comparable across extractors."
+      },
+      {
+        "t": "p",
+        "x": "Cons:"
+      },
+      {
+        "t": "p",
+        "x": "Not a ground-truth comparison metric."
+      },
+      {
+        "t": "p",
+        "x": "Threshold selection is heuristic."
+      },
+      {
+        "t": "p",
+        "x": "Can be poorly calibrated."
+      },
+      {
+        "t": "h1",
+        "x": "4. Aggregation"
+      },
+      {
+        "t": "h2",
+        "x": "4.1 Per-Field Metrics"
+      },
+      {
+        "t": "p",
+        "x": "For each field, metrics are aggregated across all certificates:"
+      },
+      {
+        "t": "p",
+        "x": "exact_acc(field) = count(exact=1) / count(all)"
+      },
+      {
+        "t": "p",
+        "x": "fuzzy_acc(field) = count(fuzzy=1) / count(all)"
+      },
+      {
+        "t": "p",
+        "x": "avg_wer(field) = mean(WER_i) for all certificates"
+      },
+      {
+        "t": "p",
+        "x": "avg_cer(field) = mean(CER_i) for all certificates"
+      },
+      {
+        "t": "h2",
+        "x": "4.2 Overall Metrics (macro_avg)"
+      },
+      {
+        "t": "p",
+        "x": "The macro_avg in this codebase is technically a micro-average — it sums correct predictions across all fields and divides by total predictions across all fields:"
+      },
+      {
+        "t": "p",
+        "x": "macro_avg = Σ exact_ok(field) / Σ total(field)"
+      },
+      {
+        "t": "p",
+        "x": "This weights fields with more certificates (e.g., nama_kegiatan with 74 predictions) more heavily than fields with fewer (e.g., tingkat with fewer if some are excluded). A true macro-average would compute the mean of per-field accuracies, giving equal weight to each field regardless of count."
+      },
+      {
+        "t": "p",
+        "x": "Trade-off: Micro-average is more stable (less variance from small fields) but can mask poor performance on rare fields. For this dataset with 74 certificates and relatively balanced field coverage, the difference is small."
+      },
+      {
+        "t": "h1",
+        "x": "5. Evaluation Pipeline"
+      },
+      {
+        "t": "p",
+        "x": "The evaluation follows a 4-step pipeline:"
+      },
+      {
+        "t": "p",
+        "x": "Step 1: Ground Truth Loading"
+      },
+      {
+        "t": "p",
+        "x": "Load Ground_Truth_Sertifikat.csv (74 rows, 8 columns). Each row maps a PDF filename to its expected field values. The TINGKAT_GT_MAP translates old GT labels to canonical form."
+      },
+      {
+        "t": "p",
+        "x": "Step 2: Field Extraction"
+      },
+      {
+        "t": "p",
+        "x": "Each certificate is processed by one or more extraction methods (regex, NER, LLM). The extractor returns a dict of ExtractedValue objects (value, confidence, source)."
+      },
+      {
+        "t": "p",
+        "x": "Step 3: Matching"
+      },
+      {
+        "t": "p",
+        "x": "evaluate_row() in evaluation_framework.py iterates over EVAL_FIELDS, calling match_field() from matchers.py for each field. match_field() applies field-specific normalization (dates via normalize_date, numbers via normalize_nomor) before computing exact, fuzzy, WER, CER, contains, and token_overlap."
+      },
+      {
+        "t": "p",
+        "x": "Step 4: Aggregation"
+      },
+      {
+        "t": "p",
+        "x": "aggregate_results() collects per-field counts and computes exact_acc, fuzzy_acc, avg_wer, avg_cer, and the overall micro-average."
+      },
+      {
+        "t": "h1",
+        "x": "6. Benchmark Methods"
+      },
+      {
+        "t": "p",
+        "x": "The following extraction methods have been benchmarked:"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Method",
+            "Approach",
+            "Key Characteristics"
+          ],
+          "r": [
+            [
+              "Regex Baseline",
+              "PyMuPDF + Docling + OCR + regex patterns",
+              "Fast (~0.1s/cert), no ML deps"
+            ],
+            [
+              "NER v1",
+              "IndoBERT NER (treamyracle/indobert-ner-gold)",
+              "~0.07s/cert, needs GPU"
+            ],
+            [
+              "Hybrid (NER+regex)",
+              "NER for text fields, regex for structured",
+              "Combines strengths of both"
+            ],
+            [
+              "Hybrid+PP",
+              "Hybrid + post-processing (filter_signer_roles)",
+              "Best non-LLM method"
+            ],
+            [
+              "LLM A1 (per-field)",
+              "Ollama llama3.1:8b, per-field prompts",
+              "834 tok/cert, 47.3% tingkat"
+            ],
+            [
+              "LLM A2 v2 (full-text)",
+              "Ollama llama3.1:8b, full text prompt",
+              "834 tok/cert, 36.5% tingkat"
+            ],
+            [
+              "LLM v3 Variant A",
+              "Context-only prompt, no raw text",
+              "410 tok/cert, 24.3% tingkat"
+            ],
+            [
+              "LLM v3 Variant B",
+              "Context + minimize_text() relevant lines",
+              "479 tok/cert, 39.2% tingkat"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "7. Results Summary"
+      },
+      {
+        "t": "p",
+        "x": "Latest benchmark results on 74 certificates (llama3.1:8b for LLM variants):"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Method",
+            "Tokens/cert",
+            "Tingkat",
+            "MACRO exact",
+            "Acc/token",
+            "Latency"
+          ],
+          "r": [
+            [
+              "Regex Baseline",
+              "0",
+              "0%",
+              "38.8%",
+              "—",
+              "~0.1s"
+            ],
+            [
+              "NER v1",
+              "0",
+              "0%",
+              "18.4%",
+              "—",
+              "~0.07s"
+            ],
+            [
+              "Hybrid+PP",
+              "0",
+              "0%",
+              "46.4%",
+              "—",
+              "~0.6s"
+            ],
+            [
+              "LLM A1",
+              "834",
+              "47.3%",
+              "49.0%",
+              "0.057",
+              "~2s"
+            ],
+            [
+              "LLM A2 v2",
+              "834",
+              "36.5%",
+              "58.3%",
+              "0.044",
+              "~2.5s"
+            ],
+            [
+              "LLM v3-A",
+              "410",
+              "24.3%",
+              "43.5%",
+              "0.059",
+              "~1s"
+            ],
+            [
+              "LLM v3-B",
+              "479",
+              "39.2%",
+              "46.4%",
+              "0.082",
+              "~1s"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h1",
+        "x": "8. Error Analysis"
+      },
+      {
+        "t": "h2",
+        "x": "8.1 Error Types"
+      },
+      {
+        "t": "p",
+        "x": "The mismatches.csv output categorizes errors into two types:"
+      },
+      {
+        "t": "p",
+        "x": "null — Extractor returned no value"
+      },
+      {
+        "t": "p",
+        "x": "The field was not extracted at all. Common causes: regex pattern did not match, NER entity not recognized, LLM returned TIDAK_DITEMUKAN or an invalid response."
+      },
+      {
+        "t": "p",
+        "x": "mismatch — Extractor returned wrong value"
+      },
+      {
+        "t": "p",
+        "x": "A value was extracted but does not match ground truth. Common causes: OCR errors propagated through extraction, incorrect field boundary detection, organizer name abbreviated differently than GT, date format mismatch."
+      },
+      {
+        "t": "h2",
+        "x": "8.2 Common Error Patterns"
+      },
+      {
+        "t": "p",
+        "x": "penyelenggara_kegiatan: Most common errors — organizer names vary significantly between extraction and GT (e.g., BEM FEB vs. full name)."
+      },
+      {
+        "t": "p",
+        "x": "nama_kegiatan_sertifikasi: Event names with parenthetical descriptions or subtitles often mismatch."
+      },
+      {
+        "t": "p",
+        "x": "tingkat: 25 of 74 certificates are Nasional level with no explicit signal in the text (requires external knowledge)."
+      },
+      {
+        "t": "p",
+        "x": "nomor_bukti_fisik: OCR errors in certificate numbers (e.g., 0 vs O, 1 vs I) cause mismatches."
+      },
+      {
+        "t": "p",
+        "x": "waktu_mulai/selesai: Date format variations (e.g., 29/09/2024 vs 29 September 2024) are mostly handled by normalize_date, but edge cases remain."
+      },
+      {
+        "t": "h1",
+        "x": "9. Limitations and Caveats"
+      },
+      {
+        "t": "p",
+        "x": "The micro-average labeled 'macro_avg' in code is not a true macro-average. See Section 4.2."
+      },
+      {
+        "t": "p",
+        "x": "Tingkat evaluation is limited: 25 of 74 certificates have no text signal for Nasional level, capping maximum achievable accuracy."
+      },
+      {
+        "t": "p",
+        "x": "Abbreviation matching is heuristic-based and can produce false positives on short strings (< 2 words)."
+      },
+      {
+        "t": "p",
+        "x": "Confidence scores are method-dependent and not comparable across extractors."
+      },
+      {
+        "t": "p",
+        "x": "The 74-certificate dataset is small and skewed toward specific certificate types (UNAIR events). Results may not generalize."
+      },
+      {
+        "t": "p",
+        "x": "WER/CER are computed on normalized text, which may not reflect the true edit distance of the original strings."
+      },
+      {
+        "t": "p",
+        "x": "LLM evaluation uses temperature=0 for determinism, but Ollama's quantized model may produce different results across runs."
+      },
+      {
+        "t": "h1",
+        "x": "10. Handoff v7/v8 Evaluation Addendum"
+      },
+      {
+        "t": "h2",
+        "x": "10.1 Ground Truth Versioning"
+      },
+      {
+        "t": "p",
+        "x": "Starting from v8, evaluation runs state which ground truth they used. Ground_Truth_Sertifikat.csv is the raw historical CSV (unchanged). Ground_Truth_Sertifikat_v8.csv applies 3 audited tingkat corrections: 1966887 Lainnya->Nasional, 1981676 Fakultas->Nasional, 2954283 Fakultas->Internasional. 2030372 stays Nasional (consistent with the identical-template 1981676)."
+      },
+      {
+        "t": "p",
+        "x": "Metrics are reported three ways: (a) raw-GT accuracy, (b) fixed-GT accuracy, (c) ceiling-adjusted accuracy with the disputed certificates excluded, so label noise is separated from method quality."
+      },
+      {
+        "t": "h2",
+        "x": "10.2 Tingkat Scale-Evidence Check"
+      },
+      {
+        "t": "p",
+        "x": "verify_ground_truth.py now scans the raw text for scale evidence (TINGKAT NASIONAL, LOMBA, INTERNASIONAL, INTERNATIONAL, foreign-institution hints) and flags ground-truth labels that contradict the text. Pre-v8 this check did not exist, which is why label noise survived."
+      },
+      {
+        "t": "h2",
+        "x": "10.3 Router Precision and Call Reduction"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "v7 (P4)",
+            "v8"
+          ],
+          "r": [
+            [
+              "Router decisions",
+              "35/74",
+              "39/74"
+            ],
+            [
+              "Router precision",
+              "100%",
+              "100%"
+            ],
+            [
+              "LLM calls / 74",
+              "39",
+              "35"
+            ],
+            [
+              "Call reduction vs no-router",
+              "47%",
+              "53%"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "v8 adds contains-based BEM/HIMA matching for OCR-merged tokens and the explicit TINGKAT NASIONAL rule. Precision stays at 100% on the fixed ground truth."
+      },
+      {
+        "t": "h2",
+        "x": "10.4 Token Accounting"
+      },
+      {
+        "t": "p",
+        "x": "Effective tokens per document = total tokens (prompt + completion) across all LLM calls, amortized over all 74 certificates. Certificates routed by rules contribute 0 tokens. This is reported per variant in token_usage_*.json. v8 final: f_bias = 214 eff tokens/cert (21.4M tokens per 100K requests), slightly above the 200 gate; per the handoff rule, the accuracy floor is preserved first."
+      },
+      {
+        "t": "h2",
+        "x": "10.5 Layout Representation Evaluation"
+      },
+      {
+        "t": "p",
+        "x": "Markdown (## title) and annotated ([TITLE]/[BODY]/[SMALL]) representations built from PyMuPDF page.get_text('dict') were compared against the plain-text baseline at matched token budgets. Only 25/74 certificates contain embedded text; the rest are scanned and fall back to OCR text. Both layout variants underperformed the plain baseline (77.0% / 78.4% vs 82.4% tingkat), so layout is rejected. Input quality is bound by OCR, not layout, on this dataset."
+      },
+      {
+        "t": "h2",
+        "x": "10.6 Final v8 Ship Gate"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "Target",
+            "Actual",
+            "Status"
+          ],
+          "r": [
+            [
+              "Tingkat exact",
+              ">= 45%",
+              "82.4%",
+              "PASS"
+            ],
+            [
+              "MACRO exact",
+              ">= 50%",
+              "55.2%",
+              "PASS"
+            ],
+            [
+              "Eff. tokens/doc",
+              "<= 200",
+              "214",
+              "MARGINAL"
+            ],
+            [
+              "100K-request tokens",
+              "<= 20M",
+              "21.4M",
+              "MARGINAL"
+            ],
+            [
+              "LLM call reduction",
+              ">= 40%",
+              "53%",
+              "PASS"
+            ],
+            [
+              "Rule precision",
+              ">= 95%",
+              "100%",
+              "PASS"
+            ],
+            [
+              "Date / number regression",
+              "none",
+              "none",
+              "PASS"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not held-out; Ollama quantization adds run-to-run variance of about +/-1-2pp; the macro_avg label is a micro-average (see Section 4.2)."
+      },
+      {
+        "t": "h2",
+        "x": "10.7 Results Summary (experiments)"
+      },
+      {
+        "t": "auto",
+        "x": "results"
+      }
+    ],
+    "phase_v4_methodology": [
+      {
+        "t": "h1",
+        "x": "Phase v4 Methodology"
+      },
+      {
+        "t": "p",
+        "x": "> **Experiment:** Comparing LLM extraction methods for certificate autofill"
+      },
+      {
+        "t": "p",
+        "x": "> **Model:** llama3.1:8b (Q4_K_M, ~6GB VRAM, RTX 5050)"
+      },
+      {
+        "t": "p",
+        "x": "> **Dataset:** 74 certificates from Universitas Airlangga"
+      },
+      {
+        "t": "p",
+        "x": "> **Date:** July 30, 2026"
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "1. Experiment Overview"
+      },
+      {
+        "t": "p",
+        "x": "Goal: find the most token-efficient method for extracting structured fields from Indonesian certificate PDFs. Two LLM-based approaches were tested against a baseline (Hybrid+PP at 38.8% MACRO)."
+      },
+      {
+        "t": "p",
+        "x": "**Winner: Approach 2 v2 (full-text extraction)** — 58.3% MACRO exact at 61,706 tokens (1,058 tokens per % MACRO point)."
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "2. Baseline (Hybrid+Post-Processing)"
+      },
+      {
+        "t": "p",
+        "x": "Before adding LLM, the pipeline uses:"
+      },
+      {
+        "t": "p",
+        "x": "1. **PyMuPDF** — fast text extraction from PDF"
+      },
+      {
+        "t": "p",
+        "x": "2. **Docling/RapidOCR** — fallback when text is empty"
+      },
+      {
+        "t": "p",
+        "x": "3. **OCR date check** — force OCR if date fields missing"
+      },
+      {
+        "t": "p",
+        "x": "4. **NER (IndoBERT)** — pre-trained entity recognition"
+      },
+      {
+        "t": "p",
+        "x": "5. **Regex** — pattern matching for dates, orgs, roles"
+      },
+      {
+        "t": "p",
+        "x": "6. **Post-processing** — entity scoring, NOR fallback, signer filtering"
+      },
+      {
+        "t": "p",
+        "x": "Baseline MACRO: 38.8% exact (including tingkat at 0%)."
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "3. Approach 1 — Per-Field LLM"
+      },
+      {
+        "t": "p",
+        "x": "**Architecture:**"
+      },
+      {
+        "t": "p",
+        "x": "PDF → NER+regex → known_fields → check empty/low-confidence\n                                     ↓\n             ┌─────────────────────────────────────┐\n             │ For each empty/low-conf field:       │\n             │   1. Build single-field prompt       │\n             │   2. Call Ollama (1 field per call)  │\n             │   3. Validate response               │\n             │   4. Log token usage                 │\n             └─────────────────────────────────────┘"
+      },
+      {
+        "t": "p",
+        "x": "**Calls:** 125 total (74 tingkat + 34 nomor + 16 nama_kegiatan + 1 penyelenggara)"
+      },
+      {
+        "t": "p",
+        "x": "**Tokens:** 61,679 (60,851 prompt + 828 completion)"
+      },
+      {
+        "t": "p",
+        "x": "**Prompt template (tingkat):**"
+      },
+      {
+        "t": "p",
+        "x": "Tentukan TINGKAT KEGIATAN dari sertifikat berikut.\n\nATURAN WAJIB:\n- Jawaban HARUS persis salah satu dari opsi di bawah\n- JANGAN jawab selain opsi ini\n\nPETUNJUK TINGKAT:\n- Jika diselenggarakan oleh BEM/Badan Eksekutif Mahasiswa tingkat FAKULTAS (BEM FEB, BEM FKM, BEM FTMM), maka == Fakultas\n- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa (HIMATESDA, HIMANO), maka == Departemen/Program Studi\n- Jika diselenggarakan oleh BEM Universitas, Rektorat, Direktorat Kemahasiswaan, maka == Universitas\n- Jika kegiatan berskala nasional (lomba nasional, webinar nasional), maka == Nasional\n- Jika kegiatan berskala internasional (konferensi internasional), maka == Internasional\n- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat\n\nOpsi yang diizinkan: [Internasional, Nasional, Universitas, Fakultas, Departemen/Program Studi, Lainnya]\n\nField yang sudah diketahui: [nama_kegiatan, penyelenggara, peran]\nTeks sertifikat: {raw_text}\nJawaban (hanya satu opsi dari daftar, tanpa penjelasan):"
+      },
+      {
+        "t": "p",
+        "x": "**Result:** MACRO 49.0% (+10.2pp over baseline)"
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "4. Approach 2 v2 — Full-Text LLM (Winner)"
+      },
+      {
+        "t": "p",
+        "x": "**Architecture:**"
+      },
+      {
+        "t": "p",
+        "x": "PDF → raw_text\n     ↓\nOne prompt per cert (all 6 fields)\n     ↓\nLLM → \"tingkat: value\\nnama_kegiatan: value\\n...\"\n     ↓\nParse: strip numbered prefix → alias lookup → validate each field\n     ↓\nPost-process: if waktu_selesai missing, copy from waktu_mulai"
+      },
+      {
+        "t": "p",
+        "x": "**Calls:** 74 (1 per cert)"
+      },
+      {
+        "t": "p",
+        "x": "**Tokens:** 61,706 (53,788 prompt + 7,918 completion)"
+      },
+      {
+        "t": "p",
+        "x": "**Prompt template (full-text):**"
+      },
+      {
+        "t": "p",
+        "x": "Dari sertifikat berikut, ekstrak semua field yang diperlukan.\n\nATURAN WAJIB:\n- Jawaban HANYA format \"field: nilai\" (satu field per baris)\n- Setiap field harus dijawab\n- Jika tidak ditemukan: field: TIDAK_DITEMUKAN\n- Jika hanya SATU tanggal, gunakan untuk waktu_mulai DAN waktu_selesai\n- Format tanggal: DD/MM/YYYY\n\nPETUNJUK TINGKAT:\n- Jika diselenggarakan oleh BEM/BEM tingkat FAKULTAS → Fakultas\n- Jika diselenggarakan oleh HIMA/Himpunan Mahasiswa → Departemen/Program Studi\n- Jika diselenggarakan oleh BEM Universitas/Rektorat → Universitas\n- Kegiatan nasional → Nasional, kegiatan internasional → Internasional\n- 'UNIVERSITAS AIRLANGGA' adalah institusi induk, BUKAN penentu tingkat\n\nField yang perlu diekstrak:\n1. tingkat: [opsi: Internasional, Nasional, Universitas, Fakultas, Departemen/Program Studi, Lainnya]\n2. nama_kegiatan: (nama acara, maks 100 karakter)\n3. penyelenggara: (organisasi/panitia penyelenggara, maks 100 karakter)\n4. waktu_mulai: (DD/MM/YYYY)\n5. waktu_selesai: (DD/MM/YYYY)\n6. nomor_bukti: (nomor sertifikat)\n\nTeks sertifikat: {raw_text}\nJawaban:"
+      },
+      {
+        "t": "p",
+        "x": "**Parser design:**"
+      },
+      {
+        "t": "b",
+        "x": [
+          "Key:Value split on first colon",
+          "Strip numbered prefixes: `re.sub(r'^\\d+[\\.\\)]?\\s*', '', key)`",
+          "Alias lookup: flexible matching for 20+ variations (\"nama kegiatan\", \"activity name\", \"organizer\", etc.)",
+          "Date validation: DD/MM/YYYY or DD-MM-YYYY → normalized",
+          "Nomor: compact remove whitespace"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "**Post-processing:**"
+      },
+      {
+        "t": "p",
+        "x": "if \"waktu_selesai\" not in validated and \"waktu_mulai\" in validated:\n    validated[\"waktu_selesai\"] = validated[\"waktu_mulai\"]"
+      },
+      {
+        "t": "p",
+        "x": "**Result:** MACRO 58.3% (+19.5pp over baseline)"
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "5. Comparison by Field"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Field",
+            "Baseline",
+            "A1 (per-field)",
+            "A2 v2 (full-text)",
+            "Why A2 v2 wins"
+          ],
+          "r": [
+            [
+              "nama_kegiatan",
+              "24.3%",
+              "25.7%",
+              "**43.2%**",
+              "Full context helps LLM pick the right event name"
+            ],
+            [
+              "penyelenggara",
+              "13.5%",
+              "13.5%",
+              "**31.1%**",
+              "LLM sees org names scattered in text; regex misses most"
+            ],
+            [
+              "waktu_mulai",
+              "81.8%",
+              "81.8%",
+              "**94.5%**",
+              "LLM handles garbled date strings like \"24September2023\""
+            ],
+            [
+              "waktu_selesai",
+              "81.8%",
+              "81.8%",
+              "**94.5%**",
+              "Post-process: copy from mulai when only one date found"
+            ],
+            [
+              "nomor",
+              "59.6%",
+              "65.4%",
+              "**73.1%**",
+              "LLM finds cert numbers in garbled text"
+            ],
+            [
+              "tingkat",
+              "0%",
+              "**47.3%**",
+              "36.5%",
+              "A1 has dedicated prompt with heuristics; A2 has them too but less effective"
+            ],
+            [
+              "**MACRO**",
+              "**38.8%**",
+              "**49.0%**",
+              "**58.3%**",
+              ""
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "6. Token Efficiency"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "A1 (per-field)",
+            "A2 v2 (full-text)",
+            "Savings"
+          ],
+          "r": [
+            [
+              "Tokens per % MACRO",
+              "1,259",
+              "**1,058**",
+              "-16%"
+            ],
+            [
+              "Prompt tokens",
+              "60,851",
+              "**53,788**",
+              "-12%"
+            ],
+            [
+              "Total calls",
+              "125",
+              "**74**",
+              "-41%"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "A2 v2 is more token-efficient because the raw text (largest token cost) is sent once instead of 1-5 times."
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "7. Gotchas & Lessons Learned"
+      },
+      {
+        "t": "h3",
+        "x": "Ollama & Model"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "#",
+            "Gotcha",
+            "Detail"
+          ],
+          "r": [
+            [
+              "1",
+              "**Model naming**",
+              "`llama3.2:8b` does NOT exist. Llama 3.2 has 1B/3B/11B only. Use `llama3.1:8b` for 8B. `llama3.2:latest` is the 3B model."
+            ],
+            [
+              "2",
+              "**Server startup**",
+              "Ollama server dies when bash session ends. Use `nohup ollama serve > /tmp/ollama.log 2>&1 &`"
+            ],
+            [
+              "3",
+              "**num_predict limit**",
+              "Default 30 truncates full-text output. Full-text needs `max_tokens=200`."
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h3",
+        "x": "Evaluation"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "#",
+            "Gotcha",
+            "Detail"
+          ],
+          "r": [
+            [
+              "4",
+              "**EVAL_FIELDS patching**",
+              "`evaluate_row()` uses module-level `EVAL_FIELDS`. Must patch `ev_fw.EVAL_FIELDS[:]` in-place to add fields."
+            ],
+            [
+              "5",
+              "**benchmark_runs/ gitignore**",
+              "Results are local-only. Reproduce with `uv run python -m tests.benchmark_llm_v2`."
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h3",
+        "x": "Prompt Engineering"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "#",
+            "Gotcha",
+            "Detail"
+          ],
+          "r": [
+            [
+              "6",
+              "**Tingkat heuristics**",
+              "Without explicit rules (BEM→Fakultas, HIMA→Prodi), LLM defaults to \"Universitas\" because \"UNIVERSITAS AIRLANGGA\" is prominent in text."
+            ],
+            [
+              "7",
+              "**Same-date post-processing**",
+              "Copy waktu_mulai→waktu_selesai if selesai missing. Fixes 49% of errors at 0 token cost."
+            ],
+            [
+              "8",
+              "**Numbered output**",
+              "LLM outputs `1. tingkat: value`. Parser must strip `^\\d+[\\.\\)]?\\s*` from key."
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h3",
+        "x": "Data"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "#",
+            "Gotcha",
+            "Detail"
+          ],
+          "r": [
+            [
+              "9",
+              "**FORM_OPTIONS tingkat**",
+              "Use \"Lainnya\" not \"UKM\". Verified against production form dropdown."
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "8. Files"
+      },
+      {
+        "t": "h3",
+        "x": "New files created in Phase v4"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "File",
+            "Purpose"
+          ],
+          "r": [
+            [
+              "`tests/llm_extractor.py`",
+              "Ollama client, prompt builders, validators, token logger (approach 1)"
+            ],
+            [
+              "`tests/benchmark_llm.py`",
+              "Benchmark runner for approach 1 (per-field LLM)"
+            ],
+            [
+              "`tests/llm_extractor_v2.py`",
+              "Full-text prompt, multi-field parser, post-processing (approach 2)"
+            ],
+            [
+              "`tests/benchmark_llm_v2.py`",
+              "Benchmark runner for approach 2 (full-text LLM)"
+            ],
+            [
+              "`phase_v4_results_summary.xlsx`",
+              "Visual results with 4 sheets"
+            ],
+            [
+              "`phase_v4_results_summary.md`",
+              "Results in markdown"
+            ],
+            [
+              "`phase_v4_methodology.md`",
+              "This document"
+            ],
+            [
+              "`phase_v4_methodology.docx`",
+              "Methodology in DOCX format"
+            ],
+            [
+              "`benchmark_methods.{docx,md}`",
+              "Per-method extraction descriptions"
+            ],
+            [
+              "`evaluation_methodology.{docx,md}`",
+              "Metrics, formulas, and evaluation caveats"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h3",
+        "x": "Modified files"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "File",
+            "Change"
+          ],
+          "r": [
+            [
+              "`backend/app/master_data.py`",
+              "FORM_OPTIONS[\"tingkat\"]: \"UKM\" → \"Lainnya\""
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "9. Next Steps"
+      },
+      {
+        "t": "b",
+        "x": [
+          "**Integrate A2 v2 into `extraction_pipeline.py`** for production use",
+          "**Try Qwen 2.5 7B** — possibly better at structured output, might improve tingkat",
+          "**Try PaddleOCR** — better text extraction could improve all methods",
+          "**Fine-tune NER with 200+ labeled certs** — if Label Studio data becomes available"
+        ]
+      },
+      {
+        "t": "p",
+        "x": "---"
+      },
+      {
+        "t": "h2",
+        "x": "10. Reproducing Results"
+      },
+      {
+        "t": "p",
+        "x": "# Start Ollama\nnohup ollama serve > /tmp/ollama.log 2>&1 &\n\n# Approach 1 (per-field LLM)\nuv run python -m tests.benchmark_llm\n\n# Approach 2 v2 (full-text LLM) — winner\nuv run python -m tests.benchmark_llm_v2"
+      },
+      {
+        "t": "h1",
+        "x": "11. Handoff v7 Addendum - Cost-Aware Hybrid Extraction"
+      },
+      {
+        "t": "p",
+        "x": "v7 replaced full-text LLM extraction with a cost-aware hybrid that routes high-confidence certificates through a rule-based tingkat router (0 tokens) and calls the LLM only for the remaining certificates. Variant e_hybrid (full prompt for risky categories, compact elsewhere) won at 77.0% tingkat exact, 54.2% MACRO, 202.2 eff tokens/cert, 39 LLM calls. Router precision: 35/35 (100%)."
+      },
+      {
+        "t": "h1",
+        "x": "12. Handoff v8 Addendum - GT Audit, Router Fix, LLM Bias, Layout"
+      },
+      {
+        "t": "p",
+        "x": "v8 executed in order: GT audit, router contains-match fix, prompt bias variants, and layout experiments. Ground truth received 3 audited tingkat corrections. The router gained contains-based BEM/HIMA matching and the TINGKAT NASIONAL rule (39/74 decisions, 100% precision, -53% calls). Variant f_bias (English != International bias) is the winner at 82.4% tingkat exact, 55.2% MACRO, 214 eff tokens/cert. g_evidence and layout representations regressed and were rejected. The winner was integrated into production behind ENABLE_LLM_TINGKAT."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "v7 P4 e_hybrid",
+            "v8 f_bias"
+          ],
+          "r": [
+            [
+              "Tingkat exact",
+              "77.0%",
+              "82.4%"
+            ],
+            [
+              "MACRO exact",
+              "54.2%",
+              "55.2%"
+            ],
+            [
+              "Eff. tokens/cert",
+              "202",
+              "214"
+            ],
+            [
+              "LLM calls / 74",
+              "39",
+              "35"
+            ],
+            [
+              "GT",
+              "raw",
+              "fixed_v8"
+            ]
+          ]
+        }
+      }
+    ],
+    "phase_v4_results_summary": [
+      {
+        "t": "h1",
+        "x": "Phase v4 Results Summary"
+      },
+      {
+        "t": "h2",
+        "x": "Method Comparison (Exact Accuracy)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Field",
+            "Regex",
+            "NER v1",
+            "Hybrid",
+            "Hybrid+PP",
+            "A1 (per-field)",
+            "A2 v2 (full-text)",
+            "Best"
+          ],
+          "r": [
+            [
+              "nama_kegiatan",
+              "6.9%",
+              "16.4%",
+              "24.3%",
+              "24.3%",
+              "25.7%",
+              "**43.2%**",
+              "A2 v2"
+            ],
+            [
+              "penyelenggara",
+              "6.9%",
+              "11.0%",
+              "12.2%",
+              "13.5%",
+              "13.5%",
+              "**31.1%**",
+              "A2 v2"
+            ],
+            [
+              "waktu_mulai",
+              "81.8%",
+              "27.3%",
+              "81.8%",
+              "81.8%",
+              "81.8%",
+              "**94.5%**",
+              "A2 v2"
+            ],
+            [
+              "waktu_selesai",
+              "81.8%",
+              "7.3%",
+              "81.8%",
+              "81.8%",
+              "81.8%",
+              "**94.5%**",
+              "A2 v2"
+            ],
+            [
+              "nomor",
+              "58.0%",
+              "0.0%",
+              "59.6%",
+              "59.6%",
+              "65.4%",
+              "**73.1%**",
+              "A2 v2"
+            ],
+            [
+              "tingkat",
+              "—",
+              "—",
+              "—",
+              "—",
+              "**47.3%**",
+              "36.5%",
+              "A1"
+            ],
+            [
+              "**MACRO**",
+              "42.2%",
+              "12.8%",
+              "47.7%",
+              "48.1%",
+              "49.0%",
+              "**58.3%**",
+              "A2 v2"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Method Comparison (Fuzzy Accuracy)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Field",
+            "Regex",
+            "NER v1",
+            "Hybrid",
+            "Hybrid+PP",
+            "A1 (per-field)",
+            "A2 v2 (full-text)"
+          ],
+          "r": [
+            [
+              "nama_kegiatan",
+              "19.2%",
+              "43.8%",
+              "63.5%",
+              "63.5%",
+              "70.3%",
+              "**85.1%**"
+            ],
+            [
+              "penyelenggara",
+              "41.1%",
+              "50.7%",
+              "47.3%",
+              "50.0%",
+              "50.0%",
+              "**73.0%**"
+            ],
+            [
+              "waktu_mulai",
+              "81.8%",
+              "27.3%",
+              "81.8%",
+              "81.8%",
+              "81.8%",
+              "**94.5%**"
+            ],
+            [
+              "waktu_selesai",
+              "81.8%",
+              "7.3%",
+              "81.8%",
+              "81.8%",
+              "81.8%",
+              "**94.5%**"
+            ],
+            [
+              "nomor",
+              "58.0%",
+              "0.0%",
+              "59.6%",
+              "59.6%",
+              "65.4%",
+              "**73.1%**"
+            ],
+            [
+              "tingkat",
+              "—",
+              "—",
+              "—",
+              "—",
+              "47.3%",
+              "36.5%"
+            ],
+            [
+              "**MACRO**",
+              "53.3%",
+              "28.8%",
+              "65.5%",
+              "66.1%",
+              "64.6%",
+              "**74.5%**"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Token Efficiency"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "A1 (per-field)",
+            "A2 v2 (full-text)",
+            "Winner"
+          ],
+          "r": [
+            [
+              "MACRO exact",
+              "49.0%",
+              "**58.3%**",
+              "A2 v2"
+            ],
+            [
+              "Total tokens",
+              "61,679",
+              "61,706",
+              "~tied"
+            ],
+            [
+              "Tokens per % MACRO",
+              "1,259",
+              "**1,058**",
+              "A2 v2"
+            ],
+            [
+              "LLM calls",
+              "125",
+              "**74**",
+              "A2 v2"
+            ],
+            [
+              "Prompt tokens",
+              "60,851",
+              "**53,788**",
+              "A2 v2"
+            ],
+            [
+              "Completion tokens",
+              "**828**",
+              "7,918",
+              "A1"
+            ],
+            [
+              "Avg latency/cert",
+              "**503ms**",
+              "2,573ms",
+              "A1"
+            ],
+            [
+              "Avg tok/s",
+              "**63.0**",
+              "54.9",
+              "A1"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Progression"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Phase",
+            "Date",
+            "Method",
+            "MACRO",
+            "Delta",
+            "Cumulative"
+          ],
+          "r": [
+            [
+              "v2",
+              "Jul 28",
+              "Regex baseline",
+              "42.2%",
+              "—",
+              "42.2%"
+            ],
+            [
+              "v2",
+              "Jul 28",
+              "NER v1 (pre-trained)",
+              "12.8%",
+              "-29.4pp",
+              "12.8%"
+            ],
+            [
+              "v2",
+              "Jul 30",
+              "Hybrid (NER+regex)",
+              "47.7%",
+              "+5.5pp",
+              "47.7%"
+            ],
+            [
+              "v3",
+              "Jul 30",
+              "Hybrid+PP",
+              "48.1%",
+              "+0.4pp",
+              "48.1%"
+            ],
+            [
+              "v4 A1",
+              "Jul 30",
+              "Per-field LLM",
+              "49.0%",
+              "+0.9pp",
+              "49.0%"
+            ],
+            [
+              "v4 A2",
+              "Jul 30",
+              "Full-text LLM (v1)",
+              "47.7%",
+              "—",
+              "47.7%"
+            ],
+            [
+              "**v4 A2v2**",
+              "**Jul 30**",
+              "**Full-text LLM (v2)**",
+              "**58.3%**",
+              "**+10.2pp**",
+              "**58.3%**"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Per-File Results"
+      },
+      {
+        "t": "p",
+        "x": "See `phase_v4_results_summary.xlsx` → Sheet \"Per-File Results\" for per-certificate comparison across A1 and A2 v2 methods. Each cert has two rows (A2 v2 top, A1 bottom)."
+      },
+      {
+        "t": "h2",
+        "x": "Key Takeaways"
+      },
+      {
+        "t": "p",
+        "x": "1. **Winner: A2 v2 (full-text)** — 58.3% MACRO exact, 61,706 tokens."
+      },
+      {
+        "t": "p",
+        "x": "2. **Token efficiency** — 1,058 tokens per % MACRO (vs 1,259 for A1). Same token budget, +9.3pp accuracy."
+      },
+      {
+        "t": "p",
+        "x": "3. **Biggest improvements** — waktu_mulai 81.8%→94.5%, waktu_selesai 81.8%→94.5%, nomor 59.6%→73.1%."
+      },
+      {
+        "t": "p",
+        "x": "4. **Approach 1 still better at tingkat** — per-field prompt with heuristics (47.3% vs 36.5%)."
+      },
+      {
+        "t": "p",
+        "x": "5. **Full context helps** — LLM extracts nama_kegiatan (43.2%) and penyelenggara (31.1%) much better when it sees the whole text."
+      },
+      {
+        "t": "h1",
+        "x": "Handoff v7 Results - Cost-Aware Hybrid (Tingkat-Only)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Variant",
+            "Tingkat exact",
+            "MACRO exact",
+            "Eff. tok/cert",
+            "LLM calls"
+          ],
+          "r": [
+            [
+              "Hybrid+PP (no LLM)",
+              "0%",
+              "39.3%",
+              "0",
+              "0"
+            ],
+            [
+              "b_minimized",
+              "74.3%",
+              "53.6%",
+              "249",
+              "39"
+            ],
+            [
+              "c_adaptive",
+              "68.9%",
+              "52.6%",
+              "167",
+              "39"
+            ],
+            [
+              "d_mid",
+              "71.6%",
+              "53.1%",
+              "191",
+              "39"
+            ],
+            [
+              "e_hybrid",
+              "77.0%",
+              "54.2%",
+              "202",
+              "39"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "Router: 35/74 decisions at 100% precision. Baseline run: tests/benchmark_runs/run_llm_v4_20260803_113310/ (GT raw)."
+      },
+      {
+        "t": "h1",
+        "x": "Handoff v8 Results - Router Fix + LLM Bias + Layout"
+      },
+      {
+        "t": "p",
+        "x": "Fixed GT: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat corrections). Best run: tests/benchmark_runs/run_llm_v4_20260804_095412/."
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Variant",
+            "Tingkat exact",
+            "MACRO exact",
+            "Eff. tok/cert",
+            "LLM calls"
+          ],
+          "r": [
+            [
+              "a_context",
+              "71.6%",
+              "53.1%",
+              "196",
+              "35"
+            ],
+            [
+              "b_minimized",
+              "78.4%",
+              "54.4%",
+              "221",
+              "35"
+            ],
+            [
+              "c_adaptive",
+              "71.6%",
+              "53.1%",
+              "149",
+              "35"
+            ],
+            [
+              "d_mid",
+              "75.7%",
+              "53.9%",
+              "169",
+              "35"
+            ],
+            [
+              "e_hybrid",
+              "79.7%",
+              "54.7%",
+              "182",
+              "35"
+            ],
+            [
+              "f_bias (winner)",
+              "82.4%",
+              "55.2%",
+              "214",
+              "35"
+            ],
+            [
+              "g_evidence",
+              "75.7%",
+              "53.9%",
+              "194",
+              "35"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Layout experiments (f_bias prompt)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Input",
+            "Tingkat exact",
+            "MACRO exact"
+          ],
+          "r": [
+            [
+              "plain text (baseline)",
+              "82.4%",
+              "55.2%"
+            ],
+            [
+              "layout markdown",
+              "77.0%",
+              "50.8%"
+            ],
+            [
+              "layout annotated",
+              "78.4%",
+              "51.3%"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "Layout rejected - only 25/74 PDFs have embedded text; markers disturb the deterministic extractors."
+      },
+      {
+        "t": "h2",
+        "x": "GT audit effect (e_hybrid, router on)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "GT",
+            "Tingkat exact",
+            "MACRO exact",
+            "Ceiling-adjusted"
+          ],
+          "r": [
+            [
+              "raw",
+              "57/74 (77.0%)",
+              "54.2%",
+              "56/71 (78.9%)"
+            ],
+            [
+              "fixed_v8",
+              "57/74 (77.0%)",
+              "54.2%",
+              "56/71 (78.9%)"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wrong->correct; the label corrections make the evaluation honest, not higher."
+      },
+      {
+        "t": "h2",
+        "x": "Ship gate check"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "Target",
+            "Actual",
+            "Status"
+          ],
+          "r": [
+            [
+              "Tingkat exact",
+              ">= 45%",
+              "82.4%",
+              "PASS"
+            ],
+            [
+              "MACRO exact",
+              ">= 50%",
+              "55.2%",
+              "PASS"
+            ],
+            [
+              "Eff. tokens/doc",
+              "<= 200",
+              "214",
+              "MARGINAL"
+            ],
+            [
+              "100K-request tokens",
+              "<= 20M",
+              "21.4M",
+              "MARGINAL"
+            ],
+            [
+              "LLM call reduction",
+              ">= 40%",
+              "53%",
+              "PASS"
+            ],
+            [
+              "Rule precision",
+              ">= 95%",
+              "100%",
+              "PASS"
+            ],
+            [
+              "Date / number regression",
+              "none",
+              "none",
+              "PASS"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Progression (tingkat exact, router on)"
+      },
+      {
+        "t": "auto",
+        "x": "progression"
+      }
+    ]
+  }
+}
