@@ -5,7 +5,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-CSV_PATH = os.path.join(os.path.dirname(__file__), "..", "Ground_Truth_Sertifikat.csv")
+CSV_PATH = os.environ.get(
+    "GT_CSV_PATH", os.path.join(os.path.dirname(__file__), "..", "Ground_Truth_Sertifikat.csv")
+)
 TEXTS_DIR = os.path.join(
     os.path.dirname(__file__), "benchmark_runs", "run_20260728_131835", "extracted_texts",
 )
@@ -24,6 +26,7 @@ CSV_COLUMN_MAP = {
     "waktu_selesai_pelaksanaan": "Waktu Selesai Pelaksanaan",
     "penyelenggara_kegiatan": "Penyelenggara Kegiatan",
     "nomor_bukti_fisik_nomor_sertifikasi": "Nomor Bukti Fisik Nomor Sertifikasi",
+    "tingkat": "Tingkat",
 }
 
 CHECKLIST = [
@@ -159,6 +162,40 @@ def find_in_text(gt_value, text):
     return "NOT_FOUND", "GT value not found in extracted text (may be OCR quality, not GT error)"
 
 
+NATIONAL_EVIDENCE = ["NASIONAL", "NATIONAL", "LOMBA", "KOMPETISI", "COMPETITION", "OLIMPIADE"]
+INTERNATIONAL_EVIDENCE = ["INTERNASIONAL", "INTERNATIONAL", "INSTITUT FRANÇAIS", "INSTITUT FRANCAIS", "EMBASSY"]
+FOREIGN_ORG_HINTS = [
+    "AIESEC", "SACLAY", "INSTITUT FRANÇAIS", "INSTITUT FRANCAIS", "EMBASSY",
+    "PARIS", "INTERNATIONAL", "INTERNASIONAL",
+]
+
+
+def check_tingkat_evidence(gt_value, text):
+    """Tingkat scale-evidence check. Returns list of warning strings."""
+    if not gt_value or gt_value == "-":
+        return []
+    upper = (text or "").upper()
+    warnings = []
+    nat = any(k in upper for k in NATIONAL_EVIDENCE)
+    inter = any(k in upper for k in INTERNATIONAL_EVIDENCE)
+    foreign = any(k in upper for k in FOREIGN_ORG_HINTS)
+
+    if gt_value == "Nasional" and not nat:
+        warnings.append("GT=Nasional tapi tidak ada bukti skala nasional di teks (mungkin domain knowledge)")
+    if gt_value == "Internasional":
+        if not inter:
+            warnings.append("GT=Internasional tapi tidak ada bukti internasional di teks")
+        elif not foreign:
+            warnings.append("GT=Internasional tapi tidak ada organisasi/indikator asing eksplisit")
+    if gt_value != "Nasional" and "TINGKAT NASIONAL" in upper:
+        warnings.append("teks menyebut 'TINGKAT NASIONAL' tapi GT != Nasional")
+    if gt_value != "Internasional" and inter:
+        warnings.append("teks menyebut internasional tapi GT != Internasional")
+    if gt_value == "Internasional" and foreign:
+        pass  # evidence konsisten
+    return warnings
+
+
 def main():
     rows = list(csv.DictReader(open(CSV_PATH, newline="")))
     csv_lookup = {r.get("Nama File", ""): r for r in rows}
@@ -258,6 +295,25 @@ def main():
             cat23_interesting.append((fname, "partial", f"{found_count}/5 fields found in text"))
         else:
             cat23_interesting.append((fname, "likely bad GT", f"{found_count}/5 fields found in text"))
+
+    s.append("\n--- CATEGORY 4: Tingkat scale-evidence check ---")
+    s.append("Memindai teks untuk bukti skala (NASIONAL/INTERNASIONAL/TINGKAT NASIONAL/")
+    s.append("organisasi asing) lalu membandingkan dengan label GT.\n")
+
+    tingkat_warnings = 0
+    for fname, row in csv_lookup.items():
+        text = read_text(fname)
+        if text is None:
+            continue
+        gt_t = row.get("Tingkat", "").strip()
+        warnings = check_tingkat_evidence(gt_t, text)
+        if warnings:
+            tingkat_warnings += len(warnings)
+            s.append(f"  {fname} (GT={gt_t or '-'})")
+            for w in warnings:
+                s.append(f"    ⚠ {w}")
+    if tingkat_warnings == 0:
+        s.append("  Tidak ada kontradiksi tingkat yang terdeteksi.")
 
     s.append("\n--- SUMMARY ---")
     s.append(f"Cat 1 potential auto-fills: {len(cat1_fixes)}")
