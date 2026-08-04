@@ -63,6 +63,10 @@ def _downscale(png_bytes: bytes, max_side: int) -> bytes:
 
 def _child(args) -> int:
     """Jalankan OCR 1 cert di proses ini, lalu tulis JSON fase ke stdout."""
+    if args.gpu and args.mem_cap_gb < 40:
+        # RLIMIT_AS memblokir CUDA (WSL memetakan VRAM ke VA host). GPU butuh
+        # cap tinggi; containment tetap via fresh-process-per-cert di build.
+        args.mem_cap_gb = 40.0
     cap_bytes = int(args.mem_cap_gb * 1024 ** 3)
     resource.setrlimit(resource.RLIMIT_AS, (cap_bytes, cap_bytes))
     import faulthandler
@@ -80,6 +84,7 @@ def _child(args) -> int:
 
     oe.PADDLE_CPU_THREADS = args.threads
     oe.PADDLE_REC_BATCH = args.batch
+    oe.EASY_GPU = args.gpu
 
     report: dict = {
         "engine": args.engine,
@@ -183,6 +188,8 @@ def _parent(args) -> int:
     ]
     if args.full_text:
         child_args.append("--full-text")
+    if args.gpu:
+        child_args.append("--gpu")
     env = dict(os.environ)
     env[CHILD_ENV] = "1"
     cap_kb = int(args.mem_cap_gb * 1024 ** 2)
@@ -240,6 +247,7 @@ def main() -> None:
     p.add_argument("--batch", type=int, default=4)
     p.add_argument("--mem-cap-gb", type=float, default=2.5)
     p.add_argument("--full-text", action="store_true", help="sertakan teks OCR penuh di JSON (untuk benchmark_ocr per-cert)")
+    p.add_argument("--gpu", action="store_true", help="EasyOCR gpu=True (opsional, evaluasi bukti saja)")
     args = p.parse_args()
     if args.engine != "paddle" and args.threads == 4:
         args.threads = 1

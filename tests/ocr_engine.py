@@ -79,10 +79,11 @@ def _get_rapid():
 _paddle_engine = None
 _easy_engine = None
 
-# Knob global utk probe (tests/paddle_probe_safe.py): set SEBELUM pemakaian
-# paddle pertama. Bisa diganti antar versi paddleocr (2.x vs 3.x).
+# Knob global utk probe (tests/paddle_probe_safe.py): set SEBELUM pemakaian.
+# GPU opsional — user prioritas CPU; GPU hanya dievaluasi sebagai bukti.
 PADDLE_CPU_THREADS = 4
 PADDLE_REC_BATCH = 4
+EASY_GPU = False
 
 
 def _paddle_major_version() -> int:
@@ -206,7 +207,7 @@ def _get_easy():
     global _easy_engine
     if _easy_engine is None:
         import easyocr
-        _easy_engine = easyocr.Reader(["en"], gpu=False, verbose=False)
+        _easy_engine = easyocr.Reader(["en"], gpu=EASY_GPU, verbose=False)
     return _easy_engine
 
 
