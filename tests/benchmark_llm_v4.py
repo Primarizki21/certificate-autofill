@@ -69,7 +69,7 @@ TEXTS_DIR = os.environ.get(
     "GT_TEXTS_DIR",
     os.path.join(REPO_ROOT, "tests", "benchmark_runs", "run_20260728_131835", "extracted_texts"),
 )
-GT_VERSION = os.environ.get("GT_VERSION", "raw")
+GT_VERSION = os.environ.get("GT_VERSION") or os.path.basename(CSV_PATH).replace(".csv", "")
 BENCHMARK_PROMPT_VERSION = "v4_variants"
 
 # Variant yang menjadi sumber taxonomy mismatch (ditetapkan eksplisit,
