@@ -78,24 +78,50 @@ def _get_rapid():
 
 _paddle_engine = None
 
+# Knob global utk probe (tests/paddle_probe_safe.py): set SEBELUM pemakaian
+# paddle pertama. Bisa diganti antar versi paddleocr (2.x vs 3.x).
+PADDLE_CPU_THREADS = 4
+PADDLE_REC_BATCH = 4
+
+
+def _paddle_major_version() -> int:
+    from paddleocr import __version__
+    try:
+        return int(str(__version__).split(".")[0])
+    except Exception:
+        return 3
+
 
 def _get_paddle():
     global _paddle_engine
     if _paddle_engine is None:
         from paddleocr import PaddleOCR
-        # v3.x: default pipeline PP-OCRv6. `enable_mkldnn=False` karena oneDNN
-        # CPU crash di paddlepaddle 3.3 (ConvertPirAttribute2RuntimeAttribute
-        # NotImplementedError). cpu_threads diambil dari lingkungan.
-        _paddle_engine = PaddleOCR(
-            lang="en",
-            use_doc_orientation_classify=False,
-            use_doc_unwarping=False,
-            use_textline_orientation=True,
-            enable_mkldnn=False,
-            # CPU-only host 7GB: batasi thread + batch agar tidak OOM di WSL.
-            cpu_threads=4,
-            text_recognition_batch_size=4,
-        )
+        if _paddle_major_version() >= 3:
+            # v3.x: default pipeline PP-OCRv6. `enable_mkldnn=False` karena
+            # oneDNN CPU crash di paddlepaddle 3.3 (ConvertPirAttribute2Runtime
+            # Attribute NotImplemented). Thread/batch dibatasi utk WSL 7GB.
+            _paddle_engine = PaddleOCR(
+                lang="en",
+                use_doc_orientation_classify=False,
+                use_doc_unwarping=False,
+                use_textline_orientation=True,
+                enable_mkldnn=False,
+                cpu_threads=PADDLE_CPU_THREADS,
+                text_recognition_batch_size=PADDLE_REC_BATCH,
+            )
+        else:
+            # v2.x: API lama. Batasi thread via paddle API bila ada; fallback
+            # OMP_NUM_THREADS (diset probe/harness). use_gpu=False (host CPU).
+            import paddle as _pd
+            if hasattr(_pd, "set_num_threads"):
+                _pd.set_num_threads(PADDLE_CPU_THREADS)
+            kwargs = dict(use_angle_cls=True, lang="en", show_log=False, use_gpu=False)
+            try:
+                _paddle_engine = PaddleOCR(**kwargs)
+            except TypeError:
+                kwargs.pop("use_gpu", None)
+                kwargs.pop("use_angle_cls", None)
+                _paddle_engine = PaddleOCR(**kwargs)
     return _paddle_engine
 
 
@@ -248,6 +274,19 @@ def embedded_char_count(path: str) -> int:
     doc = fitz.open(path)
     try:
         return len("".join(p.get_text("text") or "" for p in doc).strip())
+    finally:
+        doc.close()
+
+
+def embedded_text(path: str) -> str:
+    """Teks embedded PyMuPDF ("" untuk PNG / tanpa teks)."""
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".png":
+        return ""
+    import fitz
+    doc = fitz.open(path)
+    try:
+        return "\n".join(p.get_text("text") or "" for p in doc).strip()
     finally:
         doc.close()
 
