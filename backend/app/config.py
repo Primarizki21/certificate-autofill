@@ -24,6 +24,11 @@ class Settings:
     max_job_retries: int = int(os.getenv("MAX_JOB_RETRIES", "3"))
     processing_mode: str = os.getenv("PROCESSING_MODE", "background").lower()
     db_worker_poll_seconds: int = int(os.getenv("DB_WORKER_POLL_SECONDS", "2"))
+    # v8: LLM tingkat (Ollama) + router. Default LLM off agar produksi tetap
+    # deterministik tanpa Ollama; aktifkan via ENABLE_LLM_TINGKAT=true.
+    enable_llm_tingkat: bool = os.getenv("ENABLE_LLM_TINGKAT", "false").lower() == "true"
+    ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
+    ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
 
 
 settings = Settings()
