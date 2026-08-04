@@ -70,6 +70,7 @@ def _ocr_per_cert(args, stem: str, path: str) -> str:
             "--path", os.path.join(REPO, path),
             "--engine", args.engine,
             "--zoom", str(args.zoom),
+            "--max-side", str(args.max_side),
             "--threads", str(args.threads),
             "--batch", str(args.batch),
             "--mem-cap-gb", str(args.mem_cap_gb),
@@ -79,14 +80,23 @@ def _ocr_per_cert(args, stem: str, path: str) -> str:
     )
     if proc.returncode != 0:
         raise RuntimeError(f"probe exit {proc.returncode}: {proc.stderr[-500:]}")
-    for line in proc.stdout.splitlines():
-        try:
-            data = json.loads(line)
-        except json.JSONDecodeError:
-            continue
-        if isinstance(data, dict) and "text" in data:
-            return data["text"]
-    raise RuntimeError("probe tidak mengembalikan JSON text")
+    data = _extract_probe_json(proc.stdout)
+    if data is None or "text" not in data:
+        raise RuntimeError("probe tidak mengembalikan JSON text")
+    return data["text"]
+
+
+def _extract_probe_json(text: str) -> dict | None:
+    """Ambil objek JSON utuh dari stdout probe (tahan noise progress bar)."""
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end == -1 or end <= start:
+        return None
+    try:
+        data = json.loads(text[start : end + 1])
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
 
 
 def cmd_build(args) -> None:
@@ -298,6 +308,9 @@ def main() -> None:
                    help="lewati N sertifikat pertama (chunking)")
     b.add_argument("--zoom", type=float, default=3.0,
                    help="render zoom untuk PDF (default 3.0, konsisten baseline)")
+    b.add_argument("--max-side", type=int, default=0,
+                   help="downscale sisi terpanjang halaman (px) sebelum OCR; "
+                        "0 = tanpa downscale (diteruskan ke probe)")
     b.add_argument("--mem-cap-gb", type=float, default=10.0,
                    help="batas virtual memory proses (RLIMIT_AS). VA tinggi aman "
                         "(RSS tetap terbatas karena per-cert subprocess fresh); "
