@@ -83,7 +83,7 @@ Router: 35/74 decisions at 100% precision. Baseline run: tests/benchmark_runs/ru
 
 ## Handoff v8 Results - Router Fix + LLM Bias + Layout
 
-Fixed GT: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat corrections). Best run: tests/benchmark_runs/run_llm_v4_20260804_095412/.
+Fixed GT: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat corrections). Best run: tests/benchmark_runs/run_llm_v4_20260804_115212/.
 
 | Variant | Tingkat exact | MACRO exact | Eff. tok/cert | LLM calls |
 |---|---|---|---|---|

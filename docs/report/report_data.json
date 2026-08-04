@@ -86,7 +86,7 @@
       "gt": "fixed_v8",
       "date": "Aug 4",
       "is_winner": true,
-      "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_095412"
+      "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_115212 (GT final)"
     }
   ],
   "documents": {
@@ -4348,7 +4348,7 @@
       },
       {
         "t": "p",
-        "x": "Fixed GT: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat corrections). Best run: tests/benchmark_runs/run_llm_v4_20260804_095412/."
+        "x": "Fixed GT: Ground_Truth_Sertifikat_v8.csv (3 audited tingkat corrections). Best run: tests/benchmark_runs/run_llm_v4_20260804_115212/."
       },
       {
         "t": "table",

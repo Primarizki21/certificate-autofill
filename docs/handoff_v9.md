@@ -17,8 +17,8 @@
 | Router decisions | 35 (100% prec) | **39 (100% prec)** |
 | GT | raw | fixed_v8 |
 
-Best run: `tests/benchmark_runs/run_llm_v4_20260804_095412/` (7 variants, router
-on, GT v8).
+Best run: `tests/benchmark_runs/run_llm_v4_20260804_115212/` (7 variants, router
+on, GT v8 final).
 
 ---
 
@@ -94,7 +94,10 @@ optimization is a follow-up, not a blocker.
   - **Workflow for a new experiment:** add one entry to `experiments[]` in
     `report_data.json` → `uv run python scripts/generate_report.py` → the new
     experiment lands in the correct section/table automatically.
-- `docs/report/gt_review.xlsx` — manual GT review sheet (see Next Session).
+- `docs/report/gt_review.xlsx` — manual GT review sheet (**DONE**, keputusan
+  user sudah diterapkan ke v8 CSV via `scripts/apply_gt_review.py`; diff di
+  `docs/report/gt_review_diff.txt`). Jangan jalankan ulang
+  `scripts/generate_gt_review.py` (akan menimpa keputusan).
 - `docs/gt_verification_report.txt` — regenerated with tingkat evidence checks.
 
 ## Commits
@@ -110,21 +113,19 @@ optimization is a follow-up, not a blocker.
 | `b19d1c0` | P5: production integration + UKM->Lainnya |
 | `e1ebb98` | R1: data-driven report generator (report_data.json + scripts) |
 | `cc9a6b8` | R2: gt_review.xlsx generator + review sheet |
+| `8ba2561` | G1: apply GT review decisions -> v8 CSV final (Magang UKM label + tingkat confirmed) |
 
 ## Next Session — Execution Plan (sesi berikutnya)
 
-### 1. GT review (menunggu keputusan user)
+### 1. GT review — ✅ SELESAI
 
-- User mengisi kolom **keputusan** di `docs/report/gt_review.xlsx` (4 sheet).
-  **Jangan jalankan ulang `scripts/generate_gt_review.py` setelah diisi** — itu
-  akan menimpa keputusan user.
-- Sheet yang sudah dikonfirmasi user: `Airno_Faiz` (Nasional, event lintas-PTN),
-  `FIT_Faiz` (Internasional, ada peserta asing), 3× Magang UKM (tanggal tetap
-  kosong — 27 Des = tanggal tanda tangan).
-- Setelah keputusan lengkap: terapkan ke `Ground_Truth_Sertifikat_v8.csv`
-  (raw CSV dibiarkan sebagai history). Bila label tingkat berubah, re-run
-  benchmark (`GT_CSV_PATH=Ground_Truth_Sertifikat_v8.csv ... benchmark_llm_v4`)
-  lalu regenerate report.
+- Keputusan user sudah diterapkan ke `Ground_Truth_Sertifikat_v8.csv`:
+  tingkat final (`1966887`/`1981676` Nasional, `2954283` Internasional,
+  `2030372` Nasional, `Airno` Nasional, `FIT` Internasional) + 3× Magang UKM
+  `nama_kegiatan` → `Magang UKM Universitas Airlangga`. Raw CSV tidak diubah.
+- Re-benchmark di GT final (`run_llm_v4_20260804_115212`): **f_bias 82.4% /
+  55.2% / 214 tok** — identik, label Magang tidak menggeser angka.
+- Tidak ada lagi action GT yang menunggu.
 
 ### 2. Eksperimen OCR — PaddleOCR 3.0 (keputusan user: ganti OCR)
 
