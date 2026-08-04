@@ -176,9 +176,13 @@ optimization is a follow-up, not a blocker.
   55.2% / 214 tok** — identik, label Magang tidak menggeser angka.
 - Tidak ada lagi action GT yang menunggu.
 
-### 2. Eksperimen OCR — PaddleOCR 3.0 (keputusan user: ganti OCR)
+### 2. Eksperimen OCR — ✅ DIJALANKAN & DITUTUP (hasil: semua engine GATE FAIL)
 
-**Alasan:** contoh garbled telah dikonfirmasi manual (Girifest `NOM0R:06/001/E`,
+**Status 2026-08-04:** eksperimen OCR selesai dieksekusi dan DITUTUP. **Tidak ada
+engine OCR yang menggantikan RapidOCR+Tesseract.** Produksi
+(`backend/app/services/ocr_fallback.py`) TIDAK berubah.
+
+**Alasan awal:** contoh garbled telah dikonfirmasi manual (Girifest `NOM0R:06/001/E`,
 Venedict `UoinersitasAirlangga`, KARSA tanggal terserap). Hanya 25/74 PDF
 berteks embedded; input quality = OCR-bound (organizer exact 16.2%).
 
@@ -196,23 +200,39 @@ berteks embedded; input quality = OCR-bound (organizer exact 16.2%).
 | [2509.11720] RT-DETR layout detection | Deteksi region header/body/signature |
 | [2304.12484] DocParser / [2403.07553] Donut | OCR-free (skip OCR) → GPU, **tunda** |
 
-**Trial structure** (setiap percobaan = 1 eksperimen terstruktur, bukan append):
-1. Baseline: korpus RapidOCR+Tesseract saat ini (sudah ada).
-2. **Trial A:** PaddleOCR 3.0 default (PP-OCRv5) pada semua cert.
-3. **Trial B:** PaddleOCR + normalisasi line-merge (target token tergabung
-   `BEMFKM`, `SERT2128BEM2026`).
-4. **Trial C** (bila perlu): + preprocessing (binarize/contrast).
+**Trial yang dieksekusi** (detail: `docs/report/report_data.json` entri `ocr_*`
++ `tests/benchmark_runs/ocr_experiment/NOTES.md`):
 
-Tiap trial: bangun korpus baru (`GT_TEXTS_DIR=...`), jalankan benchmark → run
-dir baru, tambah 1 entri `experiments[]` di `report_data.json`, commit.
-Ukur per trial: CER/WER pada subset garbled, organizer/nomor/tingkat exact,
-latency.
+| Engine (subset scan, exact) | organizer | nomor | dates | MACRO | latency | Verdict |
+|---|---|---|---|---|---|---|
+| **Baseline rapid_tess (produksi)** | 14.3% | **57.6%** | **85.7%** | **44.3%** | 8.6s | referensi |
+| paddle 3.7 (PP-OCRv6) | — | — | — | — | ~50s, 3.8GB RSS/cert | tidak viable (OOM di WSL 8GB) |
+| paddleocr 2.9 + paddle 2.6 | 18.4% | 39.4% | 80–83% | 39.8% | 7.1s | FAIL nomor |
+| EasyOCR CPU (max-side 960) | 20.4% | 15.2% | 74–77% | 34.3% | 12.7s | FAIL nomor/dates |
+| EasyOCR GPU (full-res) | 16.3% | 33.3% | 80–83% | 39.3% | 9.7s | FAIL nomor |
 
-**Files:** `tests/ocr_engine.py` (seam ganti engine), `tests/benchmark_ocr.py`;
-`backend/app/services/ocr_fallback.py` hanya disentuh setelah pemenang.
-Dependency baru: `paddleocr`/`paddlepaddle` (pip) — eksperimen dulu di `tests/`.
+**Kesimpulan:** semua engine menaikkan organizer, tetapi TIDAK ADA yang menang
+nomor/dates/macro (field `nomor` exact-match sangat sensitif — tiap engine
+memberi ≥1 char error di banyak sertifikat). GPU tidak diadopsi (bukan hasil
+terbaik; prioritas user = CPU). Eksperimen ditutup; produksi tetap
+RapidOCR+Tesseract.
+
+**Hasil samping yang bertahan (reusable):**
+- `tests/paddle_probe_safe.py` — probe OCR terkontrol (subprocess + RLIMIT_AS +
+  RSS sampling + faulthandler) yang TIDAK BISA membekukan WSL; OOM jadi
+  MemoryError/exit 42. Juga mengungkap: RLIMIT_AS memblokir CUDA di WSL (VRAM
+  di-map ke VA host) → GPU butuh cap tinggi.
+- `tests/benchmark_ocr.py build` — `--per-cert-process` (fresh subprocess per
+  cert, cegah akumulasi RSS), `--prepend-embedded` (mirip produksi),
+  `--max-side`, `--gpu`, `--skip-existing`, `--mem-cap-gb`.
+- `tests/ocr_engine.py` — seam engine (rapid/tess/paddle2&3/easy), version-aware
+  paddle adapter, klasifikasi scan/embedded (<=60 char embedded).
+
+**Files:** `tests/ocr_engine.py`, `tests/benchmark_ocr.py`, `tests/paddle_probe_safe.py`;
+produksi (`ocr_fallback.py`) TIDAK disentuh. Trial B (line-merge) & C (preprocessing)
+TIDAK dieksekusi karena Trial A semua engine GATE FAIL — tidak ada dasar untuk lanjut.
 **Gate:** organizer/nomor naik pada subset scan, tanpa regresi pada cert
-berteks, latency < 2×.
+berteks, latency < 2× — **TIDAK ada engine yang lulus**.
 
 ### 3. Referensi biaya produksi (LLM API — untuk pilih model sesuai cost)
 

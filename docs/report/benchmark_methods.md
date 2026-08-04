@@ -888,6 +888,9 @@ The table below lists all functions referenced in this document. Functions are l
 | v7 P3 router rule-based | 71.6% | 53.1% | 191 | 42 | - | raw | Aug 3 |
 | v7 P4 e_hybrid + router | 77.0% | 54.2% | 202 | 39 | 35/74 @100% | raw | Aug 3 |
 | v8 f_bias + router | 82.4% | 55.2% | 214 | 35 | 39/74 @100% | fixed_v8 | Aug 4 |
+| OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 | Aug 4 |
+| OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
+| OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -897,3 +900,6 @@ The table below lists all functions referenced in this document. Functions are l
 | v7 | v7 P3 router rule-based | 71.6% | 53.1% |
 | v7 | v7 P4 e_hybrid + router ** | 77.0% | 54.2% |
 | v8 | v8 f_bias + router ** | 82.4% | 55.2% |
+| ocr | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% |
+| ocr | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% |
+| ocr | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% |

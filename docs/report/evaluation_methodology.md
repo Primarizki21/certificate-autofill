@@ -373,3 +373,6 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | v7 P3 router rule-based | 71.6% | 53.1% | 191 | 42 | - | raw |
 | v7 P4 e_hybrid + router | 77.0% | 54.2% | 202 | 39 | 35/74 @100% | raw |
 | v8 f_bias + router | 82.4% | 55.2% | 214 | 35 | 39/74 @100% | fixed_v8 |
+| OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 |
+| OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% | 0 | 0 | - | fixed_v8 |
+| OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% | 0 | 0 | - | fixed_v8 |

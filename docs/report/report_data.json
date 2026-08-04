@@ -88,6 +88,48 @@
       "date": "Aug 4",
       "is_winner": true,
       "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_115212 (GT final)"
+    },
+    {
+      "id": "ocr_a_paddle26",
+      "phase": "ocr",
+      "label": "OCR Trial A — PaddleOCR 2.9 (CPU)",
+      "variant": "paddle26",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/trial_a_paddle26",
+      "tingkat": "n/a",
+      "macro": "39.8%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "fixed_v8",
+      "date": "Aug 4",
+      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 18.4% (naik vs baseline 14.3%), nomor 39.4% (turun vs 57.6%), dates 80-83%, MACRO 39.8% (turun vs 44.3%). Latency 7.1 s/cert (PASS <2x). Korpus 74/74 ok; process-per-cert + RLIMIT_AS (paddle 3.7 gagal viabilitas: 3.8GB RSS/cert, OOM di WSL 8GB)."
+    },
+    {
+      "id": "ocr_a_easycpu",
+      "phase": "ocr",
+      "label": "OCR Trial A — EasyOCR (CPU, max-side 960)",
+      "variant": "easy960",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/trial_a_easyocr",
+      "tingkat": "n/a",
+      "macro": "34.3%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "fixed_v8",
+      "date": "Aug 4",
+      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 20.4% (terbaik semua engine), nomor 15.2% (paling buruk; downscale 960 merusak digit), dates 74-77%, MACRO 34.3%. Latency 12.7 s/cert."
+    },
+    {
+      "id": "ocr_a_easygpu",
+      "phase": "ocr",
+      "label": "OCR Trial A — EasyOCR (GPU, full-res)",
+      "variant": "easygpu",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/trial_a_easyocr_gpu",
+      "tingkat": "n/a",
+      "macro": "39.3%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "fixed_v8",
+      "date": "Aug 4",
+      "notes": "GATE FAIL — GPU TIDAK diadopsi (bukan hasil terbaik; prioritas user = CPU). Field-eval subset scan (exact): organizer 16.3%, nomor 33.3%, dates 80-83%, MACRO 39.3%. Latency 9.7 s/cert (termasuk CUDA init per-cert-process)."
     }
   ],
   "documents": {

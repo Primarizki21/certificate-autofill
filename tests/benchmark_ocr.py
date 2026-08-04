@@ -64,22 +64,24 @@ def _ocr_per_cert(args, stem: str, path: str) -> str:
     Proses fresh membebaskan semua memori C++ engine tiap cert — mencegah
     akumulasi RSS paddle yang bisa membekukan WSL. Mengembalikan teks OCR."""
     import subprocess
-    proc = subprocess.run(
-        [
-            sys.executable, "-m", "tests.paddle_probe_safe",
-            "--path", os.path.join(REPO, path),
-            "--engine", args.engine,
-            "--zoom", str(args.zoom),
-            "--max-side", str(args.max_side),
-            "--threads", str(args.threads),
-            "--batch", str(args.batch),
-            "--mem-cap-gb", str(args.mem_cap_gb),
-            "--full-text",
-        ],
-        capture_output=True, text=True, timeout=600,
-    )
+    cmd = [
+        sys.executable, "-m", "tests.paddle_probe_safe",
+        "--path", os.path.join(REPO, path),
+        "--engine", args.engine,
+        "--zoom", str(args.zoom),
+        "--max-side", str(args.max_side),
+        "--threads", str(args.threads),
+        "--batch", str(args.batch),
+        "--mem-cap-gb", str(args.mem_cap_gb),
+        "--full-text",
+    ]
+    if args.gpu:
+        cmd.append("--gpu")
+    proc = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
     if proc.returncode != 0:
-        raise RuntimeError(f"probe exit {proc.returncode}: {proc.stderr[-500:]}")
+        raise RuntimeError(
+            f"probe exit {proc.returncode}: stderr={proc.stderr[-300:]!r} stdout={proc.stdout[-300:]!r}"
+        )
     data = _extract_probe_json(proc.stdout)
     if data is None or "text" not in data:
         raise RuntimeError("probe tidak mengembalikan JSON text")
@@ -106,9 +108,11 @@ def cmd_build(args) -> None:
     # KAPUR BARIS DARURAT: batasi virtual memory proses sehingga kalau engine
     # OCR (paddle) kehabisan memori, proses melempar MemoryError & mati bersih
     # — TIDAK PERNAH membekukan WSL (lihat tests/paddle_probe_safe.py).
+    # Hanya soft limit; hard = unlimited agar subprocess (probe GPU) boleh
+    # menaikkan cap-nya sendiri (CUDA butuh VA besar di WSL).
     if args.mem_cap_gb:
         cap = int(args.mem_cap_gb * 1024 ** 3)
-        resource.setrlimit(resource.RLIMIT_AS, (cap, cap))
+        resource.setrlimit(resource.RLIMIT_AS, (cap, resource.RLIM_INFINITY))
 
     manifest = _load_manifest()
     classification = classify_manifest(manifest)
@@ -322,6 +326,9 @@ def main() -> None:
                         "cegah akumulasi RSS yang membekukan WSL)")
     b.add_argument("--threads", type=int, default=4, help="CPU thread (paddle)")
     b.add_argument("--batch", type=int, default=4, help="batch size rec (paddle)")
+    b.add_argument("--gpu", action="store_true",
+                   help="EasyOCR gpu=True (opsional; prioritas user = CPU, GPU "
+                        "hanya untuk bukti/evaluasi)")
     b.add_argument("--prepend-embedded", action="store_true",
                    help="awali teks embedded PyMuPDF sebelum OCR (mirip produksi)")
     b.set_defaults(func=cmd_build)

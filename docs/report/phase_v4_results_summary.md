@@ -136,3 +136,6 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 | v7 | v7 P3 router rule-based | 71.6% | 53.1% |
 | v7 | v7 P4 e_hybrid + router ** | 77.0% | 54.2% |
 | v8 | v8 f_bias + router ** | 82.4% | 55.2% |
+| ocr | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% |
+| ocr | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% |
+| ocr | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% |
