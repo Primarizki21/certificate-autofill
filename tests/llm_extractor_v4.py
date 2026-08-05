@@ -20,9 +20,9 @@ from tests.llm_extractor_v3 import (
 PROMPT_VERSION = "v4_adaptive"
 
 # Certificate type -> text budget (chars)
-BUDGET_STRONG = 140
-BUDGET_NORMAL = 200
-BUDGET_POOR_OCR = 300
+BUDGET_STRONG = 100
+BUDGET_NORMAL = 150
+BUDGET_POOR_OCR = 250
 
 _INSTR = """Tentukan tingkat kegiatan. Jawab SATU opsi:
 {options}
