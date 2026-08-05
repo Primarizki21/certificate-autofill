@@ -154,7 +154,8 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 ### Context loading (WAJIB di awal sesi, urut)
 1. `git status` + `git log --oneline -5` — posisi & file untracked.
-2. Baca `docs/handoff_v10.md` — plan + open frontier.
+2. Baca handoff TERBARU (`docs/handoff_v*.md`, versi angka tertinggi — parse
+   `int` setelah "v", jangan sort lexicographic) — plan + open frontier.
 3. Baca `docs/report/runs_summary.md` — angka terukur semua run.
 4. Baca `docs/experiments_ledger.md` — closed/failed approaches (JANGAN dilewatkan).
 5. Kunci baseline dari runs_summary; pastikan `Ground_Truth_Sertifikat_v8.csv` frozen.
@@ -205,7 +206,7 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 | v7 P4 e_hybrid + router | 54.2% | — | 39 | tingkat 77.0% |
 | **v8 f_bias + router (current)** | **55.2%** | — | **35** | **tingkat 82.4%**, 214 eff tok/cert |
 
-> **Angka otoritatif:** [docs/handoff_v10.md](docs/handoff_v10.md) + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
+> **Angka otoritatif:** handoff terbaru + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
 
 ### Ollama Setup
 ```bash
@@ -268,7 +269,7 @@ Yang mungkin berubah ke depannya:
 ---
 
 ## Dokumen Referensi
-- **Status eksperimen terbaru:** [docs/handoff_v9.md](docs/handoff_v9.md) — v8 executed (router fix, f_bias winner, layout rejected, production integration)
+- **Status eksperimen terbaru:** handoff TERBARU (`docs/handoff_v*.md`, versi angka tertinggi) + `docs/experiments_ledger.md` (closed approaches)
 - **Laporan eksperimen:** [docs/report/README.md](docs/report/README.md) — benchmark_methods, evaluation_methodology, phase_v4_methodology, phase_v4_results_summary (`.docx` + mirror `.md`)
 - **Improvement tracking:** [docs/improvements.md](docs/improvements.md) — checklist perbaikan teridentifikasi
 - **Paper keywords:** [docs/paper_keywords.md](docs/paper_keywords.md) — keyword pencarian paper per topik
