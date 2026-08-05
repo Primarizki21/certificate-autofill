@@ -68,6 +68,20 @@ konteks penuh. Berlaku untuk:
 Cara: SATU `codegraph_explore` per target edit. Output = source verbatim +
 call path + blast radius. Perlakukan output sebagai sudah-Read. Jangan grep ulang.
 
+## Context Loading & Workflow (sesi berikutnya)
+
+Baca berurutan di awal sesi (lihat `AGENTS.md` §Session Context & Experiment
+Workflow — loop A/B lengkap ada di sana):
+
+1. `docs/handoff_v10.md` (ini) — plan + open frontier.
+2. `docs/report/runs_summary.md` — angka terukur semua run.
+3. `docs/experiments_ledger.md` — closed/failed approaches + re-try condition.
+4. `codegraph_explore` on-demand untuk kode.
+
+Aturan kunci: **DEDUP via ledger sebelum eksperimen** (jangan ulang pendekatan
+yang sudah ditutup), **gate check sebelum commit**, **regenerate
+`runs_summary.py` setelah tiap eksperimen**, **user yang push**.
+
 ---
 
 ## Next Session — Eksperimen

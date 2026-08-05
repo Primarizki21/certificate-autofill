@@ -150,6 +150,38 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 ---
 
+## Session Context & Experiment Workflow
+
+### Context loading (WAJIB di awal sesi, urut)
+1. `git status` + `git log --oneline -5` — posisi & file untracked.
+2. Baca `docs/handoff_v10.md` — plan + open frontier.
+3. Baca `docs/report/runs_summary.md` — angka terukur semua run.
+4. Baca `docs/experiments_ledger.md` — closed/failed approaches (JANGAN dilewatkan).
+5. Kunci baseline dari runs_summary; pastikan `Ground_Truth_Sertifikat_v8.csv` frozen.
+6. Kode: `codegraph_explore` on-demand (bukan baca semua file).
+
+### Loop eksperimen (per eksperimen)
+- **B0 DEDUP:** cek `experiments_ledger.md` — hipotesis pernah dicoba? Skip jika
+  closed kecuali re-try condition terpenuhi.
+- **B1 Pilih metode + tulis GATE** (target angka vs baseline) & sebutkan goal
+  yang dilayani (efisien/robust/cepat/hemat-token/scalable).
+- **B2 `codegraph_explore`** target → pahami blast radius SEBELUM edit.
+- **B3 Edit kode eksperimen** di `tests/` — produksi tidak disentuh tanpa persetujuan.
+- **B4 `codegraph_explore` ulang** → verifikasi index menangkap edit (auto-sync ~1s).
+- **B5 Jalankan trial** (berat/OCR = probe terkontrol / user-run — WSL 8GB).
+- **B6 GATE CHECK** vs baseline (akurasi no-regress + target token/call).
+- **B7 `pytest tests/`** setelah perubahan kode.
+- **B8 Audit diff** (blast radius, tidak ada perubahan produksi).
+- **B9 LEDGER:** tambah entri PASS/FAIL (hipotesis, hasil, verdict, re-try condition).
+- **B10 PASS →** `report_data.json` + `generate_report.py` + `generate_runs_summary.py` + update handoff. FAIL → regenerate runs_summary (biar terlihat).
+- **B11 Commit** kode + docs bersama. **User yang push** (SSH passphrase).
+- Rollback: trial FAIL = kode eksperimen boleh tetap, tercatat di ledger, jangan dipakai produksi.
+
+> Gagal trial = pengetahuan (bukan dead end). Ledger mempersempit ruang pencarian
+> sehingga sesi berikutnya tidak mengulang pendekatan yang sudah ditutup.
+
+---
+
 ## Testing & Benchmark
 
 ```bash
@@ -173,7 +205,7 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 | v7 P4 e_hybrid + router | 54.2% | — | 39 | tingkat 77.0% |
 | **v8 f_bias + router (current)** | **55.2%** | — | **35** | **tingkat 82.4%**, 214 eff tok/cert |
 
-> **Angka otoritatif:** [docs/handoff_v9.md](docs/handoff_v9.md) + `docs/report/report_data.json`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
+> **Angka otoritatif:** [docs/handoff_v10.md](docs/handoff_v10.md) + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
 
 ### Ollama Setup
 ```bash

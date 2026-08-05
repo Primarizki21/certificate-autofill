@@ -12,6 +12,7 @@ disinkronkan agar agen dapat membaca isinya tanpa tool khusus.
 | `evaluation_methodology.{docx,md}` | Metrik, formula, dataset, batasan evaluasi | Tim + agen |
 | `phase_v4_methodology.{docx,md}` | Narasi eksperimen fase v4 + addendum v7/v8 | Tim + agen |
 | `phase_v4_results_summary.{md,xlsx}` | Ringkasan numerik hasil benchmark + per-file | Tim |
+| `runs_summary.{md,csv}` | Registry semua benchmark run + angka otoritatif (auto-generated `scripts/generate_runs_summary.py`) | Agen + tim |
 
 ## Konvensi Sinkronisasi
 
