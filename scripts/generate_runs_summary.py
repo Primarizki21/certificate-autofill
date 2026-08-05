@@ -31,13 +31,18 @@ FIELD_LABELS = {
 # Run yang punya deskripsi kurasi (muncul di seksi "Authoritative runs").
 AUTHORITATIVE = {
     "run_20260728_131835": "Baseline corpus produksi (teks RapidOCR+Tesseract, 74 txt)",
-    "run_llm_v4_20260804_115212": "v8 f_bias winner (GT final fixed_v8)",
+    "run_llm_v4_20260804_115212": "v8 f_bias winner lama (GT final fixed_v8)",
+    "run_llm_v4_20260805_163541": "v9 organizer_v2 + router fix (GT v8)",
+    "run_llm_v4_20260805_163541 (reval)": "v9 winner re-baseline GT v9 + matcher v2",
     "ocr_experiment/baseline_rapid": "OCR baseline: RapidOCR only (host)",
     "ocr_experiment/baseline_rapid_tess": "OCR baseline produksi-equivalent (RapidOCR+Tesseract)",
     "ocr_experiment/trial_a_paddle26": "OCR trial: paddleocr 2.9 + paddle 2.6 (GATE FAIL)",
     "ocr_experiment/trial_a_easyocr": "OCR trial: EasyOCR CPU max-side 960 (GATE FAIL)",
     "ocr_experiment/trial_a_easyocr_gpu": "OCR trial: EasyOCR GPU full-res (GATE FAIL, not adopted)",
 }
+
+# f_bias winner utk seksi "f_bias winner — field exact".
+WINNER_RUN = "run_llm_v4_20260805_163541"
 
 
 def _date_from_name(name: str) -> str:
@@ -281,6 +286,15 @@ def main():
     lines.append("|---|---|---|---|---|---|")
     for key, desc in AUTHORITATIVE.items():
         rec = next((r for r in runs if r["run_dir"] == key), None)
+        if key.endswith(" (reval)"):
+            reval = _load(os.path.join(RUNS_ROOT, key[:-len(" (reval)")], "summary_gt_v9_reval.json"))
+            if reval:
+                ma = reval.get("macro_avg", {})
+                tk = (reval.get("fields", {}).get("tingkat", {})).get("exact_acc")
+                lines.append(f"| `{key}` | {desc} | {_pct(tk)} | {_pct(ma.get('exact_acc'))} | — | — |")
+                continue
+            lines.append(f"| `{key}` | {desc} | — | — | — | — |")
+            continue
         if rec is None:
             lines.append(f"| `{key}` | {desc} | — | — | — | — |")
             continue
@@ -289,10 +303,10 @@ def main():
     lines.append("")
 
     # f_bias winner field metrics
-    win = next((r for r in runs if r["run_dir"] == "run_llm_v4_20260804_115212"), None)
+    win = next((r for r in runs if r["run_dir"] == WINNER_RUN), None)
     if win:
         s = _load(os.path.join(RUNS_ROOT, win["run_dir"], "summary_variant_f_bias.json"))
-        lines.append("## f_bias winner — field exact (run_llm_v4_20260804_115212)")
+        lines.append(f"## f_bias winner — field exact ({WINNER_RUN})")
         lines.append("")
         lines.append("| Field | exact | fuzzy |")
         lines.append("|---|---|---|")
@@ -301,6 +315,23 @@ def main():
             lines.append(f"| {label} | {_pct(d.get('exact_acc'))} | {_pct(d.get('fuzzy_acc'))} |")
         ma = (s or {}).get("macro_avg", {})
         lines.append(f"| **MACRO** | {_pct(ma.get('exact_acc'))} | {_pct(ma.get('fuzzy_acc'))} |")
+        lines.append("")
+
+    # GT v9 + matcher v2 re-baseline field metrics
+    reval = _load(os.path.join(RUNS_ROOT, WINNER_RUN, "summary_gt_v9_reval.json"))
+    if reval:
+        lines.append(f"## GT v9 + matcher v2 re-baseline — field exact ({WINNER_RUN})")
+        lines.append("")
+        lines.append("> Re-evaluasi extracted_fields vs Ground_Truth_Sertifikat_v9.csv + "
+                     "matcher v2 (handoff v12). Angka GT v8/matcher v1: MACRO exact 58.9%.")
+        lines.append("")
+        lines.append("| Field | exact | fuzzy |")
+        lines.append("|---|---|---|")
+        for field, label in FIELD_LABELS.items():
+            d = reval.get("fields", {}).get(field, {})
+            lines.append(f"| {label} | {_pct(d.get('exact_acc'))} | {_pct(d.get('fuzzy_acc'))} |")
+        rma = reval.get("macro_avg", {})
+        lines.append(f"| **MACRO** | {_pct(rma.get('exact_acc'))} | {_pct(rma.get('fuzzy_acc'))} |")
         lines.append("")
 
     # OCR trials
