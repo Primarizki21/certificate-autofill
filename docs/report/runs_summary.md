@@ -1,9 +1,9 @@
 # Benchmark Runs Summary
 
-> Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v12.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
+> Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 49 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 53 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -99,6 +99,10 @@
 | `run_llm_v4_20260804_100410` | 2026-08-04 | llm_v4 | f_bias | 78.4% | 51.3% | 224 | 37 | on | router 37/74 @100% |
 | `run_llm_v4_20260804_115212` | 2026-08-04 | llm_v4 | f_bias | 82.4% | 55.2% | 214 | 35 | on | router 39/74 @100% |
 | `run_llm_v4_20260805_163541` | 2026-08-05 | llm_v4 | f_bias | 83.8% | 58.9% | 176 | 29 | on | router 45/74 @100% |
+| `run_llm_v5_exp5_20260805_211529` | 2026-08-05 | other |  | 66.7% | 77.8% | 14 | 2 |  |  |
+| `run_llm_v5_exp5_20260805_211624` | 2026-08-05 | other |  | 83.8% | 60.7% | 195 | 29 |  |  |
+| `run_llm_v5_exp5_20260805_225540` | 2026-08-05 | other |  | 60.0% | 65.5% | 19 | 3 |  |  |
+| `run_llm_v5_exp5_20260805_225609` | 2026-08-05 | other |  | 81.1% | 60.4% | 185 | 29 |  |  |
 | `run_ner_v1_20260728_161014` | 2026-07-28 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_083808` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_084046` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |

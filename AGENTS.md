@@ -211,8 +211,14 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 | v8 f_bias + router | 55.2% | — | 35 | tingkat 82.4%, 214 eff tok/cert |
 | **v9 organizer_v2 + router (current)** | **58.9%** | 76.8% | **29** | **tingkat 83.8%**, 176 eff tok/cert |
 | v9 re-baseline GT v9 + matcher v2 | **60.2%** | 74.2% | 29 | metrologi handoff v12 (matcher jujur) |
+| Exp5 multi-field (tingkat+organizer, 1 call) | 60.7% | 74.7% | 29 | organizer +2.7pt tapi token 195 > gate 176 → **FAIL** (handoff v13) |
 
 > **Angka otoritatif:** handoff terbaru + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
+>
+> **OCR:** eksperimen OCR sebelumnya CLOSED (nomor gagal, ledger OCR-001..004).
+> Analisis 3 tool baru (handoff v13): CnOCR redundant (PP-OCR, sama RapidOCR),
+> MMOCR stale (2023), **DocTR = kandidat probe berikutnya** (keluarga model
+> baru, active, Latin out-of-box).
 
 ### Ollama Setup
 ```bash
