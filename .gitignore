@@ -9,6 +9,9 @@ wheels/
 # Virtual environments
 .venv
 
+# CodeGraph local index (regenerated, machine-local)
+.codegraph/
+
 # Downloaded arXiv PDFs
 papers/
 
