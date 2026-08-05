@@ -48,11 +48,17 @@ def _sig(raw_text: str, organizer: str) -> dict:
         "hima": bool(
             re.search(r"HIMPUNAN|HIMA", o) or hima_raw
         ),
+        "hima_org": bool(re.search(r"HIMPUNAN|HIMA", o)),
         "dept": bool(re.search(
+            r"\bDEPT\b|DEPARTMENT|STUDY\s*PROGRAM|STUDYPROGRAM|\bPRODI\b|PROGRAM STUDI", u))
+        or bool(re.search(
             r"\bDEPT\b|DEPARTMENT|STUDY PROGRAM|\bPRODI\b|PROGRAM STUDI", o2)),
         "univ": bool(re.search(
             r"UNIVERSITAS|UNIVERSITY|REKTORAT|DIREKTORAT|KEMAHASISWAAN", o)),
         "luar": bool(re.search(
+            r"AIESEC|UNIMUS|UNISBA|UNS|USU|POLTEK|TELKOM|BRAWIJAYA|UGM|IPB"
+            r"|PELITA HARAPAN|CALTEK|STAN|SACLAY|IRIS|BINUS|SRIWIJAYA|UNY|UNESA|PCR", u))
+        or bool(re.search(
             r"AIESEC|UNIMUS|UNISBA|UNS|USU|POLTEK|TELKOM|BRAWIJAYA|UGM|IPB"
             r"|PELITA HARAPAN|CALTEK|STAN|SACLAY|IRIS|BINUS|SRIWIJAYA|UNY|UNESA|PCR", o)),
         "nasw": bool(re.search(r"\bNASIONAL\b|\bNATIONAL\b", u)),
@@ -93,6 +99,16 @@ def _decide(s: dict) -> tuple[str | None, str]:
         return "Fakultas", "fak+univ"
     if s["bem"] and s["sem"] and not s["lomba"] and not s["hima"] and not s["nasw"]:
         return "Fakultas", "bem+sem"
+    # v10 Exp3 (data-driven, precision-validated on all 74):
+    #   BEM-level org (no university/lomba/nasw context) -> Fakultas.
+    if s["bem"] and not s["univ"] and not s["sem"] and not s["lomba"] and not s["lomba_merged"] and not s["nasw"] and not s["luar"] and not s["hima"]:
+        return "Fakultas", "bem_no_univ"
+    #   BEM + HIMA partnership (panitia internal FTMM certs) -> Fakultas.
+    if s["bem"] and s["hima"] and not s["lomba"] and not s["lomba_merged"] and not s["nasw"] and not s["luar"]:
+        return "Fakultas", "bem+hima"
+    #   Universitas-level unit + seminar (Perpustakaan/lecture by univ organ) -> Universitas.
+    if s["sem"] and s["univ"] and not s["fak"] and not s["bem"] and not s["hima"] and not s["lomba"]:
+        return "Universitas", "sem+univ"
     return None, ""
 
 
