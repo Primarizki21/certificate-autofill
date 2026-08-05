@@ -376,3 +376,5 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 |
 | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% | 0 | 0 | - | fixed_v8 |
 | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% | 0 | 0 | - | fixed_v8 |
+| v9 organizer_v2 + router fix | 83.8% | 58.9% | 176 | 29 | 42/74 @100% | v8 |
+| v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 42/74 @100% | v9 |

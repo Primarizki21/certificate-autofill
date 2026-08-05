@@ -38,6 +38,7 @@ run_llm_v4_20260804_095713,2026-08-04,llm_v4,llama3.1:8b,v3_tingkat_only,fixed_v
 run_llm_v4_20260804_100137,2026-08-04,llm_v4,llama3.1:8b,v3_tingkat_only,fixed_v8,on,phrase_v2,f_bias,77.0%,50.8%,235,39,370.9,router 35/74 @100%
 run_llm_v4_20260804_100410,2026-08-04,llm_v4,llama3.1:8b,v3_tingkat_only,fixed_v8,on,phrase_v2,f_bias,78.4%,51.3%,224,37,365.0,router 37/74 @100%
 run_llm_v4_20260804_115212,2026-08-04,llm_v4,llama3.1:8b,v3_tingkat_only,Ground_Truth_Sertifikat_v8,on,phrase_v2,f_bias,82.4%,55.2%,214,35,357.3,router 39/74 @100%
+run_llm_v4_20260805_163541,2026-08-05,llm_v4,llama3.1:8b,v3_tingkat_only,Ground_Truth_Sertifikat_v8,on,phrase_v2,f_bias,83.8%,58.9%,176,29,349.6,router 45/74 @100%
 run_ner_v1_20260728_161014,2026-07-28,ner_v1,,,,,,,—,12.8%,—,—,—,
 run_ner_v1_20260730_083808,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,
 run_ner_v1_20260730_084046,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,

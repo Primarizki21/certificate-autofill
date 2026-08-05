@@ -1,33 +1,49 @@
 # Benchmark Runs Summary
 
-> Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
+> Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v12.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 48 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 49 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
 | Run | Deskripsi | Tingkat | MACRO | Tok/cert | Calls |
 |---|---|---|---|---|---|
 | `run_20260728_131835` | Baseline corpus produksi (teks RapidOCR+Tesseract, 74 txt) | — | 42.2% | — | — |
-| `run_llm_v4_20260804_115212` | v8 f_bias winner (GT final fixed_v8) | 82.4% | 55.2% | 214 | 35 |
+| `run_llm_v4_20260804_115212` | v8 f_bias winner lama (GT final fixed_v8) | 82.4% | 55.2% | 214 | 35 |
+| `run_llm_v4_20260805_163541` | v9 organizer_v2 + router fix (GT v8) | 83.8% | 58.9% | 176 | 29 |
+| `run_llm_v4_20260805_163541 (reval)` | v9 winner re-baseline GT v9 + matcher v2 | 83.8% | 60.2% | — | — |
 | `ocr_experiment/baseline_rapid` | OCR baseline: RapidOCR only (host) | — | 42.8% | — | — |
 | `ocr_experiment/baseline_rapid_tess` | OCR baseline produksi-equivalent (RapidOCR+Tesseract) | — | 44.3% | — | — |
 | `ocr_experiment/trial_a_paddle26` | OCR trial: paddleocr 2.9 + paddle 2.6 (GATE FAIL) | — | 39.8% | — | — |
 | `ocr_experiment/trial_a_easyocr` | OCR trial: EasyOCR CPU max-side 960 (GATE FAIL) | — | 34.3% | — | — |
 | `ocr_experiment/trial_a_easyocr_gpu` | OCR trial: EasyOCR GPU full-res (GATE FAIL, not adopted) | — | 39.3% | — | — |
 
-## f_bias winner — field exact (run_llm_v4_20260804_115212)
+## f_bias winner — field exact (run_llm_v4_20260805_163541)
 
 | Field | exact | fuzzy |
 |---|---|---|
 | nama_kegiatan | 24.3% | 63.5% |
 | nomor | 59.6% | 59.6% |
-| organizer | 16.2% | 75.7% |
+| organizer | 33.8% | 82.4% |
 | tanggal_mulai | 81.8% | 81.8% |
 | tanggal_selesai | 81.8% | 81.8% |
-| tingkat | 82.4% | 85.1% |
-| **MACRO** | 55.2% | 74.7% |
+| tingkat | 83.8% | 86.5% |
+| **MACRO** | 58.9% | 76.3% |
+
+## GT v9 + matcher v2 re-baseline — field exact (run_llm_v4_20260805_163541)
+
+> Re-evaluasi extracted_fields vs Ground_Truth_Sertifikat_v9.csv + matcher v2 (handoff v12). Angka GT v8/matcher v1: MACRO exact 58.9%.
+
+| Field | exact | fuzzy |
+|---|---|---|
+| nama_kegiatan | 25.7% | 52.7% |
+| nomor | 59.6% | 59.6% |
+| organizer | 39.2% | 79.7% |
+| tanggal_mulai | 81.8% | 81.8% |
+| tanggal_selesai | 81.8% | 81.8% |
+| tingkat | 83.8% | 89.2% |
+| **MACRO** | 60.2% | 74.2% |
 
 ## OCR experiment (subset scan, field-eval exact)
 
@@ -82,6 +98,7 @@
 | `run_llm_v4_20260804_100137` | 2026-08-04 | llm_v4 | f_bias | 77.0% | 50.8% | 235 | 39 | on | router 35/74 @100% |
 | `run_llm_v4_20260804_100410` | 2026-08-04 | llm_v4 | f_bias | 78.4% | 51.3% | 224 | 37 | on | router 37/74 @100% |
 | `run_llm_v4_20260804_115212` | 2026-08-04 | llm_v4 | f_bias | 82.4% | 55.2% | 214 | 35 | on | router 39/74 @100% |
+| `run_llm_v4_20260805_163541` | 2026-08-05 | llm_v4 | f_bias | 83.8% | 58.9% | 176 | 29 | on | router 45/74 @100% |
 | `run_ner_v1_20260728_161014` | 2026-07-28 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_083808` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_084046` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |

@@ -37,12 +37,23 @@ def test_match_contains_activity():
     assert r["fuzzy"] is True
 
 
-def test_match_token_overlap():
+def test_match_abbreviation_organizer():
     expected = "BEM FTMM Universitas Airlangga"
     actual = "Badan Eksekutif Mahasiswa Fakultas Teknologi Maju dan Multidisiplin Universitas Airlangga"
     r = match_field(expected, actual, "penyelenggara_kegiatan")
-    assert r["exact"] is False
-    assert r["token_overlap"] >= 0.5
+    assert r["exact"] is True
+    assert r["fuzzy"] is True
+    r = match_field(actual, expected, "penyelenggara_kegiatan")
+    assert r["exact"] is True
+
+
+def test_match_distinct_organizations_not_credited():
+    # FEB vs FKM / UGM / UPNVJT = BEDA organisasi. Token-overlap 0.67, tapi
+    # tidak boleh exact maupun fuzzy (anti-inflasi).
+    for other in ["BEM FKM UNAIR", "BEM FEB UGM", "BEM FEB UPNVJT"]:
+        r = match_field("BEM FEB UNAIR", other, "penyelenggara_kegiatan")
+        assert r["exact"] is False
+        assert r["fuzzy"] is False
 
 
 def test_match_date():

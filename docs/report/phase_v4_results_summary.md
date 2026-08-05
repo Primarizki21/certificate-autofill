@@ -134,8 +134,10 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 | v4 | LLM A2 v2 (full-text) | 36.5% | 58.3% |
 | v6 | LLM v3 Variant B | 39.2% | 46.4% |
 | v7 | v7 P3 router rule-based | 71.6% | 53.1% |
-| v7 | v7 P4 e_hybrid + router ** | 77.0% | 54.2% |
-| v8 | v8 f_bias + router ** | 82.4% | 55.2% |
+| v7 | v7 P4 e_hybrid + router | 77.0% | 54.2% |
+| v8 | v8 f_bias + router | 82.4% | 55.2% |
 | ocr | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% |
 | ocr | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% |
 | ocr | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% |
+| v9 | v9 organizer_v2 + router fix ** | 83.8% | 58.9% |
+| v12 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% |

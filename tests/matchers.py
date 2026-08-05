@@ -5,6 +5,11 @@ from tests.date_normalizer import normalize_date
 NOMOR_NORMALIZE = re.compile(r"[ .\-\t]+")
 TEXT_NORMALIZE = re.compile(r"[^a-z0-9/]+")
 
+# Kata sambung/filler yang tidak memberi sinyal pembeda organisasi.
+# "universitas"/"fakultas" TIDAK dimasukkan: UNAIR/FTMM adalah portmanteau
+# yang hurufnya harus tetap ikut check subsequence (UNAIR=Universitas Airlangga).
+ABBR_STOPWORDS = {"dan", "dengan", "di", "yang", "of", "the", "for", "and", "de"}
+
 
 def normalize_value(value: str) -> str:
     return TEXT_NORMALIZE.sub(" ", value.lower()).strip()
@@ -12,6 +17,10 @@ def normalize_value(value: str) -> str:
 
 def normalize_nomor(value: str) -> str:
     return NOMOR_NORMALIZE.sub("", value.lower()).strip()
+
+
+def _words(value: str) -> list[str]:
+    return [w for w in re.sub(r"[^a-zA-Z0-9\s/]", " ", value or "").split() if w]
 
 
 def exact_match(expected: str, actual: str | None) -> bool:
@@ -79,19 +88,40 @@ def cer_score(reference: str, hypothesis: str) -> float:
 
 
 def is_abbreviation_of(abbr: str, full: str) -> bool:
-    abbr_clean = re.sub(r"[^a-zA-Z]", "", abbr).lower()
-    if not abbr_clean or len(abbr_clean) < 2:
+    """True bila `abbr` adalah akronim/singkatan dari `full`.
+
+    Robust vs OCR & urutan: huruf akronim harus muncul berurutan (subsequence)
+    di huruf nama lengkap, dengan stopword di-skip. Sinyal huruf (bukan inisial
+    kata) yang membedakan BEM FEB UNAIR vs BEM FKM UNAIR / BEM FEB UGM /
+    BEM FEB UPNVJT (beda organisasi) — inisialnya identik, isi hurufnya beda.
+
+    Rasio cakupan kata mencegah partial-string dipuji sebagai akronim
+    (mis. "Himpunan Surabaya" dari nama 14 kata = BUKAN akronim, hanya
+    potongan teks).
+    """
+    abbr_words = [w.lower() for w in _words(abbr) if w.lower() not in ABBR_STOPWORDS]
+    full_words = [w.lower() for w in _words(full) if w.lower() not in ABBR_STOPWORDS]
+    if len(abbr_words) < 2:
         return False
-    full_words = re.sub(r"[^a-zA-Z\s]", "", full).lower().split()
-    if len(full_words) < 2 or len(full_words) > len(abbr_clean) * 3:
+    if len(full_words) < 2 or len(abbr_words) / len(full_words) < 0.3:
         return False
-    i = 0
-    for word in full_words:
-        if not word:
-            continue
-        if i < len(abbr_clean) and word[0] == abbr_clean[i]:
-            i += 1
-    return i >= len(abbr_clean) * 0.5
+    abbr_letters = "".join(abbr_words)
+    full_letters = "".join(full_words)
+    if not abbr_letters or len(full_letters) <= len(abbr_letters):
+        return False
+    # Akronim sejati jauh lebih pendek dari nama penuh (rasio huruf kecil).
+    # Potongan OCR/parsial hampir sepanjang nama penuh (rasio ~0.7+) -> bukan akronim.
+    if len(abbr_letters) / len(full_letters) > 0.6:
+        return False
+    # Parsial kontigu (kata abbr muncul berurutan sebagai substring full) =
+    # containment, bukan akronim -> biarkan fuzzy/contains yang menangani.
+    if " ".join(abbr_words) in " ".join(full_words):
+        return False
+    j = 0
+    for c in full_letters:
+        if j < len(abbr_letters) and c == abbr_letters[j]:
+            j += 1
+    return j >= len(abbr_letters)
 
 
 def abbreviation_match(expected: str, actual: str | None) -> bool:
@@ -136,12 +166,19 @@ def match_field(expected: str, actual: str | None, field_name: str) -> dict:
     norm_act = normalize_value(actual)
     w = wer_score(norm_exp, norm_act)
     c = cer_score(norm_exp, norm_act)
-    fuzzy = contains or overlap >= 0.5
 
-    if not fuzzy and field_name in ("penyelenggara_kegiatan", "nama_kegiatan_sertifikasi"):
-        if abbreviation_match(expected, actual):
-            fuzzy = True
+    is_org_like = field_name in ("penyelenggara_kegiatan", "nama_kegiatan_sertifikasi")
+    abbr = abbreviation_match(expected, actual) if is_org_like else False
+
+    if is_org_like:
+        # Threshold organizer dinaikkan 0.5 -> 0.75: overlap 0.67 terbukti false
+        # positive (BEM FEB UNAIR vs BEM FKM UNAIR = 0.67 tapi beda org), sementara
+        # overlap 0.75+ umumnya organizer yang benar. Akronim-valid menaikkan exact.
+        fuzzy = contains or abbr or overlap >= 0.75
+        if abbr:
             exact = True
+    else:
+        fuzzy = contains or overlap >= 0.5
 
     return {
         "exact": exact,

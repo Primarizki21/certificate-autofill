@@ -23,6 +23,12 @@
 | **LLM-001** | Prompt `g_evidence` (minta bukti singkat sebelum jawaban) | Tingkat turun (75.7% vs f_bias 82.4%). | CLOSED — regresi (v8 P3) | Perlu struktur output yang lebih ketat; replay setelah LLM lebih mampu follow structured format |
 | **LLM-002** | Layout representation (markdown/annotation) dimasukkan ke prompt | Tingkat 77.0%/78.4% (< f_bias 82.4%); OCR-bound (25/74 berteks embedded). | CLOSED — ditolak (v8 P4) | Hanya kalau OCR kualitas naik drastis |
 | **LLM-003** | Per-field LLM (A1) / full-text (A2 v2) untuk semua field | A1: tingkat 47.3%, 834 tok/cert, 125 calls. A2: MACRO 58.3% tapi tingkat 36.5%, 834 tok. | CLOSED — superseded oleh tingkat-only hybrid | Sudah digantikan pipeline v7/v8 (router + tingkat-only); tetap jadi referensi MACRO tinggi |
+| **ORG-001** | Organizer normalization di `organizer_extractor_v2.py` (abbreviation map, strip institusi induk, trailing-context, merged tokens, signer EN roles) | Organizer exact **16.2% → 33.8%** (full LLM benchmark v8), fuzzy **59.5% → 82.4%**, tingkat **82.4% → 83.8%**, MACRO **55.2% → 58.9%**, 176 tok/cert, 29 calls. Full benchmark PASS. | **PASS** — semua gate met, no-regress | Sudah dipromosikan ke eksperimen; produksi butuh keputusan user. Efek samping: organizer_v2 bersih bisa menghilangkan signal router (`dept`/`luar`) → di-fix ROUTER-003 |
+| **ROUTER-001** | Router expansion: naive `univ&!fak&!sem&!lomba→Univ`, `hima&!luar→Departemen`, `fak&!univ→Fakultas` | Precision turun ke 78.2% (12 salah) — rule naive terlalu agresif, `univ` fire pada "Universitas Airlangga" induk & `hima` fire pada raw-text. | **FAIL** — gate precision ≥95% tidak tercapai | Re-try hanya dengan signal yang diperketat (org-level, exclude BEM/hima-raw) |
+| **ROUTER-002** | Router expansion data-driven: `bem_no_univ`, `bem+hima`, `sem+univ` (org-level signals) | Router coverage **36→42/74 @100% precision**, 0 salah. | **PASS** — coverage naik, precision ≥95% terjaga | Bagian dari pipeline v9 (dengan ROUTER-003) |
+| **ROUTER-003** | Router `dept`/`luar` signal dari raw_text (OR dengan organizer) — fix efek samping organizer_v2 | Router coverage **42→45/74 @100%**, pull balik 3 cert (Ananda×2 dept+fak, NIC hima+luar) yang hilang signal-nya karena organizer_v2 bersih. Full benchmark: tingkat 83.8%, 29 calls. | **PASS** — coverage +3, precision tetap 100% | Dipertahankan; guard: `luar` dari raw_text terbatas daftar universitas eksternal (tidak menangkap fakultas internal) |
+| **METRO-001** | Matcher evaluasi v1 `is_abbreviation_of` (threshold salah: hitung inisial-kata vs 0.5×panjang string) + fuzzy `token_overlap ≥0.5` | False positive ganda: `BEM FEB UNAIR` vs `BEM FKM UNAIR`/`BEM FEB UGM`/`BEM FEB UPNVJT` dikredit exact/fuzzy (0.67) padahal beda org. Organizer exact 33.8% ter-diskon (akronim valid tak pernah exact). | CLOSED — diganti matcher v2 (handoff v12) | Tidak ada — matcher v2 (subsequence huruf + rasio kata ≥0.3 + rasio huruf ≤0.6 + tolak parsial kontigu) |
+| **METRO-002** | GT v8 inconsistency (organizer): `Kementriann` typo, `Akuntasi` typo, `FIT_Faiz Informatioon` typo, `NIC_Faiz` kurang spesifik | GT v9 dibuat: 5 organizer fixes (3 typo + NIC lebih spesifik + hakim_lomba Akuntasi). Tingkat tak tersentuh → 83.8% stabil. | CLOSED — GT v9 frozen, v8 tetap acuan historis | Tidak ada — GT v9 + matcher v2 = baseline evaluasi baru |
 
 ---
 
@@ -33,10 +39,10 @@
 3. Kolom `Re-try condition` = kondisi eksplisit yang membuat pendekatan layak
    dicoba ulang. Jika tidak ada, tulis "tidak ada".
 4. Commit bersama kode eksperimen & update `runs_summary.md` (workflow B9-B11).
-5. Referensi detail: `docs/handoff_v10.md` + `docs/report/runs_summary.md`.
+5. Referensi detail: `docs/handoff_v12.md` + `docs/report/runs_summary.md`.
 
 ## Hubungan dengan dokumen lain
 
-- `handoff_v10.md` = **open frontier** (baseline + hipotesis terbuka).
+- `handoff_v12.md` = **open frontier** (supersedes v11) (baseline + hipotesis terbuka).
 - `runs_summary.md` = **angka terukur** (semua run).
 - `experiments_ledger.md` (ini) = **closed list** (yang sudah dicoba & ditutup).

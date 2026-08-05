@@ -158,7 +158,11 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
    `int` setelah "v", jangan sort lexicographic) — plan + open frontier.
 3. Baca `docs/report/runs_summary.md` — angka terukur semua run.
 4. Baca `docs/experiments_ledger.md` — closed/failed approaches (JANGAN dilewatkan).
-5. Kunci baseline dari runs_summary; pastikan `Ground_Truth_Sertifikat_v8.csv` frozen.
+5. Kunci baseline dari runs_summary; baseline evaluasi = `Ground_Truth_Sertifikat_v9.csv`
+   (GT v9 = handoff v12, 5 organizer fixes) + matcher v2 (`tests/matchers.py`).
+   `Ground_Truth_Sertifikat_v8.csv` tetap frozen sebagai acuan historis; raw
+   `Ground_Truth_Sertifikat.csv` = history, JANGAN diubah. Run benchmark baru
+   WAJIB `GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`.
 6. Kode: `codegraph_explore` on-demand (bukan baca semua file).
 
 ### Loop eksperimen (per eksperimen)
@@ -204,7 +208,9 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 | Hybrid + post-processing | 48.1% | 66.1% | 0 | v3 |
 | Hybrid + LLM (A2 v2 full-text) | 58.3% | 74.5% | 74 | v4 |
 | v7 P4 e_hybrid + router | 54.2% | — | 39 | tingkat 77.0% |
-| **v8 f_bias + router (current)** | **55.2%** | — | **35** | **tingkat 82.4%**, 214 eff tok/cert |
+| v8 f_bias + router | 55.2% | — | 35 | tingkat 82.4%, 214 eff tok/cert |
+| **v9 organizer_v2 + router (current)** | **58.9%** | 76.8% | **29** | **tingkat 83.8%**, 176 eff tok/cert |
+| v9 re-baseline GT v9 + matcher v2 | **60.2%** | 74.2% | 29 | metrologi handoff v12 (matcher jujur) |
 
 > **Angka otoritatif:** handoff terbaru + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
 

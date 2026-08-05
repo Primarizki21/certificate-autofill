@@ -1,0 +1,17 @@
+GT v9 DIFF (v8 -> v9)
+============================================================
+
+AQEEL_Seminar.pdf
+  'Kementriann Komunikasi dan Informatika Republik Indonesia dan Gerakan Nasional Literasi Digital Siberkreasi' -> 'Kementerian Komunikasi dan Informatika Republik Indonesia dan Gerakan Nasional Literasi Digital Siberkreasi'
+
+Piagam HIMA S1-AK 2025-compressed_69.pdf
+  'Himpunan Mahasiswa S-1 Akuntasi' -> 'Himpunan Mahasiswa S-1 Akuntansi'
+
+hakim_lomba.png
+  'Himpunan Mahasiswa Akuntasi Universitas Airlangga' -> 'Himpunan Mahasiswa Akuntansi Universitas Airlangga'
+
+FIT_Faiz.pdf
+  'Informatics Engineering, Faculty of Informatioon Technology' -> 'Informatics Engineering, Faculty of Information Technology'
+
+NIC_Faiz.pdf
+  'Himpunan Mahasiswa UNIMUS' -> 'Himpunan Mahasiswa Statistika UNIMUS'

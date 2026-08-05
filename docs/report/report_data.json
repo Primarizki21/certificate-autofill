@@ -17,7 +17,8 @@
       "calls": 125,
       "gt": "raw",
       "date": "Jul 30",
-      "notes": "per-field LLM, Phase v4"
+      "notes": "per-field LLM, Phase v4",
+      "is_winner": false
     },
     {
       "id": "v4_a2",
@@ -30,7 +31,8 @@
       "calls": 74,
       "gt": "raw",
       "date": "Jul 30",
-      "notes": "full-text LLM, Phase v4"
+      "notes": "full-text LLM, Phase v4",
+      "is_winner": false
     },
     {
       "id": "v6_b",
@@ -43,7 +45,8 @@
       "calls": 74,
       "gt": "raw",
       "date": "Jul 31",
-      "notes": "context + minimized text"
+      "notes": "context + minimized text",
+      "is_winner": false
     },
     {
       "id": "v7_p3",
@@ -56,7 +59,8 @@
       "calls": 42,
       "gt": "raw",
       "date": "Aug 3",
-      "notes": "rule-based router, LLM calls -43%"
+      "notes": "rule-based router, LLM calls -43%",
+      "is_winner": false
     },
     {
       "id": "v7_p4",
@@ -70,7 +74,7 @@
       "router": "35/74 @100%",
       "gt": "raw",
       "date": "Aug 3",
-      "is_winner": true,
+      "is_winner": false,
       "notes": "merged-lomba router; baseline run run_llm_v4_20260803_113310"
     },
     {
@@ -86,7 +90,7 @@
       "router": "39/74 @100%",
       "gt": "fixed_v8",
       "date": "Aug 4",
-      "is_winner": true,
+      "is_winner": false,
       "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_115212 (GT final)"
     },
     {
@@ -101,7 +105,8 @@
       "calls": 0,
       "gt": "fixed_v8",
       "date": "Aug 4",
-      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 18.4% (naik vs baseline 14.3%), nomor 39.4% (turun vs 57.6%), dates 80-83%, MACRO 39.8% (turun vs 44.3%). Latency 7.1 s/cert (PASS <2x). Korpus 74/74 ok; process-per-cert + RLIMIT_AS (paddle 3.7 gagal viabilitas: 3.8GB RSS/cert, OOM di WSL 8GB)."
+      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 18.4% (naik vs baseline 14.3%), nomor 39.4% (turun vs 57.6%), dates 80-83%, MACRO 39.8% (turun vs 44.3%). Latency 7.1 s/cert (PASS <2x). Korpus 74/74 ok; process-per-cert + RLIMIT_AS (paddle 3.7 gagal viabilitas: 3.8GB RSS/cert, OOM di WSL 8GB).",
+      "is_winner": false
     },
     {
       "id": "ocr_a_easycpu",
@@ -115,7 +120,8 @@
       "calls": 0,
       "gt": "fixed_v8",
       "date": "Aug 4",
-      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 20.4% (terbaik semua engine), nomor 15.2% (paling buruk; downscale 960 merusak digit), dates 74-77%, MACRO 34.3%. Latency 12.7 s/cert."
+      "notes": "GATE FAIL — tidak diadopsi. Field-eval subset scan (exact): organizer 20.4% (terbaik semua engine), nomor 15.2% (paling buruk; downscale 960 merusak digit), dates 74-77%, MACRO 34.3%. Latency 12.7 s/cert.",
+      "is_winner": false
     },
     {
       "id": "ocr_a_easygpu",
@@ -129,7 +135,40 @@
       "calls": 0,
       "gt": "fixed_v8",
       "date": "Aug 4",
-      "notes": "GATE FAIL — GPU TIDAK diadopsi (bukan hasil terbaik; prioritas user = CPU). Field-eval subset scan (exact): organizer 16.3%, nomor 33.3%, dates 80-83%, MACRO 39.3%. Latency 9.7 s/cert (termasuk CUDA init per-cert-process)."
+      "notes": "GATE FAIL — GPU TIDAK diadopsi (bukan hasil terbaik; prioritas user = CPU). Field-eval subset scan (exact): organizer 16.3%, nomor 33.3%, dates 80-83%, MACRO 39.3%. Latency 9.7 s/cert (termasuk CUDA init per-cert-process).",
+      "is_winner": false
+    },
+    {
+      "id": "v9_final",
+      "phase": "v9",
+      "label": "v9 organizer_v2 + router fix",
+      "variant": "f_bias",
+      "run_dir": "tests/benchmark_runs/run_llm_v4_20260805_163541",
+      "tingkat": "83.8%",
+      "macro": "58.9%",
+      "tokens_cert": 176,
+      "calls": 29,
+      "router": "42/74 @100%",
+      "gt": "v8",
+      "date": "Aug 5",
+      "is_winner": true,
+      "notes": "organizer_v2 + data-driven router; GT v8"
+    },
+    {
+      "id": "v9_reval_v12",
+      "phase": "v12",
+      "label": "v9 winner re-baseline (GT v9 + matcher v2)",
+      "variant": "f_bias",
+      "run_dir": "tests/benchmark_runs/run_llm_v4_20260805_163541",
+      "tingkat": "83.8%",
+      "macro": "60.2%",
+      "tokens_cert": 176,
+      "calls": 29,
+      "router": "42/74 @100%",
+      "gt": "v9",
+      "date": "Aug 5",
+      "is_winner": false,
+      "notes": "handoff v12: GT v9 (5 organizer fixes) + matcher v2 (abbr subsequence, anti-false-positive). MACRO exact 58.9->60.2%, organizer 33.8->39.2%. Metrologi, bukan eksperimen baru."
     }
   ],
   "documents": {
