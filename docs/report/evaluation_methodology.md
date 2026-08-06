@@ -379,3 +379,5 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | v9 organizer_v2 + router fix | 83.8% | 58.9% | 176 | 29 | 42/74 @100% | v8 |
 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 42/74 @100% | v9 |
 | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% | 0 | 0 | - | v9 |
+| OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 |
+| HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 |

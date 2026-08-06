@@ -184,6 +184,36 @@
       "date": "Aug 6",
       "notes": "GATE PASS vs baseline rapid_tess 49 scan (GT v9): nomor 57.6%->60.6% (+3.0pt, Falcon_Faiz XI1->XII = GT), dates 85.7% (=), organizer 20.4%/61.2% (=), MACRO 45.8->46.3%. Anchor SEMANTIK (baris NOMOR/pola via bbox RapidOCR) + re-render region PDF zoom 6x (piksel nyata utk scan native dpi>216, 33/49) + merge voting-disagreement; TANPA hardcode koordinat. Ver1 upscale digital (LANCZOS) = 0 gain. anchor_miss 22/49, +5.2s/cert. Integrasi produksi: lazy (hanya saat nomor baseline hilang/low-conf).",
       "is_winner": false
+    },
+    {
+      "id": "ocr_006_doctr",
+      "phase": "ocr",
+      "label": "OCR-006 DocTR probe (mobilenet CPU, 10 scan)",
+      "variant": "doctr_probe",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/probe_doctr",
+      "tingkat": "n/a",
+      "macro": "40.0%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 6",
+      "notes": "GATE FAIL — nomor. Like-for-like 10 stem (GT v9 + matcher v2): DocTR nomor 14.3% vs baseline rapid_tess 28.6% (digit hancur: 106/STF.E/HOLOGY7.0/x1t/2024 -> 6/ST:E/-LG7.X1/2o), dates 88.9% (=), organizer exact 0%/fuzzy 70% vs 60% (naik). 10/10 ok, RSS ~1.3GB/cert, ~7.5s/cert. Full replacement ditutup -> hybrid per-field (HYB-001).",
+      "is_winner": false
+    },
+    {
+      "id": "hyb_001",
+      "phase": "ocr",
+      "label": "HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor)",
+      "variant": "doctr_hybrid",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/corpus_doctr",
+      "tingkat": "n/a",
+      "macro": "46.8%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 6",
+      "notes": "GATE PASS — merge per-field DocTR(dates+organizer)+baseline rapid_tess(nomor), GT v9 + matcher v2, 49 scan: organizer 20.4%/61.2% -> 24.5%/65.3%, nomor 57.6% (=), dates 85.7% (=), MACRO 45.8% -> 46.8%. Embedded 25 no-regress (fallback baseline). Oracle = hybrid (rule merge optimal). Cost +~7.5s/cert (DocTR). Integrasi produksi: SKIP rekomendasi (gain tersebar, lazy lemah, full mahal).",
+      "is_winner": false
     }
   ],
   "documents": {

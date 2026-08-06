@@ -96,6 +96,33 @@ self-check → anchor + merge rules ok. Produksi & GT tak disentuh.
 
 ---
 
+## Addendum — Konsistensi laporan lengkap (pasca-audit user)
+
+Audit konsistensi 4 sumber (ledger / runs_summary / handoff / report_data-docx)
+menemukan: report_data.json kurang entri **OCR-006** (DocTR probe) dan
+**HYB-001** (hybrid) → docx report tak memuat seluruh eksperimen. Diperbaiki:
+
+1. `docs/report/report_data.json` — +`ocr_006_doctr` (macro 40.0%) +
+   `hyb_001` (macro 46.8%), angka persis dari ledger/handoff → **14 eksperimen**.
+2. `baseline_rapid_tess/eval.json` ← re-eval segar GT v9 + matcher v2
+   (sebelumnya stale 44.3%/org 14.3% → kini 45.8%/org 20.4%, konsisten dgn
+   handoff/HYB/NC-001).
+3. `scripts/generate_runs_summary.py` — scan_ocr_trials kini juga membaca
+   `eval_hybrid_*.json` → row `[hybrid_10]` 42.2% + `[hybrid_49]` 46.8%
+   tampil di runs_summary (sebelumnya hanya DocTR-only 43.3%).
+4. `scripts/generate_report.py` — **styling docx**: header tabel indigo
+   `1F3864` + teks putih, border lembut, baris selang-seling, highlight baris
+   pemenang (progression), heading berwarna accent — profesional, tak
+   mengganggu baca.
+5. Regenerate report (docx + md + xlsx) + runs_summary → docx kini memuat
+   **seluruh 14 eksperimen** (comparison/progression/results).
+
+Keputusan user: trial easy/paddle tetap historis (konsisten dgn ledger
+OCR-002..004), hanya baseline referensi yang dibenahi. Docx **di-commit**
+kali ini (deliverable report konsisten dgn source-of-truth report_data).
+
+---
+
 ## Key Files
 
 | File | Peran |

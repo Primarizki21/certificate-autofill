@@ -252,6 +252,26 @@ def scan_ocr_trials() -> list[dict]:
                 f"scan org {_pct(org)} nomor {_pct(nom)}"
             )
         recs.append(rec)
+        # Variant eval (mis. HYB-001 hybrid per-field) di korpus yang sama:
+        # eval_hybrid_*.json -> emit row terpisah agar hasil variant tampil.
+        try:
+            hfiles = sorted(f for f in os.listdir(d) if f.startswith("eval_hybrid") and f.endswith(".json"))
+        except OSError:
+            hfiles = []
+        for hname in hfiles:
+            hev = _load(os.path.join(d, hname))
+            hm = (hev or {}).get("hybrid") or {}
+            if not hm:
+                continue
+            hrec = dict(rec)
+            hrec["run_dir"] = f"ocr_experiment/{name} [{hname.replace('eval_', '').replace('.json', '')}]"
+            hrec["model"] = "rapid_tess+doctr"
+            hrec["macro"] = _pct((hm.get("macro_avg") or {}).get("exact_acc"))
+            org = (hm.get("penyelenggara_kegiatan") or {}).get("exact_acc")
+            nom = (hm.get("nomor_bukti_fisik_nomor_sertifikasi") or {}).get("exact_acc")
+            hrec["notes"] = (f"HYB-001 hybrid (DocTR dates+organizer / baseline nomor); "
+                             f"org {_pct(org)} nomor {_pct(nom)}")
+            recs.append(hrec)
     return recs
 
 

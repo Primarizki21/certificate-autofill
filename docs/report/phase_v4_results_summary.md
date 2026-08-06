@@ -142,3 +142,5 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 | v9 | v9 organizer_v2 + router fix ** | 83.8% | 58.9% |
 | v12 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% |
 | ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
+| ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
+| ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
