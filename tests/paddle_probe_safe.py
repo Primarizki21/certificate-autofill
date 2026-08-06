@@ -134,6 +134,10 @@ def _child(args) -> int:
                 t0 = time.perf_counter()
                 oe._get_paddle()
                 report["model_init_s"] = round(time.perf_counter() - t0, 2)
+            elif args.engine == "doctr":
+                t0 = time.perf_counter()
+                oe._load_doctr()
+                report["model_init_s"] = round(time.perf_counter() - t0, 2)
             texts = []
             for png in _render_pages(pdf_bytes, args.zoom):
                 if args.max_side > 0:
@@ -240,7 +244,7 @@ def _parent(args) -> int:
 def main() -> None:
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument("--path", required=True, help="file PDF/PNG utk di-probe")
-    p.add_argument("--engine", default="paddle", choices=["paddle", "rapid", "rapid_tess", "tess", "easy"])
+    p.add_argument("--engine", default="paddle", choices=["paddle", "rapid", "rapid_tess", "tess", "easy", "doctr"])
     p.add_argument("--zoom", type=float, default=3.0)
     p.add_argument("--max-side", type=int, default=0, help="0 = tanpa downscale; >0 = cap sisi terpanjang px")
     p.add_argument("--threads", type=int, default=4)

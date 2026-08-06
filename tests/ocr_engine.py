@@ -47,7 +47,13 @@ ENGINE_INFO: dict[str, tuple[str, bool]] = {
     "tess": ("tesseract binary", True),
     "paddle": ("paddleocr (uv run --with)", True),
     "rapid_tess": ("rapidocr + tesseract", True),
+    "doctr": ("python-doctr (uv run --with)", False),
 }
+
+# DocTR arch (CPU-friendly, handoff OCR-005): db_mobilenet_v3_large +
+# crnn_mobilenet_v3_small — keluarga model baru, Latin out-of-box.
+DOCTR_DET_ARCH = "db_mobilenet_v3_large"
+DOCTR_RECO_ARCH = "crnn_mobilenet_v3_small"
 
 
 def _tesseract_available() -> bool:
@@ -125,6 +131,47 @@ def _get_paddle():
                 kwargs.pop("use_angle_cls", None)
                 _paddle_engine = PaddleOCR(**kwargs)
     return _paddle_engine
+
+
+_doctr_engine = None
+
+
+def _load_doctr():
+    global _doctr_engine
+    if _doctr_engine is None:
+        import torch
+        # WSL 8GB: default torch CPU = 1 thread per core (16+) → arena
+        # malloc per thread bikin RLIMIT_AS cap (4GB) jebol saat inferens.
+        # Batasi seragam (halo juga OMP/MKL_NUM_THREADS dari probe).
+        torch.set_num_threads(1)
+        from doctr.models import ocr_predictor
+        _doctr_engine = ocr_predictor(
+            det_arch=DOCTR_DET_ARCH,
+            reco_arch=DOCTR_RECO_ARCH,
+            pretrained=True,
+            assume_straight_pages=True,
+            preserve_aspect_ratio=True,
+            symmetric_pad=True,
+            detect_orientation=False,
+        ).to(device="cpu")
+    return _doctr_engine
+
+
+def ocr_doctr(image_bytes: bytes) -> str:
+    """DocTR (mindee) — engine CPU ringan (mobilenet), layout-aware.
+
+    Harness eksperimen OCR-005: DocTR = kandidat pengganti RapidOCR+Tesseract.
+    Memakai `result.render()` (baris per newline, kata per spasi) agar
+    field_extractor bisa memproses sama seperti engine lain.
+    """
+    import numpy as np
+    engine = _load_doctr()
+    img = np.array(Image.open(BytesIO(image_bytes)).convert("RGB"))
+    try:
+        result = engine([img])
+    except Exception:
+        return ""
+    return result.render().strip()
 
 
 def _read_image(image_bytes: bytes) -> Image.Image:
@@ -226,6 +273,7 @@ ENGINES: dict[str, Callable[[bytes], str]] = {
     "tess": ocr_tess,
     "paddle": ocr_paddle,
     "easy": ocr_easy,
+    "doctr": ocr_doctr,
 }
 
 
