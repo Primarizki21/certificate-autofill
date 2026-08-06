@@ -34,6 +34,7 @@ import resource
 import sys
 import time
 from io import BytesIO
+from typing import Callable
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "backend"))
@@ -83,8 +84,22 @@ def find_number_line(items: list) -> list | None:
     return None
 
 
+# NC-002: region-OCR MURAH — tes mana yg pertahankan recovery nomor NC-001
+# (rapid_tess = control ~5.2s/cert) dgn cost <<. Pilih via --region-engine.
+_REGION_ENGINES: dict[str, Callable[[bytes], str]] = {
+    "rapid_tess": lambda b: oe.ocr_engine("rapid_tess", b),
+    "rapid": lambda b: oe.ocr_engine("rapid", b),
+    "rapid_tess_psm13": lambda b: oe.merge_unique_lines(
+        [oe.ocr_engine("rapid", b), oe.ocr_tess_psm(b, 13)]
+    ),
+    "tess_psm6": lambda b: oe.ocr_tess_psm(b, 6),
+    "tess_psm13": lambda b: oe.ocr_tess_psm(b, 13),
+}
+REGION_ENGINE_KEY = "rapid_tess"
+
+
 def ocr_region(png_bytes: bytes) -> str:
-    return oe.ocr_engine("rapid_tess", png_bytes)
+    return _REGION_ENGINES[REGION_ENGINE_KEY](png_bytes)
 
 
 def merge_full(baseline_text: str, crop_text: str) -> str:
@@ -148,6 +163,8 @@ def _crop_number_from_pdf(path: str, rapid) -> str:
 
 
 def cmd_build(args) -> dict:
+    global REGION_ENGINE_KEY
+    REGION_ENGINE_KEY = args.region_engine
     manifest = _load_manifest()
     classification = classify_manifest(manifest)
     run_root = args.out or os.path.join(RUNS_DIR, "corpus_nomor_crop")
@@ -199,6 +216,7 @@ def cmd_build(args) -> dict:
 
     meta = {
         "engine": "nomor_crop",
+        "region_engine": REGION_ENGINE_KEY,
         "created": time.strftime("%Y-%m-%dT%H:%M:%S"),
         "subset": "scan",
         "zoom": ZOOM,
@@ -267,6 +285,11 @@ def main() -> None:
         b.add_argument("--csv", default=DEFAULT_GT, help="GT CSV (default v9)")
         b.add_argument("--skip-existing", action="store_true")
         b.add_argument("--mem-cap-gb", type=float, default=6.5)
+        b.add_argument(
+            "--region-engine", default="rapid_tess",
+            choices=sorted(_REGION_ENGINES),
+            help="OCR utk region nomor (NC-002: murah vs control rapid_tess)",
+        )
         b.set_defaults(fn=fn)
     args = p.parse_args()
     args.fn(args)

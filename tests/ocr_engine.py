@@ -213,6 +213,20 @@ def ocr_tess(image_bytes: bytes) -> str:
     return "\n".join(lines)
 
 
+def ocr_tess_psm(image_bytes: bytes, psm: int) -> str:
+    """Tesseract SATU PSM — region-OCR murah (NC-002). psm 6 (block) / 13 (raw
+    line). Kontras dgn ocr_tess (3 config digabung, ~2-10s utk region)."""
+    if not _tesseract_available():
+        return ""
+    import pytesseract
+    image = _read_image(image_bytes)
+    try:
+        text = pytesseract.image_to_string(image, lang="ind+eng", config=f"--psm {psm}").strip()
+    except Exception:
+        text = pytesseract.image_to_string(image, lang="eng", config=f"--psm {psm}").strip()
+    return text
+
+
 def ocr_paddle(image_bytes: bytes) -> str:
     engine = _get_paddle()
     # PaddleOCR `ocr()` hanya menerima numpy.ndarray / path file — tulis PNG
