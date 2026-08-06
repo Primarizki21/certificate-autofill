@@ -148,7 +148,7 @@
       "macro": "58.9%",
       "tokens_cert": 176,
       "calls": 29,
-      "router": "42/74 @100%",
+      "router": "45/74 @100%",
       "gt": "v8",
       "date": "Aug 5",
       "is_winner": true,
@@ -164,7 +164,7 @@
       "macro": "60.2%",
       "tokens_cert": 176,
       "calls": 29,
-      "router": "42/74 @100%",
+      "router": "45/74 @100%",
       "gt": "v9",
       "date": "Aug 5",
       "is_winner": false,
@@ -213,6 +213,21 @@
       "gt": "v9",
       "date": "Aug 6",
       "notes": "GATE PASS — merge per-field DocTR(dates+organizer)+baseline rapid_tess(nomor), GT v9 + matcher v2, 49 scan: organizer 20.4%/61.2% -> 24.5%/65.3%, nomor 57.6% (=), dates 85.7% (=), MACRO 45.8% -> 46.8%. Embedded 25 no-regress (fallback baseline). Oracle = hybrid (rule merge optimal). Cost +~7.5s/cert (DocTR). Integrasi produksi: SKIP rekomendasi (gain tersebar, lazy lemah, full mahal). [PASCA-PROMOSI v9] Re-eval konteks produksi baru: hybrid 49-stem 46.8->49.2% (org 26.5->34.7%), embedded 52.3% no-regress. Integrasi produksi: SKIP rekomendasi (gain tersebar, DocTR +7.5s/cert).",
+      "is_winner": false
+    },
+    {
+      "id": "nc_002",
+      "phase": "ocr",
+      "label": "NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor",
+      "variant": "region_cheap",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/corpus_nomor_cheap_rapid",
+      "tingkat": "n/a",
+      "macro": "47.3%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 6",
+      "notes": "GATE FAIL — region-OCR murah tidak mempertahankan recovery NC-001. 4 varian vs control rapid_tess 60.6%: rapid 54.5% (regress, 6.3s), tess_psm13 57.6% (=baseline, 4.3s), tess_psm6 57.6% (=baseline), rapid+tess_psm13 54.5% (regress, 6.2s). Recovery +3pt melekat ke multi-config tess (psm '',6,11); psm tunggal = perilaku rapid-only. Latency floor ~4.3s didominasi anchor full-page + region re-render, bukan OCR region. Garis OCR nomor ditutup.",
       "is_winner": false
     }
   ],
@@ -4670,6 +4685,130 @@
       {
         "t": "h2",
         "x": "Progression (tingkat exact, router on)"
+      },
+      {
+        "t": "h1",
+        "x": "Handoff v9–v17 Addendum — Production Promotion & OCR Line"
+      },
+      {
+        "t": "h2",
+        "x": "v9 winner: organizer_v2 + router (ORG-001, ROUTER-002/003)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Metric",
+            "v8 f_bias",
+            "v9 organizer_v2 + router",
+            "v9 re-baseline (GT v9 + matcher v2)"
+          ],
+          "r": [
+            [
+              "Tingkat exact",
+              "82.4%",
+              "83.8%",
+              "83.8%"
+            ],
+            [
+              "MACRO exact",
+              "55.2%",
+              "58.9%",
+              "60.2%"
+            ],
+            [
+              "Eff tok/cert",
+              "214",
+              "176",
+              "176"
+            ],
+            [
+              "LLM calls",
+              "35",
+              "29",
+              "29"
+            ],
+            [
+              "Router coverage @100% precision",
+              "39/74",
+              "45/74",
+              "45/74"
+            ],
+            [
+              "Organizer exact",
+              "33.8%",
+              "33.8%",
+              "39.2%"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "p",
+        "x": "v9 (handoff v13): organizer_v2 + data-driven router ROUTER-002/003. Re-baseline GT v9 + matcher v2 (handoff v12) adalah metrologi jujur — MACRO 58.9% → 60.2%, organizer 33.8% → 39.2%."
+      },
+      {
+        "t": "h2",
+        "x": "Production promotion — PROD-001 (v9 ke backend/app/services/)"
+      },
+      {
+        "t": "p",
+        "x": "organizer_v2.py + tingkat_router.py di-port dari tests/ ke produksi. Re-eval semua korpus di bawah konteks produksi (GT v9 + matcher v2): baseline rapid_tess scan MACRO 45.8 → 47.3%, organizer 20.4 → 26.5%, nomor 57.6% no-regress. pytest 31 passed; smoke pipeline 1 cert ok. Trial OCR lain (easy/paddle) ikut naik karena organizer_v2 — angka historis di ledger tetap."
+      },
+      {
+        "t": "h2",
+        "x": "OCR exploration — bottleneck nomor sertifikat (line ditutup)"
+      },
+      {
+        "t": "table",
+        "x": {
+          "h": [
+            "Experiment",
+            "Approach",
+            "Nomor scan (GT v9)",
+            "Verdict"
+          ],
+          "r": [
+            [
+              "OCR-005",
+              "Analisis 3 tool: DocTR / MMOCR / CnOCR",
+              "—",
+              "DocTR = kandidat (CnOCR redundant PP-OCR, MMOCR stale 2023)"
+            ],
+            [
+              "OCR-006",
+              "DocTR probe (mobilenet CPU, 10 scan)",
+              "14.3% (like-for-like 28.6%)",
+              "FAIL — digit nomor hancur"
+            ],
+            [
+              "HYB-001",
+              "Hybrid per-field DocTR(dates+org) / baseline(nomor)",
+              "57.6% (= baseline)",
+              "PASS — organizer +4.1pt, cost +7.5s/cert; tidak diintegrasikan"
+            ],
+            [
+              "NC-001",
+              "Re-render region zoom 6x + re-OCR rapid_tess (disagreement)",
+              "60.6% (+3.0pt)",
+              "PASS — cost +5.2s/cert; flag OFF"
+            ],
+            [
+              "NC-002",
+              "Region-OCR murah (rapid / tess psm6/13 tunggal)",
+              "max 57.6% (= baseline)",
+              "FAIL — recovery melekat ke multi-config tess"
+            ]
+          ]
+        }
+      },
+      {
+        "t": "h2",
+        "x": "Current production status"
+      },
+      {
+        "t": "p",
+        "x": "ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallback.py tapi keputusan deploy-time (gain +3pt nomor dengan cost +2-10s/cert). No-regress di produksi. Garis penggantian engine OCR untuk nomor ditutup (PaddleOCR, EasyOCR, DocTR, region-OCR murah)."
       },
       {
         "t": "auto",

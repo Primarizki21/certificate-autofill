@@ -891,11 +891,12 @@ The table below lists all functions referenced in this document. Functions are l
 | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 | Aug 4 |
 | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
 | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
-| v9 organizer_v2 + router fix | 83.8% | 58.9% | 176 | 29 | 42/74 @100% | v8 | Aug 5 |
-| v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 42/74 @100% | v9 | Aug 5 |
+| v9 organizer_v2 + router fix | 83.8% | 58.9% | 176 | 29 | 45/74 @100% | v8 | Aug 5 |
+| v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 45/74 @100% | v9 | Aug 5 |
 | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% | 0 | 0 | - | v9 | Aug 6 |
 | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 | Aug 6 |
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 | Aug 6 |
+| NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 | Aug 6 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -913,3 +914,4 @@ The table below lists all functions referenced in this document. Functions are l
 | ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
 | ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
+| ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |

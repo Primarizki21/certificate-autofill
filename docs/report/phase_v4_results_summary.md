@@ -128,6 +128,39 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 
 ### Progression (tingkat exact, router on)
 
+## Handoff v9–v17 Addendum — Production Promotion & OCR Line
+
+### v9 winner: organizer_v2 + router (ORG-001, ROUTER-002/003)
+
+| Metric | v8 f_bias | v9 organizer_v2 + router | v9 re-baseline (GT v9 + matcher v2) |
+|---|---|---|---|
+| Tingkat exact | 82.4% | 83.8% | 83.8% |
+| MACRO exact | 55.2% | 58.9% | 60.2% |
+| Eff tok/cert | 214 | 176 | 176 |
+| LLM calls | 35 | 29 | 29 |
+| Router coverage @100% precision | 39/74 | 45/74 | 45/74 |
+| Organizer exact | 33.8% | 33.8% | 39.2% |
+
+v9 (handoff v13): organizer_v2 + data-driven router ROUTER-002/003. Re-baseline GT v9 + matcher v2 (handoff v12) adalah metrologi jujur — MACRO 58.9% → 60.2%, organizer 33.8% → 39.2%.
+
+### Production promotion — PROD-001 (v9 ke backend/app/services/)
+
+organizer_v2.py + tingkat_router.py di-port dari tests/ ke produksi. Re-eval semua korpus di bawah konteks produksi (GT v9 + matcher v2): baseline rapid_tess scan MACRO 45.8 → 47.3%, organizer 20.4 → 26.5%, nomor 57.6% no-regress. pytest 31 passed; smoke pipeline 1 cert ok. Trial OCR lain (easy/paddle) ikut naik karena organizer_v2 — angka historis di ledger tetap.
+
+### OCR exploration — bottleneck nomor sertifikat (line ditutup)
+
+| Experiment | Approach | Nomor scan (GT v9) | Verdict |
+|---|---|---|---|
+| OCR-005 | Analisis 3 tool: DocTR / MMOCR / CnOCR | — | DocTR = kandidat (CnOCR redundant PP-OCR, MMOCR stale 2023) |
+| OCR-006 | DocTR probe (mobilenet CPU, 10 scan) | 14.3% (like-for-like 28.6%) | FAIL — digit nomor hancur |
+| HYB-001 | Hybrid per-field DocTR(dates+org) / baseline(nomor) | 57.6% (= baseline) | PASS — organizer +4.1pt, cost +7.5s/cert; tidak diintegrasikan |
+| NC-001 | Re-render region zoom 6x + re-OCR rapid_tess (disagreement) | 60.6% (+3.0pt) | PASS — cost +5.2s/cert; flag OFF |
+| NC-002 | Region-OCR murah (rapid / tess psm6/13 tunggal) | max 57.6% (= baseline) | FAIL — recovery melekat ke multi-config tess |
+
+### Current production status
+
+ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallback.py tapi keputusan deploy-time (gain +3pt nomor dengan cost +2-10s/cert). No-regress di produksi. Garis penggantian engine OCR untuk nomor ditutup (PaddleOCR, EasyOCR, DocTR, region-OCR murah).
+
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
 | v4 | LLM A1 (per-field) | 47.3% | 49.0% |
@@ -144,3 +177,4 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 | ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
 | ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
+| ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
