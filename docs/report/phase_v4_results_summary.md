@@ -141,3 +141,4 @@ Net-zero on raw count because 1981676 went correct->wrong while 2954283 went wro
 | ocr | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% |
 | v9 | v9 organizer_v2 + router fix ** | 83.8% | 58.9% |
 | v12 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% |
+| ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |

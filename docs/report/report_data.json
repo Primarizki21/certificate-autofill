@@ -169,6 +169,21 @@
       "date": "Aug 5",
       "is_winner": false,
       "notes": "handoff v12: GT v9 (5 organizer fixes) + matcher v2 (abbr subsequence, anti-false-positive). MACRO exact 58.9->60.2%, organizer 33.8->39.2%. Metrologi, bukan eksperimen baru."
+    },
+    {
+      "id": "nc_001",
+      "phase": "ocr",
+      "label": "NC-001 nomor crop preprocessing (re-render region zoom 6x)",
+      "variant": "nomor_crop",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/corpus_nomor_crop",
+      "tingkat": "n/a",
+      "macro": "46.3%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 6",
+      "notes": "GATE PASS vs baseline rapid_tess 49 scan (GT v9): nomor 57.6%->60.6% (+3.0pt, Falcon_Faiz XI1->XII = GT), dates 85.7% (=), organizer 20.4%/61.2% (=), MACRO 45.8->46.3%. Anchor SEMANTIK (baris NOMOR/pola via bbox RapidOCR) + re-render region PDF zoom 6x (piksel nyata utk scan native dpi>216, 33/49) + merge voting-disagreement; TANPA hardcode koordinat. Ver1 upscale digital (LANCZOS) = 0 gain. anchor_miss 22/49, +5.2s/cert. Integrasi produksi: lazy (hanya saat nomor baseline hilang/low-conf).",
+      "is_winner": false
     }
   ],
   "documents": {

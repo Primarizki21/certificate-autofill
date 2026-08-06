@@ -50,6 +50,7 @@ run_ner_v1_20260730_095336,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,
 ocr_experiment/baseline_rapid,2026-08-04,ocr_trial,rapid,,fixed_v8,,,,—,42.8%,—,—,3488,scan=49 emb=25; scan org 16.3% nomor 54.5%
 ocr_experiment/baseline_rapid_tess,2026-08-04,ocr_trial,rapid_tess,,fixed_v8,,,,—,44.3%,—,—,8609,scan=49 emb=?; scan org 14.3% nomor 57.6%
 ocr_experiment/corpus_doctr,2026-08-06,ocr_trial,doctr,,fixed_v8,,,,—,43.3%,—,—,—,scan=49 emb=?; scan org 24.5% nomor 36.4%
+ocr_experiment/corpus_nomor_crop,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,46.3%,—,—,5231,scan=49 emb=?; scan org 20.4% nomor 60.6%
 ocr_experiment/probe_doctr,2026-08-06,ocr_trial,doctr,,fixed_v8,,,,—,40.0%,—,—,—,scan=None emb=?; scan org 10.0% nomor 14.3%
 ocr_experiment/trial_a_easyocr,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,34.3%,—,—,—,scan=49 emb=?; scan org 20.4% nomor 15.2%
 ocr_experiment/trial_a_easyocr_gpu,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,39.3%,—,—,9716,scan=49 emb=?; scan org 16.3% nomor 33.3%
