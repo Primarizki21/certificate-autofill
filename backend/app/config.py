@@ -21,6 +21,10 @@ class Settings:
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_docling: bool = os.getenv("ENABLE_DOCLING", "true").lower() == "true"
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
+    # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
+    # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur
+    # lazy (nomor hilang) = 0/18 gain; varian penuh ~+2-10s/cert utk +3pt.
+    enable_ocr_number_2pass: bool = os.getenv("ENABLE_OCR_NUMBER_2PASS", "false").lower() == "true"
     max_job_retries: int = int(os.getenv("MAX_JOB_RETRIES", "3"))
     processing_mode: str = os.getenv("PROCESSING_MODE", "background").lower()
     db_worker_poll_seconds: int = int(os.getenv("DB_WORKER_POLL_SECONDS", "2"))

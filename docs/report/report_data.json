@@ -152,7 +152,7 @@
       "gt": "v8",
       "date": "Aug 5",
       "is_winner": true,
-      "notes": "organizer_v2 + data-driven router; GT v8"
+      "notes": "organizer_v2 + data-driven router; GT v8 [PROD-001] Sudah dipromosikan ke produksi (organizer_v2 + tingkat_router) — pasca-promosi baseline rapid_tess scan: organizer 20.4->26.5%, MACRO 45.8->47.3%."
     },
     {
       "id": "v9_reval_v12",
@@ -182,7 +182,7 @@
       "calls": 0,
       "gt": "v9",
       "date": "Aug 6",
-      "notes": "GATE PASS vs baseline rapid_tess 49 scan (GT v9): nomor 57.6%->60.6% (+3.0pt, Falcon_Faiz XI1->XII = GT), dates 85.7% (=), organizer 20.4%/61.2% (=), MACRO 45.8->46.3%. Anchor SEMANTIK (baris NOMOR/pola via bbox RapidOCR) + re-render region PDF zoom 6x (piksel nyata utk scan native dpi>216, 33/49) + merge voting-disagreement; TANPA hardcode koordinat. Ver1 upscale digital (LANCZOS) = 0 gain. anchor_miss 22/49, +5.2s/cert. Integrasi produksi: lazy (hanya saat nomor baseline hilang/low-conf).",
+      "notes": "GATE PASS vs baseline rapid_tess 49 scan (GT v9): nomor 57.6%->60.6% (+3.0pt, Falcon_Faiz XI1->XII = GT), dates 85.7% (=), organizer 20.4%/61.2% (=), MACRO 45.8->46.3%. Anchor SEMANTIK (baris NOMOR/pola via bbox RapidOCR) + re-render region PDF zoom 6x (piksel nyata utk scan native dpi>216, 33/49) + merge voting-disagreement; TANPA hardcode koordinat. Ver1 upscale digital (LANCZOS) = 0 gain. anchor_miss 22/49, +5.2s/cert. Integrasi produksi: lazy (hanya saat nomor baseline hilang/low-conf). [INTEGRASI] Produksi: disagreement 2-pass di ocr_fallback.py, ENABLE_OCR_NUMBER_2PASS default FALSE — lazy (nomor hilang) terukur 0/18 recovered; varian penuh +2-10s/cert utk +3pt. Pasca-promosi v9, re-eval: nomor tetap 60.6%, MACRO 47.8%.",
       "is_winner": false
     },
     {
@@ -212,7 +212,7 @@
       "calls": 0,
       "gt": "v9",
       "date": "Aug 6",
-      "notes": "GATE PASS — merge per-field DocTR(dates+organizer)+baseline rapid_tess(nomor), GT v9 + matcher v2, 49 scan: organizer 20.4%/61.2% -> 24.5%/65.3%, nomor 57.6% (=), dates 85.7% (=), MACRO 45.8% -> 46.8%. Embedded 25 no-regress (fallback baseline). Oracle = hybrid (rule merge optimal). Cost +~7.5s/cert (DocTR). Integrasi produksi: SKIP rekomendasi (gain tersebar, lazy lemah, full mahal).",
+      "notes": "GATE PASS — merge per-field DocTR(dates+organizer)+baseline rapid_tess(nomor), GT v9 + matcher v2, 49 scan: organizer 20.4%/61.2% -> 24.5%/65.3%, nomor 57.6% (=), dates 85.7% (=), MACRO 45.8% -> 46.8%. Embedded 25 no-regress (fallback baseline). Oracle = hybrid (rule merge optimal). Cost +~7.5s/cert (DocTR). Integrasi produksi: SKIP rekomendasi (gain tersebar, lazy lemah, full mahal). [PASCA-PROMOSI v9] Re-eval konteks produksi baru: hybrid 49-stem 46.8->49.2% (org 26.5->34.7%), embedded 52.3% no-regress. Integrasi produksi: SKIP rekomendasi (gain tersebar, DocTR +7.5s/cert).",
       "is_winner": false
     }
   ],
