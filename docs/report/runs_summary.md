@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 53 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 55 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -51,6 +51,8 @@
 |---|---|---|---|---|
 | `ocr_experiment/baseline_rapid` | rapid | 42.8% | 3488ms | scan=49 emb=25; scan org 16.3% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | rapid_tess | 44.3% | 8609ms | scan=49 emb=?; scan org 14.3% nomor 57.6% |
+| `ocr_experiment/corpus_doctr` | doctr | 43.3% | —ms | scan=49 emb=?; scan org 24.5% nomor 36.4% |
+| `ocr_experiment/probe_doctr` | doctr | 40.0% | —ms | scan=None emb=?; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/trial_a_easyocr` | easy | 34.3% | —ms | scan=49 emb=?; scan org 20.4% nomor 15.2% |
 | `ocr_experiment/trial_a_easyocr_gpu` | easy | 39.3% | 9716ms | scan=49 emb=?; scan org 16.3% nomor 33.3% |
 | `ocr_experiment/trial_a_paddle26` | paddle | 39.8% | 10692ms | scan=49 emb=?; scan org 18.4% nomor 39.4% |
@@ -109,6 +111,8 @@
 | `run_ner_v1_20260730_095336` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `ocr_experiment/baseline_rapid` | 2026-08-04 | ocr_trial |  | — | 42.8% | — | — |  | scan=49 emb=25; scan org 16.3% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | 2026-08-04 | ocr_trial |  | — | 44.3% | — | — |  | scan=49 emb=?; scan org 14.3% nomor 57.6% |
+| `ocr_experiment/corpus_doctr` | 2026-08-06 | ocr_trial |  | — | 43.3% | — | — |  | scan=49 emb=?; scan org 24.5% nomor 36.4% |
+| `ocr_experiment/probe_doctr` | 2026-08-06 | ocr_trial |  | — | 40.0% | — | — |  | scan=None emb=?; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/trial_a_easyocr` | 2026-08-04 | ocr_trial |  | — | 34.3% | — | — |  | scan=49 emb=?; scan org 20.4% nomor 15.2% |
 | `ocr_experiment/trial_a_easyocr_gpu` | 2026-08-04 | ocr_trial |  | — | 39.3% | — | — |  | scan=49 emb=?; scan org 16.3% nomor 33.3% |
 | `ocr_experiment/trial_a_paddle26` | 2026-08-04 | ocr_trial |  | — | 39.8% | — | — |  | scan=49 emb=?; scan org 18.4% nomor 39.4% |
