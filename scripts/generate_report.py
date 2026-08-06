@@ -14,12 +14,21 @@ import sys
 import docx
 from docx.shared import Pt, RGBColor
 from docx.enum.text import WD_ALIGN_PARAGRAPH
+from docx.oxml.ns import qn
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 DATA = os.path.join(REPO, "docs", "report", "report_data.json")
 OUTDIR = os.path.join(REPO, "docs", "report")
 
-BLUE = RGBColor(0x2F, 0x54, 0x96)
+# Palette dokumen (indigo profesional — kontras tinggi, tidak mencolok)
+ACCENT = RGBColor(0x1F, 0x38, 0x64)      # judul & heading utama
+ACCENT_BLUE = RGBColor(0x2F, 0x54, 0x96)  # heading sekunder
+TEXT_MUTED = RGBColor(0x59, 0x59, 0x59)   # subtitle
+WHITE = RGBColor(0xFF, 0xFF, 0xFF)
+HEADER_FILL = "1F3864"                    # header tabel
+ROW_ALT_FILL = "F2F6FC"                   # baris selang-seling
+WINNER_FILL = "FDF3D7"                    # baris pemenang (progression)
+BORDER_COLOR = "C9D4E4"                   # border tabel lembut
 
 
 def load_data() -> dict:
@@ -82,6 +91,66 @@ def resolve_auto(kind: str, data: dict) -> dict:
 # ---------------------------------------------------------------------------
 # DOCX renderer
 # ---------------------------------------------------------------------------
+def _shade(cell, hexfill: str) -> None:
+    tcPr = cell._tc.get_or_add_tcPr()
+    shd = tcPr.makeelement(
+        qn("w:shd"), {qn("w:val"): "clear", qn("w:color"): "auto", qn("w:fill"): hexfill}
+    )
+    tcPr.append(shd)
+
+
+def _table_borders(tbl, color: str) -> None:
+    tblPr = tbl._tbl.tblPr
+    borders = tblPr.makeelement(qn("w:tblBorders"), {})
+    for edge in ("top", "left", "bottom", "right", "insideH", "insideV"):
+        el = tblPr.makeelement(qn(f"w:{edge}"), {
+            qn("w:val"): "single", qn("w:sz"): "4", qn("w:space"): "0", qn("w:color"): color,
+        })
+        borders.append(el)
+    tblPr.append(borders)
+
+
+def _heading(doc, text: str, level: int):
+    h = doc.add_heading(text, level=level)
+    color = ACCENT if level <= 1 else ACCENT_BLUE
+    for run in h.runs:
+        run.font.color.rgb = color
+        run.font.name = "Calibri"
+    return h
+
+
+def _build_table(doc, hdr, rows):
+    tbl = doc.add_table(rows=1 + len(rows), cols=len(hdr))
+    try:
+        tbl.style = "Table Grid"
+    except KeyError:
+        pass
+    _table_borders(tbl, BORDER_COLOR)
+    for j, cell in enumerate(tbl.rows[0].cells):
+        _shade(cell, HEADER_FILL)
+        cell.text = ""
+        r = cell.paragraphs[0].add_run(str(hdr[j]))
+        r.bold = True
+        r.font.size = Pt(9)
+        r.font.color.rgb = WHITE
+    for i, row in enumerate(rows):
+        is_winner = any("**" in str(v) for v in row)
+        if is_winner:
+            for c in tbl.rows[i + 1].cells:
+                _shade(c, WINNER_FILL)
+        elif i % 2 == 1:
+            for c in tbl.rows[i + 1].cells:
+                _shade(c, ROW_ALT_FILL)
+        for j, val in enumerate(row):
+            c = tbl.rows[i + 1].cells[j]
+            c.text = ""
+            r = c.paragraphs[0].add_run(str(val).replace("**", ""))
+            r.font.size = Pt(9)
+            if is_winner:
+                r.bold = True
+    return tbl
+
+
 def render_docx(blocks: list[dict], path: str, title: str, subtitle: str):
     doc = docx.Document()
     styles = doc.styles
@@ -90,24 +159,24 @@ def render_docx(blocks: list[dict], path: str, title: str, subtitle: str):
 
     t = doc.add_heading(title, level=0)
     for run in t.runs:
-        run.font.color.rgb = RGBColor(0x00, 0x00, 0x00)
+        run.font.color.rgb = ACCENT
     if subtitle:
         sp = doc.add_paragraph()
         sp.alignment = WD_ALIGN_PARAGRAPH.CENTER
         run = sp.add_run(subtitle)
         run.font.size = Pt(12)
-        run.font.color.rgb = RGBColor(0x55, 0x55, 0x55)
+        run.font.color.rgb = TEXT_MUTED
     doc.add_paragraph()
 
     for blk in blocks:
         kind = blk["t"]
         x = blk["x"]
         if kind == "h1":
-            doc.add_heading(x, level=1)
+            _heading(doc, x, 1)
         elif kind == "h2":
-            doc.add_heading(x, level=2)
+            _heading(doc, x, 2)
         elif kind == "h3":
-            doc.add_heading(x, level=3)
+            _heading(doc, x, 3)
         elif kind == "p":
             p = doc.add_paragraph()
             lines = x.split("\n")
@@ -119,50 +188,15 @@ def render_docx(blocks: list[dict], path: str, title: str, subtitle: str):
             for item in x:
                 doc.add_paragraph(item, style="List Bullet")
         elif kind == "table":
-            hdr, rows = x["h"], x["r"]
-            tbl = doc.add_table(rows=1 + len(rows), cols=len(hdr))
-            try:
-                tbl.style = "Table Grid"
-            except KeyError:
-                pass
-            for j, cell in enumerate(hdr):
-                c = tbl.cell(0, j)
-                c.text = ""
-                r = c.paragraphs[0].add_run(str(cell))
-                r.bold = True
-                r.font.size = Pt(9)
-            for i, row in enumerate(rows):
-                for j, val in enumerate(row):
-                    c = tbl.cell(i + 1, j)
-                    c.text = ""
-                    r = c.paragraphs[0].add_run(str(val).replace("**", ""))
-                    r.font.size = Pt(9)
+            _build_table(doc, x["h"], x["r"])
             doc.add_paragraph()
         elif kind == "auto":
-            tbl_data = resolve_auto(x, DATA_CACHE)
-            render_docx_table(doc, tbl_data)
+            render_docx_table(doc, resolve_auto(x, DATA_CACHE))
     doc.save(path)
 
 
 def render_docx_table(doc, tbl_data: dict):
-    hdr, rows = tbl_data["h"], tbl_data["r"]
-    tbl = doc.add_table(rows=1 + len(rows), cols=len(hdr))
-    try:
-        tbl.style = "Table Grid"
-    except KeyError:
-        pass
-    for j, cell in enumerate(hdr):
-        c = tbl.cell(0, j)
-        c.text = ""
-        r = c.paragraphs[0].add_run(str(cell))
-        r.bold = True
-        r.font.size = Pt(9)
-    for i, row in enumerate(rows):
-        for j, val in enumerate(row):
-            c = tbl.cell(i + 1, j)
-            c.text = ""
-            r = c.paragraphs[0].add_run(str(val).replace("**", ""))
-            r.font.size = Pt(9)
+    _build_table(doc, tbl_data["h"], tbl_data["r"])
     doc.add_paragraph()
 
 
