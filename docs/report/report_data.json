@@ -3948,8 +3948,8 @@
               "Benchmark runner for approach 2 (full-text LLM)"
             ],
             [
-              "`phase_v4_results_summary.xlsx`",
-              "Visual results with 4 sheets"
+              "`results_comparison.xlsx`",
+              "Visual results with 6 sheets (all experiments, color-coded deltas)"
             ],
             [
               "`phase_v4_results_summary.md`",
@@ -4401,7 +4401,7 @@
       },
       {
         "t": "p",
-        "x": "See `phase_v4_results_summary.xlsx` → Sheet \"Per-File Results\" for per-certificate comparison across A1 and A2 v2 methods. Each cert has two rows (A2 v2 top, A1 bottom)."
+        "x": "See `results_comparison.xlsx` → Sheet \"Per-File tingkat\" for per-certificate comparison of tingkat across methods."
       },
       {
         "t": "h2",

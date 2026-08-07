@@ -235,47 +235,300 @@ def render_md(blocks: list[dict], path: str, title: str, subtitle: str):
 
 
 # ---------------------------------------------------------------------------
-# XLSX for results summary
+# XLSX — results comparison (styled: grid, header fill, direction-aware deltas)
 # ---------------------------------------------------------------------------
+def _xlsx_styles():
+    import openpyxl
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    GREEN_FILL = PatternFill("solid", fgColor="C6EFCE")
+    RED_FILL = PatternFill("solid", fgColor="FFC7CE")
+    GREEN_FONT = Font(color="006100", size=9)
+    RED_FONT = Font(color="9C0006", size=9)
+    HEADER_FILL = PatternFill("solid", fgColor="1F3864")
+    HEADER_FONT = Font(bold=True, color="FFFFFF", size=9)
+    ALT_FILL = PatternFill("solid", fgColor="F2F6FC")
+    WINNER_FILL = PatternFill("solid", fgColor="FDF3D7")
+    BASE_FONT = Font(size=9)
+    BOLD_FONT = Font(size=9, bold=True)
+    THIN = Side(style="thin", color="C9D4E4")
+    BORDER = Border(left=THIN, right=THIN, top=THIN, bottom=THIN)
+    WRAP = Alignment(vertical="center", wrap_text=True)
+    return {
+        "GREEN_FILL": GREEN_FILL, "RED_FILL": RED_FILL, "GREEN_FONT": GREEN_FONT,
+        "RED_FONT": RED_FONT, "HEADER_FILL": HEADER_FILL, "HEADER_FONT": HEADER_FONT,
+        "ALT_FILL": ALT_FILL, "WINNER_FILL": WINNER_FILL, "BASE_FONT": BASE_FONT,
+        "BOLD_FONT": BOLD_FONT, "BORDER": BORDER, "WRAP": WRAP,
+    }
+
+
+def _pct(value) -> float | None:
+    """'83.8%' -> 83.8 ; 'n/a'/None -> None."""
+    if value is None:
+        return None
+    s = str(value).strip()
+    if s in ("", "-", "n/a", "—"):
+        return None
+    try:
+        return float(s.replace("%", ""))
+    except ValueError:
+        return None
+
+
+def _style_header(ws, S, ncols):
+    from openpyxl.styles import Alignment
+    for c in range(1, ncols + 1):
+        cell = ws.cell(1, c)
+        cell.fill = S["HEADER_FILL"]
+        cell.font = S["HEADER_FONT"]
+        cell.border = S["BORDER"]
+        cell.alignment = Alignment(vertical="center", horizontal="center", wrap_text=True)
+    ws.freeze_panes = "A2"
+
+
+def _style_rows(ws, S, nrows, ncols, winner_idx=None, deltas=None, n_fixed=1):
+    """deltas: dict col_index -> ('acc'|'cost'), kolom yang di-warnai arah."""
+    for r in range(2, nrows + 2):
+        is_alt = (r % 2 == 0)
+        for c in range(1, ncols + 1):
+            cell = ws.cell(r, c)
+            if cell.font is None or not cell.font.bold:
+                cell.font = S["BOLD_FONT"] if (winner_idx and r - 2 == winner_idx) else S["BASE_FONT"]
+            cell.border = S["BORDER"]
+            if winner_idx and r - 2 == winner_idx:
+                cell.fill = S["WINNER_FILL"]
+            elif is_alt:
+                cell.fill = S["ALT_FILL"]
+        # Delta coloring (setelah border; fill hanya cell delta)
+        for c, kind in (deltas or {}).items():
+            cell = ws.cell(r, c)
+            v = cell.value
+            if v is None or (isinstance(v, str) and v in ("-", "", "—")):
+                continue
+            try:
+                n = float(str(v).replace("+", "").replace("pp", "").replace(",", ""))
+            except ValueError:
+                continue
+            if n == 0:
+                continue
+            up = n > 0
+            good = up if kind == "acc" else not up  # cost: naik = buruk
+            cell.fill = S["GREEN_FILL"] if good else S["RED_FILL"]
+            cell.font = S["GREEN_FONT"] if good else S["RED_FONT"]
+
+
+def _fmt_delta(cur, prev, suffix="pp") -> str:
+    if cur is None or prev is None:
+        return "-"
+    d = cur - prev
+    if d == 0:
+        return "0"
+    return f"{d:+.{1}f}{suffix}"
+
+
+def _best_col(vals, prev=None):
+    """Index kolom bernilai tertinggi (untuk highlight per-field)."""
+    parsed = [(_pct(v), i) for i, v in enumerate(vals)]
+    parsed = [(v, i) for v, i in parsed if v is not None]
+    if not parsed:
+        return None
+    return max(parsed)[1]
+
+
+# Per-field tables (metode v2-v4, GT raw) — dari phase_v4_results_summary.md
+PER_FIELD_METHODS = ["Regex", "NER v1", "Hybrid", "Hybrid+PP", "A1 (per-field)", "A2 v2 (full-text)"]
+PER_FIELD_EXACT = [
+    ["nama_kegiatan", 6.9, 16.4, 24.3, 24.3, 25.7, 43.2],
+    ["penyelenggara", 6.9, 11.0, 12.2, 13.5, 13.5, 31.1],
+    ["waktu_mulai", 81.8, 27.3, 81.8, 81.8, 81.8, 94.5],
+    ["waktu_selesai", 81.8, 7.3, 81.8, 81.8, 81.8, 94.5],
+    ["nomor", 58.0, 0.0, 59.6, 59.6, 65.4, 73.1],
+    ["tingkat", None, None, None, None, 47.3, 36.5],
+    ["MACRO", 42.2, 12.8, 47.7, 48.1, 49.0, 58.3],
+]
+PER_FIELD_FUZZY = [
+    ["nama_kegiatan", 19.2, 43.8, 63.5, 63.5, 70.3, 85.1],
+    ["penyelenggara", 41.1, 50.7, 47.3, 50.0, 50.0, 73.0],
+    ["waktu_mulai", 81.8, 27.3, 81.8, 81.8, 81.8, 94.5],
+    ["waktu_selesai", 81.8, 7.3, 81.8, 81.8, 81.8, 94.5],
+    ["nomor", 58.0, 0.0, 59.6, 59.6, 65.4, 73.1],
+    ["tingkat", None, None, None, None, 47.3, 36.5],
+    ["MACRO", 53.3, 28.8, 65.5, 66.1, 64.6, 74.5],
+]
+# v9 per-field (GT v9 + matcher v2) — metrologi berbeda dari baris di atas.
+PER_FIELD_V9 = [
+    ["nama_kegiatan_sertifikasi", 25.7, 52.7],
+    ["waktu_mulai_pelaksanaan", 81.8, 81.8],
+    ["waktu_selesai_pelaksanaan", 81.8, 81.8],
+    ["penyelenggara_kegiatan", 39.2, 79.7],
+    ["nomor_bukti_fisik_nomor_sertifikasi", 59.6, 59.6],
+    ["tingkat", 83.8, 89.2],
+    ["MACRO", 60.2, 74.2],
+]
+OCR_LINE = [
+    # [Engine / approach, scan MACRO, nomor scan, verdict]
+    ["RapidOCR (baseline)", "47.3%", "57.6%", "baseline"],
+    ["RapidOCR+Tesseract (prod-equivalent)", "47.3%", "57.6%", "baseline"],
+    ["PaddleOCR 2.9 (CPU)", "39.8%", "39.4%", "FAIL"],
+    ["EasyOCR (CPU, max-side 960)", "34.3%", "15.2%", "FAIL"],
+    ["EasyOCR (GPU, full-res)", "39.3%", "33.3%", "FAIL"],
+    ["DocTR probe (OCR-006)", "40.0%", "14.3%", "FAIL"],
+    ["DocTR hybrid per-field (HYB-001)", "46.8%", "57.6%", "PASS"],
+    ["NC-001 nomor crop (re-render zoom 6x)", "46.3%", "60.6%", "PASS"],
+    ["NC-002 region-OCR murah", "47.3%", "57.6%", "FAIL"],
+]
+
+
 def render_xlsx(data: dict, path: str):
     import openpyxl
 
+    S = _xlsx_styles()
     wb = openpyxl.Workbook()
+
+    # --- Sheet 1: Results Comparison (semua eksperimen + delta arah) ---
     ws = wb.active
-    ws.title = "Results Summary"
-    t = results_table(data)
-    ws.append(t["h"])
-    for r in t["r"]:
-        ws.append([str(v).replace("**", "") for v in r])
+    ws.title = "Results Comparison"
+    exps = data["experiments"]
+    ncols = 12
+    ws.append(["Experiment", "Phase", "Tingkat", "ΔTingkat", "MACRO", "ΔMACRO",
+               "Eff tok/cert", "Δtokens", "LLM calls", "Δcalls", "Router", "GT"])
+    prev = {"tk": None, "macro": None, "tok": None, "calls": None}
+    prev_ocr = {"macro": None}
+    winner_idx = None
+    for i, e in enumerate(exps):
+        tk, macro = _pct(e.get("tingkat")), _pct(e.get("macro"))
+        is_ocr = e.get("phase") == "ocr"
+        tok = None if is_ocr else (e.get("tokens_cert") if isinstance(e.get("tokens_cert"), (int, float)) else None)
+        calls = None if is_ocr else (e.get("calls") if isinstance(e.get("calls"), (int, float)) else None)
+        # Delta dihitung vs eksperimen SEJENIS sebelumnya (LLM/rule vs OCR terpisah)
+        # agar perbandingan like-for-like (korpus berbeda tidak dicampur).
+        d_macro = _fmt_delta(macro, prev_ocr["macro"] if is_ocr else prev["macro"])
+        ws.append([
+            e["label"],
+            e.get("phase", ""),
+            e.get("tingkat", "-"),
+            "-" if is_ocr else _fmt_delta(tk, prev["tk"]),
+            e.get("macro", "-"),
+            d_macro,
+            "n/a" if is_ocr else e.get("tokens_cert", "-"),
+            "n/a" if is_ocr else _fmt_delta(tok, prev["tok"], suffix=""),
+            "n/a" if is_ocr else e.get("calls", "-"),
+            "n/a" if is_ocr else _fmt_delta(calls, prev["calls"], suffix=""),
+            e.get("router", "-"),
+            e.get("gt", "raw"),
+        ])
+        if is_ocr:
+            if macro is not None:
+                prev_ocr["macro"] = macro
+            continue
+        if tk is not None:
+            prev["tk"] = tk
+        if macro is not None:
+            prev["macro"] = macro
+        if tok is not None:
+            prev["tok"] = tok
+        if calls is not None:
+            prev["calls"] = calls
+        if e.get("is_winner"):
+            winner_idx = i
+    _style_header(ws, S, ncols)
+    deltas = {4: "acc", 6: "acc", 8: "cost", 10: "cost"}
+    _style_rows(ws, S, len(exps), ncols, winner_idx=winner_idx, deltas=deltas)
+    ws.column_dimensions["A"].width = 42
+    for col in "BCDEFGHIJKL":
+        ws.column_dimensions[col].width = 11
+    ws.append([])
+    ws.append(["Legenda:", "Accuracy (Tingkat/MACRO): naik = hijau, turun = merah. "
+              "Cost (tokens/calls): turun = hijau (hemat), naik = merah."])
+    ws.append(["Winner row (v9):", "kuning. Delta dihitung vs eksperimen sebelumnya."])
 
+    # --- Sheet 2: Progression (ringkas, delta MACRO) ---
     ws2 = wb.create_sheet("Progression")
-    p = progression_table(data)
-    ws2.append(p["h"])
-    for r in p["r"]:
-        ws2.append([str(v).replace("**", "") for v in r])
+    ws2.append(["Phase", "Method", "Tingkat", "MACRO", "ΔMACRO", "Tok/cert", "Calls"])
+    prev_macro = None
+    prev_ocr_macro = None
+    winner_idx2 = None
+    for i, e in enumerate(exps):
+        macro = _pct(e.get("macro"))
+        is_ocr = e.get("phase") == "ocr"
+        d_macro = _fmt_delta(macro, prev_ocr_macro if is_ocr else prev_macro)
+        ws2.append([e.get("phase", ""), e["label"], e.get("tingkat", "-"),
+                    e.get("macro", "-"), d_macro,
+                    "n/a" if is_ocr else e.get("tokens_cert", "-"),
+                    "n/a" if is_ocr else e.get("calls", "-")])
+        if is_ocr:
+            if macro is not None:
+                prev_ocr_macro = macro
+            continue
+        if macro is not None:
+            prev_macro = macro
+        if e.get("is_winner"):
+            winner_idx2 = i
+    _style_header(ws2, S, 7)
+    _style_rows(ws2, S, len(exps), 7, winner_idx=winner_idx2, deltas={5: "acc"})
+    ws2.column_dimensions["B"].width = 42
+    for col in "ACDEFG":
+        ws2.column_dimensions[col].width = 11
 
-    # Per-file sheet from the winning experiment's run dir (if present).
-    # Source run didefinisikan di report_data.json (field `run_dir`), bukan
-    # hardcoded di sini — mencegah drift ke run yang bukan otoritatif.
-    # Ambil winner TERAKHIR (array eksperimen kronologis; bisa ada >1 winner).
-    winners = [e for e in data["experiments"] if e.get("is_winner")]
-    winner = winners[-1] if winners else None
-    run_rel = (winner or {}).get("run_dir", "")
-    run_path = os.path.join(REPO, run_rel, "results.xlsx") if run_rel else ""
-    if run_path and os.path.exists(run_path):
-        src = openpyxl.load_workbook(run_path).active
-        ws3 = wb.create_sheet("v8 Per-File f_bias")
-        hdr = [c.value for c in src[1]]
-        keep = ["filename", "f_bias_tingkat_expected", "f_bias_tingkat_actual",
-                "f_bias_tingkat_exact", "e_hybrid_tingkat_actual", "e_hybrid_tingkat_exact"]
-        idx = {h: hdr.index(h) for h in hdr if h in hdr}
-        ws3.append(keep)
-        for row in src.iter_rows(min_row=2, values_only=True):
-            ws3.append([row[idx[h]] for h in keep])
+    # --- Sheet 3: Per-Field (exact + fuzzy per metode) ---
+    ws3 = wb.create_sheet("Per-Field")
+    ws3.append(["Field", "Metric"] + PER_FIELD_METHODS)
+    for i, row in enumerate(PER_FIELD_EXACT):
+        ws3.append([row[0], "exact"] + [f"{v}%" if v is not None else "-" for v in row[1:]])
+        best = _best_col(row[1:])
+        if best is not None:
+            ws3.cell(i + 2, best + 3).font = S["BOLD_FONT"]
+            ws3.cell(i + 2, best + 3).fill = S["GREEN_FILL"]
+    base = len(PER_FIELD_EXACT) + 2
+    for i, row in enumerate(PER_FIELD_FUZZY):
+        ws3.append([row[0], "fuzzy"] + [f"{v}%" if v is not None else "-" for v in row[1:]])
+        best = _best_col(row[1:])
+        if best is not None:
+            ws3.cell(base + i, best + 3).font = S["BOLD_FONT"]
+            ws3.cell(base + i, best + 3).fill = S["GREEN_FILL"]
+    _style_header(ws3, S, 8)
+    _style_rows(ws3, S, len(PER_FIELD_EXACT) + len(PER_FIELD_FUZZY), 8)
+    ws3.append([])
+    ws3.append(["v9 per-field (GT v9 + matcher v2) — metrologi berbeda dari tabel di atas"])
+    r0 = len(PER_FIELD_EXACT) + len(PER_FIELD_FUZZY) + 3
+    ws3.cell(r0, 1).value = "Field"
+    ws3.cell(r0, 2).value = "Exact"
+    ws3.cell(r0, 3).value = "Fuzzy"
+    ws3.cell(r0, 1).font = ws3.cell(r0, 2).font = ws3.cell(r0, 3).font = S["BOLD_FONT"]
+    for i, (f, ex, fu) in enumerate(PER_FIELD_V9):
+        ws3.cell(r0 + 1 + i, 1).value = f
+        ws3.cell(r0 + 1 + i, 2).value = f"{ex}%"
+        ws3.cell(r0 + 1 + i, 3).value = f"{fu}%"
+    for col in "ABCDEFGH":
+        ws3.column_dimensions[col].width = 13
+    ws3.column_dimensions["A"].width = 30
 
-    # v8 variants static
-    ws4 = wb.create_sheet("v8 Variants")
-    ws4.append(["Variant", "Tingkat exact", "MACRO exact", "Eff tok/cert", "LLM calls"])
+    # --- Sheet 4: OCR Line ---
+    ws4 = wb.create_sheet("OCR Line")
+    ws4.append(["Engine / approach", "scan MACRO", "nomor scan", "verdict"])
+    for row in OCR_LINE:
+        ws4.append(row)
+    _style_header(ws4, S, 4)
+    for r in range(2, len(OCR_LINE) + 2):
+        verdict = ws4.cell(r, 4).value
+        for c in range(1, 5):
+            cell = ws4.cell(r, c)
+            cell.border = S["BORDER"]
+            if r % 2 == 0:
+                cell.fill = S["ALT_FILL"]
+        if verdict == "PASS":
+            ws4.cell(r, 4).fill = S["GREEN_FILL"]
+            ws4.cell(r, 4).font = S["GREEN_FONT"]
+        elif verdict == "FAIL":
+            ws4.cell(r, 4).fill = S["RED_FILL"]
+            ws4.cell(r, 4).font = S["RED_FONT"]
+    ws4.column_dimensions["A"].width = 44
+    for col in "BCD":
+        ws4.column_dimensions[col].width = 13
+
+    # --- Sheet 5: v8 Variants (static) ---
+    ws5 = wb.create_sheet("v8 Variants")
+    ws5.append(["Variant", "Tingkat exact", "MACRO exact", "Eff tok/cert", "LLM calls"])
     v8 = [
         ["b_minimized", "78.4%", "54.4%", "221", "35"],
         ["e_hybrid", "79.7%", "54.7%", "182", "35"],
@@ -285,7 +538,46 @@ def render_xlsx(data: dict, path: str):
         ["layout_ann (f_bias)", "78.4%", "51.3%", "-", "-"],
     ]
     for r in v8:
-        ws4.append(r)
+        ws5.append(r)
+    _style_header(ws5, S, 5)
+    _style_rows(ws5, S, len(v8), 5)
+    ws5.column_dimensions["A"].width = 22
+    for col in "BCDE":
+        ws5.column_dimensions[col].width = 13
+
+    # --- Sheet 6: Per-file tingkat (winner run) ---
+    winners = [e for e in data["experiments"] if e.get("is_winner")]
+    winner = winners[-1] if winners else None
+    run_rel = (winner or {}).get("run_dir", "")
+    run_path = os.path.join(REPO, run_rel, "results.xlsx") if run_rel else ""
+    if run_path and os.path.exists(run_path):
+        src = openpyxl.load_workbook(run_path).active
+        ws6 = wb.create_sheet("Per-File tingkat")
+        hdr = [c.value for c in src[1]]
+        keep = ["filename", "f_bias_tingkat_expected", "f_bias_tingkat_actual",
+                "f_bias_tingkat_exact", "e_hybrid_tingkat_actual", "e_hybrid_tingkat_exact"]
+        idx = {h: hdr.index(h) for h in hdr if h in hdr}
+        ws6.append(keep)
+        for row in src.iter_rows(min_row=2, values_only=True):
+            ws6.append([row[idx[h]] for h in keep])
+        _style_header(ws6, S, len(keep))
+        for r in range(2, ws6.max_row + 1):
+            exact = ws6.cell(r, 4).value
+            for c in range(1, len(keep) + 1):
+                cell = ws6.cell(r, c)
+                cell.border = S["BORDER"]
+                if r % 2 == 0:
+                    cell.fill = S["ALT_FILL"]
+            if exact == 1:
+                ws6.cell(r, 4).fill = S["GREEN_FILL"]
+                ws6.cell(r, 4).font = S["GREEN_FONT"]
+            elif exact == 0:
+                ws6.cell(r, 4).fill = S["RED_FILL"]
+                ws6.cell(r, 4).font = S["RED_FONT"]
+        ws6.column_dimensions["A"].width = 30
+        for col in "BCDEF":
+            ws6.column_dimensions[col].width = 16
+
     wb.save(path)
 
 
@@ -308,8 +600,8 @@ def main():
         render_docx(blocks, os.path.join(OUTDIR, name + ".docx"), title, subtitle)
         render_md(blocks, os.path.join(OUTDIR, name + ".md"), title, subtitle)
         print(f"  {name}.docx + .md")
-    render_xlsx(data, os.path.join(OUTDIR, "phase_v4_results_summary.xlsx"))
-    print("  phase_v4_results_summary.xlsx")
+    render_xlsx(data, os.path.join(OUTDIR, "results_comparison.xlsx"))
+    print("  results_comparison.xlsx")
     print("done")
 
 

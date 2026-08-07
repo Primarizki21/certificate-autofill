@@ -55,7 +55,7 @@
 
 ### Per-File Results
 
-See `phase_v4_results_summary.xlsx` → Sheet "Per-File Results" for per-certificate comparison across A1 and A2 v2 methods. Each cert has two rows (A2 v2 top, A1 bottom).
+See `results_comparison.xlsx` → Sheet "Per-File tingkat" for per-certificate comparison of tingkat across methods.
 
 ### Key Takeaways
 
