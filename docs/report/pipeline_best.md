@@ -101,6 +101,20 @@ Simpan field + confidence ke PostgreSQL; flag needs_review utk review manusia.
 | bem+hima | bem dan hima (panitia internal FTMM) | Fakultas |
 | sem+univ | sem dan univ, tanpa fak/bem/hima/lomba | Universitas |
 
+### Metode Penentuan Field (sentence -> field)
+
+NER TIDAK dipakai di v9. NER v1 (pre-trained) = 12.8% MACRO (FAIL, closed di ledger); hybrid NER+regex v3 = 47.7% (superseded). Semua field ditentukan oleh regex + rule-based extractor; LLM hanya fallback utk field tingkat.
+
+| Field | Metode | Mekanisme | Modul |
+|---|---|---|---|
+| nama_kegiatan_sertifikasi | Regex template + keyword | pola 'seminar X yang diselenggarakan', 'talkshow', PKKMB; fallback keyword AIRNOLOGY/KAKIWIMA/SPECTA/BRIEF | field_extractor.py (extract_activity_name) |
+| waktu_mulai / waktu_selesai | Regex 5-tier + alias bulan OCR | interval numerik -> English month-first -> tanggal tunggal -> same-month -> token-scan; MONTH_ALIASES (AGUSTU5 -> AGUSTUS) | field_extractor.py (extract_dates) |
+| raw_role (jabatan) | Regex + keyword fallback | pola 'as a' / 'sebagai' / 'Atas partisipasinya sebagai'; fallback keyword PANITIA/PESERTA/KETUA | field_extractor.py (extract_role) |
+| nomor_bukti_fisik_nomor_sertifikasi | Regex 3 pola | NO./NOMOR + digit + tahun (mis. 212/E/BEM-FKM/UNAIR/X/2023) | field_extractor.py (extract_certificate_number) |
+| penyelenggara_kegiatan | Rule-based organizer_v2 | preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga') | organizer_v2.py (extract_organizer_v2) |
+| tingkat | Router 13 rule -> LLM fallback | sinyal teks deterministik 45/74 @100% precision; LLM llama3.1:8b utk 29/74 cert yang tak ter-rute | tingkat_router.py + llm_tingkat.py |
+| kelompok / jenis / jabatan form / jenis_penyelenggara | Rule mapper | form_mapper rules + threshold confidence < 0.80 -> needs_review (human-in-the-loop) | form_mapper.py (map_fields_to_form) |
+
 ### LLM Tingkat (fallback router)
 
 | Aspek | Nilai |

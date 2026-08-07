@@ -75,6 +75,13 @@ def build_blocks(d: dict) -> list[dict]:
         "r": [[r["rule"], r["signals"], r["decision"]] for r in d["router_rules"]],
     }})
 
+    b.append({"t": "h2", "x": "Metode Penentuan Field (sentence -> field)"})
+    b.append({"t": "p", "x": d["ner_status"]})
+    b.append({"t": "table", "x": {
+        "h": ["Field", "Metode", "Mekanisme", "Modul"],
+        "r": [[m["field"], m["method"], m["mechanism"], m["module"]] for m in d["field_methods"]],
+    }})
+
     b.append({"t": "h2", "x": "LLM Tingkat (fallback router)"})
     b.append({"t": "table", "x": _kv_table([
         ("Model", llm["model"]),
@@ -153,6 +160,12 @@ def render_xlsx(d: dict, path: str) -> None:
     ws3.append(["Rule", "Signals", "Decision"])
     for r in d["router_rules"]:
         ws3.append([r["rule"], r["signals"], r["decision"]])
+
+    ws7 = wb.create_sheet("Field Methods")
+    ws7.append(["Field", "Metode", "Mekanisme", "Modul"])
+    ws7.append(["", d["ner_status"], "", ""])
+    for m in d["field_methods"]:
+        ws7.append([m["field"], m["method"], m["mechanism"], m["module"]])
 
     ws4 = wb.create_sheet("Field Results")
     ws4.append(["Field", "Exact", "Fuzzy"])
