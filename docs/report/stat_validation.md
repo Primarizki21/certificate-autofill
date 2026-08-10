@@ -1,6 +1,6 @@
 # Stat Validation — Pipeline v9 (N=74)
 
-> Generasi: 2026-08-10 08:23:20 | GT v9 + matcher v2 | router = llm_router_v4 (identik produksi) | bootstrap 1000x, 5-fold seed 42
+> Generasi: 2026-08-10 10:20:25 | GT v9 + matcher v2 | router = llm_router_v4 (identik produksi) | bootstrap 1000x, 5-fold seed 42
 
 ## Bootstrap CI (per-field exact/fuzzy + MACRO, 95%)
 

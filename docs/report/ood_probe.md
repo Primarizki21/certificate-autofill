@@ -1,6 +1,6 @@
 # OOD Probe — Pipeline v9 di Luar Domain (N=74)
 
-> Generasi: 2026-08-10 08:25:33 | GT v9 + matcher v2 | pipeline offline (no LLM) | seed 42
+> Generasi: 2026-08-10 10:20:26 | GT v9 + matcher v2 | pipeline offline (no LLM) | seed 42
 
 ## Baseline offline (tanpa mutasi/noise)
 

@@ -4,6 +4,14 @@ Prototype internal — ekstraksi PDF sertifikat mahasiswa + autofill form Kartu 
 
 > **Adaptif.** Struktur dan konvensi di sini mencerminkan keadaan sekarang. Dapat berubah sesuai arahan tim.
 
+## Gaya Komunikasi dengan User
+
+- **Bahasa mudah + contoh konkret** — hindari jargon abstrak; kalau harus istilah
+  teknis, beri contoh kasus nyata (mis. "organizer seperti `Himasada` vs GT
+  `Himasada, Fakultas Ilmu Komputer`").
+- **Ringkas** — jawaban pendek dulu, detail hanya kalau diminta.
+- Jawaban dalam Bahasa Indonesia (istilah teknis boleh Inggris).
+
 ---
 
 ## Quick Start
@@ -188,6 +196,26 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 ---
 
 ## Testing & Benchmark
+
+### Protokol evaluasi WAJIB (semua eksperimen baru — handoff v20)
+
+1. **Rule router baru → k-fold dulu** (`tests/stat_validation.py`): precision
+   per-rule di fold uji; klaim hanya valid dengan CI; fire <5 (LOW-N) = jangan
+   diklaim robust.
+2. **Setiap perubahan ekstraktor/router → `pytest tests/` (31 test)** +
+   no-regress vs baseline GT v9 + matcher v2
+   (`GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`).
+3. **JANGAN bandingkan snapshot `router_decisions.json` lama vs code baru**
+   tanpa recompute organizer — snapshot memakai organizer pre-85f5cc8
+   (6/74 beda, memicu 2 false rule). Selalu recompute dengan
+   `tests/organizer_extractor_v2` current.
+4. **Benchmark run**: `uv run python -m tests.X`; run dir
+   `tests/benchmark_runs/{kind}_{ts}`; update ledger + report .md per eksperimen.
+5. **Matcher v2 + GT v9 = baseline evaluasi, jangan diubah** tanpa re-baseline
+   eksplisit. Normalisasi pipeline-side dulu; evaluator hanya jika disetujui user.
+6. **`offline_fields()`/`offline_variant()`** (di `tests/ood_probe.py`,
+   `tests/benchmark_org_norm.py`) = pipeline offline tanpa LLM/OCR untuk semua
+   evaluasi cepat — reuse, jangan duplikasi.
 
 ```bash
 # Semua unit test
