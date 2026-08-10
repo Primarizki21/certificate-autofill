@@ -229,6 +229,21 @@
       "date": "Aug 6",
       "notes": "GATE FAIL — region-OCR murah tidak mempertahankan recovery NC-001. 4 varian vs control rapid_tess 60.6%: rapid 54.5% (regress, 6.3s), tess_psm13 57.6% (=baseline, 4.3s), tess_psm6 57.6% (=baseline), rapid+tess_psm13 54.5% (regress, 6.2s). Recovery +3pt melekat ke multi-config tess (psm '',6,11); psm tunggal = perilaku rapid-only. Latency floor ~4.3s didominasi anchor full-page + region re-render, bukan OCR region. Garis OCR nomor ditutup.",
       "is_winner": false
+    },
+    {
+      "id": "org_003_v3",
+      "phase": "v10",
+      "label": "F1 organizer v3 (R0-R5, 0 LLM)",
+      "variant": "organizer_v3",
+      "run_dir": "tests/benchmark_runs/organizer_v3_20260810_111514",
+      "tingkat": "81.1%",
+      "macro": "59.6%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 10",
+      "is_winner": false,
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru."
     }
   ],
   "documents": {
@@ -4813,6 +4828,39 @@
       {
         "t": "auto",
         "x": "progression"
+      },
+      {
+        "t": "h1",
+        "x": "Handoff v18–v21 Addendum — F1 Organizer v3 (0 LLM) & Robustness OOD Probe"
+      },
+      {
+        "t": "h2",
+        "x": "F1 lanjutan organizer v3 (ORG-003)"
+      },
+      {
+        "t": "p",
+        "x": "Lapisan post-processing organizer tanpa AI (tests-only, produksi tak disentuh): R0 fix bug rule B, R1 strip suffix ', Faculty/Department' (Inggris saja), R2 strip prefix 'Library Class', R3 strip prefix sampai 'oleh', R4 strip suffix mulai tanggal, R5 normalisasi dash 'S-1'→'S1', fix regex 'Which [was] Held From <tgl> to <tgl> by'. Hasil (GT v9 + matcher v2, 0 LLM): organizer exact 39.2% → 45.9% (+6.7pt, GATE PASS), MACRO 58.3% → 59.6% no-regress. 5 fix per-cert: PRIMARIZKI (rule B), Rasio_Faiz (R1), 2955331 (R4 tanggal), Venedict ORM (R2), Venedict_specta (prefix held)."
+      },
+      {
+        "t": "h2",
+        "x": "Robustness OOD probe lapisan v3 (OOD-002)"
+      },
+      {
+        "t": "p",
+        "x": "Uji kerapuhan aturan v3 saat varian sertifikat baru: template mutation (institusi/event diganti) + OCR noise 10/25/50% + ablation per aturan + noise survival fix-cert. Verdict: FAIL gate drop-relatif — tapi mutation 0 kerapuhan aturan nyata (extra drop = 100% kontaminasi GT, nilai v3 justru mengikuti institusi baru); noise: R4 rapuh sejak 10% (digit tanggal rusak 'July 30'→'July 3O') & R1 sejak 25% (kata merge 'Facultyof'); R0/R2/PREFIX_HELD bertahan s.d. 50%. R3 = NO_FIX & R5 = DEAD (tanpa manfaat terukur, kandidat hapus). Gain absolut v3 tetap positif di semua kondisi (noise 10%: organizer 44.5% vs v9 37.8%)."
+      },
+      {
+        "t": "h2",
+        "x": "Rekomendasi port produksi (menunggu keputusan user)"
+      },
+      {
+        "t": "b",
+        "x": [
+          "R0, R2, PREFIX_HELD: KEEP — aman dipromosikan.",
+          "R1, R4: GUARD — rapuh di noise OCR, wajib ditemani needs_review (F6) sebagai jaring pengaman.",
+          "R3, R5: hapus — tanpa manfaat terukur di korpus.",
+          "Semua aturan hanya 1 fix-cert (LOW_N, <3) — klaim robustness per-aturan butuh validasi data baru (cert non-UNAIR/FTMM)."
+        ]
       }
     ]
   }

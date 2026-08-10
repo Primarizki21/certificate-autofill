@@ -178,3 +178,21 @@ ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallb
 | ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
+| v10 | F1 organizer v3 (R0-R5, 0 LLM) | 81.1% | 59.6% |
+
+## Handoff v18–v21 Addendum — F1 Organizer v3 (0 LLM) & Robustness OOD Probe
+
+### F1 lanjutan organizer v3 (ORG-003)
+
+Lapisan post-processing organizer tanpa AI (tests-only, produksi tak disentuh): R0 fix bug rule B, R1 strip suffix ', Faculty/Department' (Inggris saja), R2 strip prefix 'Library Class', R3 strip prefix sampai 'oleh', R4 strip suffix mulai tanggal, R5 normalisasi dash 'S-1'→'S1', fix regex 'Which [was] Held From <tgl> to <tgl> by'. Hasil (GT v9 + matcher v2, 0 LLM): organizer exact 39.2% → 45.9% (+6.7pt, GATE PASS), MACRO 58.3% → 59.6% no-regress. 5 fix per-cert: PRIMARIZKI (rule B), Rasio_Faiz (R1), 2955331 (R4 tanggal), Venedict ORM (R2), Venedict_specta (prefix held).
+
+### Robustness OOD probe lapisan v3 (OOD-002)
+
+Uji kerapuhan aturan v3 saat varian sertifikat baru: template mutation (institusi/event diganti) + OCR noise 10/25/50% + ablation per aturan + noise survival fix-cert. Verdict: FAIL gate drop-relatif — tapi mutation 0 kerapuhan aturan nyata (extra drop = 100% kontaminasi GT, nilai v3 justru mengikuti institusi baru); noise: R4 rapuh sejak 10% (digit tanggal rusak 'July 30'→'July 3O') & R1 sejak 25% (kata merge 'Facultyof'); R0/R2/PREFIX_HELD bertahan s.d. 50%. R3 = NO_FIX & R5 = DEAD (tanpa manfaat terukur, kandidat hapus). Gain absolut v3 tetap positif di semua kondisi (noise 10%: organizer 44.5% vs v9 37.8%).
+
+### Rekomendasi port produksi (menunggu keputusan user)
+
+- R0, R2, PREFIX_HELD: KEEP — aman dipromosikan.
+- R1, R4: GUARD — rapuh di noise OCR, wajib ditemani needs_review (F6) sebagai jaring pengaman.
+- R3, R5: hapus — tanpa manfaat terukur di korpus.
+- Semua aturan hanya 1 fix-cert (LOW_N, <3) — klaim robustness per-aturan butuh validasi data baru (cert non-UNAIR/FTMM).

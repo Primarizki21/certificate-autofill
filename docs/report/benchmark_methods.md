@@ -897,6 +897,7 @@ The table below lists all functions referenced in this document. Functions are l
 | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 | Aug 6 |
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 | Aug 6 |
 | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 | Aug 6 |
+| F1 organizer v3 (R0-R5, 0 LLM) | 81.1% | 59.6% | 0 | 0 | - | v9 | Aug 10 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -915,3 +916,4 @@ The table below lists all functions referenced in this document. Functions are l
 | ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
+| v10 | F1 organizer v3 (R0-R5, 0 LLM) | 81.1% | 59.6% |
