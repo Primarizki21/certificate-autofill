@@ -184,8 +184,8 @@ def main() -> None:
     gt = load_gt()
     texts = load_texts()
 
-    per_field = {f: {"total": 0, "exact": 0} for f in EVAL_FIELDS}
-    per_field_v3 = {f: {"total": 0, "exact": 0} for f in EVAL_FIELDS}
+    per_field = {f: {"total": 0, "exact": 0, "fuzzy": 0} for f in EVAL_FIELDS}
+    per_field_v3 = {f: {"total": 0, "exact": 0, "fuzzy": 0} for f in EVAL_FIELDS}
     rows: dict[str, dict] = {}
     for stem, text in texts.items():
         row = gt.get(stem)
@@ -198,10 +198,14 @@ def main() -> None:
             gv = (row.get(field) or "").strip()
             if not gv or gv == "-":
                 continue
+            bm = match_field(gv, base.get(field), field)
+            vm = match_field(gv, var.get(field), field)
             per_field[field]["total"] += 1
-            per_field[field]["exact"] += 1 if match_field(gv, base.get(field), field)["exact"] else 0
+            per_field[field]["exact"] += 1 if bm["exact"] else 0
+            per_field[field]["fuzzy"] += 1 if bm["fuzzy"] else 0
             per_field_v3[field]["total"] += 1
-            per_field_v3[field]["exact"] += 1 if match_field(gv, var.get(field), field)["exact"] else 0
+            per_field_v3[field]["exact"] += 1 if vm["exact"] else 0
+            per_field_v3[field]["fuzzy"] += 1 if vm["fuzzy"] else 0
 
     def macro(pf: dict) -> float:
         t = sum(d["total"] for d in pf.values())
