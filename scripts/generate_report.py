@@ -586,6 +586,8 @@ def render_xlsx(data: dict, path: str):
         for col in "BCDEF":
             ws6.column_dimensions[col].width = 16
 
+    _render_per_field_exp_sheet(wb, S, data)
+
     wb.save(path)
 
 
@@ -638,6 +640,100 @@ def _pct_str(v: float | None) -> str:
     if v is None:
         return "—"
     return f"{v:.1f}%"
+
+
+# ---------------------------------------------------------------------------
+# Sheet "Per-Field by Experiment" — level eksperimen (seperti Results
+# Comparison), baris = field, kolom = eksperimen. Sumber per-field = file
+# per_field_src di report_data.json (3 format: top-level / fields dict /
+# per_field_v3 nested). OCR tidak punya per-field (korpus scan 49 cert,
+# tidak sebanding) → "n/a" + catatan.
+# ---------------------------------------------------------------------------
+_FIELD_KEYS = [k for k, _ in _FIELD_LABELS]
+
+
+def _load_per_field_src(path: str) -> dict | None:
+    """Kembalikan {label: {"exact": acc|None, "fuzzy": acc|None}} + macro."""
+    if not path or not os.path.exists(path):
+        return None
+    with open(path) as f:
+        s = json.load(f)
+    if "per_field_v3" in s:
+        pf = s["per_field_v3"]
+    elif "fields" in s and isinstance(s["fields"], dict):
+        pf = s["fields"]
+    else:
+        pf = s
+
+    def acc(v, kind):
+        if not isinstance(v, dict) or not v.get("total"):
+            return None
+        if f"{kind}_acc" in v:
+            return v[f"{kind}_acc"]
+        cnt = v.get(kind)
+        return cnt / v["total"] if isinstance(cnt, (int, float)) else None
+
+    out = {}
+    for key, label in _FIELD_LABELS:
+        v = pf.get(key)
+        if isinstance(v, dict) and v.get("total"):
+            out[label] = {"exact": acc(v, "exact"), "fuzzy": acc(v, "fuzzy")}
+    macro = None
+    if "macro_avg" in s and isinstance(s["macro_avg"], dict):
+        macro = {"exact": s["macro_avg"].get("exact_acc"), "fuzzy": s["macro_avg"].get("fuzzy_acc")}
+    if "macro_exact_v3" in s and macro is None:
+        macro = {"exact": s["macro_exact_v3"] / 100, "fuzzy": None}
+    if macro is not None and macro["fuzzy"] is None:
+        tt = sum(v["total"] for v in pf.values() if isinstance(v, dict) and v.get("total"))
+        fu = sum(v["fuzzy"] for v in pf.values() if isinstance(v, dict) and v.get("fuzzy"))
+        macro["fuzzy"] = fu / tt if tt else None
+    if out and macro:
+        out["MACRO"] = macro
+    return out
+
+
+def _per_field_by_experiment(data: dict) -> list[dict]:
+    """Baris per eksperimen: {id, label, gt, per_field} — urut seperti experiments[]."""
+    out = []
+    for e in data["experiments"]:
+        pf = _load_per_field_src(e.get("per_field_src") or "")
+        out.append({"id": e["id"], "label": e["label"], "gt": e.get("gt", "raw"),
+                    "per_field": pf})
+    return out
+
+
+def _render_per_field_exp_sheet(wb, S, data: dict):
+    rows = _per_field_by_experiment(data)
+    hdr = ["Field", "Metric"] + [f"{r['id']} ({r['gt']})" for r in rows]
+    ws = wb.create_sheet("Per-Field by Experiment")
+    ws.append(["Per-Field by Experiment — level eksperimen (bandingkan hanya dalam kolom GT yang sama)"])
+    for metric in ("exact", "fuzzy"):
+        ws.append(hdr)
+        hr = ws.max_row
+        for label in ["nama_kegiatan", "penyelenggara", "waktu_mulai", "waktu_selesai", "nomor", "tingkat", "MACRO"]:
+            row_vals = []
+            for r in rows:
+                pf = r["per_field"] or {}
+                v = (pf.get(label) or {}).get(metric)
+                row_vals.append(_pct_str(v * 100) if v is not None else "n/a")
+            ws.append([label, metric] + row_vals)
+        for c in range(1, len(hdr) + 1):
+            cell = ws.cell(hr, c)
+            cell.fill = S["HEADER_FILL"]
+            cell.font = S["HEADER_FONT"]
+            cell.border = S["BORDER"]
+        ws.append([])
+    ws.append(["Catatan: OCR eksperimen (ocr_a_*, nc_001, ocr_006, hyb_001, nc_002) tidak punya per-field — "
+               "dievaluasi pada korpus scan 49 cert (metrik terpisah, lihat sheet 'OCR Line'); hasil MACRO scan "
+               "34.3-47.3%, lebih rendah dari pipeline teks — jangan dibandingkan langsung atau dianggap lebih tinggi."])
+    ws.append(["Metrologi: raw = GT raw | fixed_v8/v8 = GT v8 | v9 = GT v9 + matcher v2. "
+               "Perbandingan yang sebanding hanya dalam kolom GT yang sama (mis. v9_reval vs org_003_v3)."])
+    ws.freeze_panes = "C3"
+    ws.column_dimensions["A"].width = 24
+    ws.column_dimensions["B"].width = 8
+    for col in "CDEFGHIJKLMNOPQRST":
+        ws.column_dimensions[col].width = 14
+    return ws
 
 
 

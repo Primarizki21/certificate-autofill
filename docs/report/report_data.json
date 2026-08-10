@@ -18,7 +18,8 @@
       "gt": "raw",
       "date": "Jul 30",
       "notes": "per-field LLM, Phase v4",
-      "is_winner": false
+      "is_winner": false,
+      "per_field_src": "tests/benchmark_runs/run_hybrid_llm_20260730_193007/summary_hybrid_llm.json"
     },
     {
       "id": "v4_a2",
@@ -32,7 +33,8 @@
       "gt": "raw",
       "date": "Jul 30",
       "notes": "full-text LLM, Phase v4",
-      "is_winner": false
+      "is_winner": false,
+      "per_field_src": "tests/benchmark_runs/run_fulltext_llm_20260730_202823/summary_fulltext_llm.json"
     },
     {
       "id": "v6_b",
@@ -46,7 +48,8 @@
       "gt": "raw",
       "date": "Jul 31",
       "notes": "context + minimized text",
-      "is_winner": false
+      "is_winner": false,
+      "per_field_src": "tests/benchmark_runs/run_llm_v3_20260731_113402/summary_variant_b_minimized.json"
     },
     {
       "id": "v7_p3",
@@ -60,7 +63,8 @@
       "gt": "raw",
       "date": "Aug 3",
       "notes": "rule-based router, LLM calls -43%",
-      "is_winner": false
+      "is_winner": false,
+      "per_field_src": "tests/benchmark_runs/run_llm_v4_20260803_103345/summary.json"
     },
     {
       "id": "v7_p4",
@@ -75,7 +79,8 @@
       "gt": "raw",
       "date": "Aug 3",
       "is_winner": false,
-      "notes": "merged-lomba router; baseline run run_llm_v4_20260803_113310"
+      "notes": "merged-lomba router; baseline run run_llm_v4_20260803_113310",
+      "per_field_src": "tests/benchmark_runs/run_llm_v4_20260803_113310/summary_variant_e_hybrid.json"
     },
     {
       "id": "v8_final",
@@ -91,7 +96,8 @@
       "gt": "fixed_v8",
       "date": "Aug 4",
       "is_winner": false,
-      "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_115212 (GT final)"
+      "notes": "contains-match router + bias prompt; run run_llm_v4_20260804_115212 (GT final)",
+      "per_field_src": "tests/benchmark_runs/run_llm_v4_20260804_115212/summary_variant_f_bias.json"
     },
     {
       "id": "ocr_a_paddle26",
@@ -152,7 +158,8 @@
       "gt": "v8",
       "date": "Aug 5",
       "is_winner": true,
-      "notes": "organizer_v2 + data-driven router; GT v8 [PROD-001] Sudah dipromosikan ke produksi (organizer_v2 + tingkat_router) — pasca-promosi baseline rapid_tess scan: organizer 20.4->26.5%, MACRO 45.8->47.3%."
+      "notes": "organizer_v2 + data-driven router; GT v8 [PROD-001] Sudah dipromosikan ke produksi (organizer_v2 + tingkat_router) — pasca-promosi baseline rapid_tess scan: organizer 20.4->26.5%, MACRO 45.8->47.3%.",
+      "per_field_src": "tests/benchmark_runs/run_llm_v4_20260805_163541/summary.json"
     },
     {
       "id": "v9_reval_v12",
@@ -168,7 +175,8 @@
       "gt": "v9",
       "date": "Aug 5",
       "is_winner": false,
-      "notes": "handoff v12: GT v9 (5 organizer fixes) + matcher v2 (abbr subsequence, anti-false-positive). MACRO exact 58.9->60.2%, organizer 33.8->39.2%. Metrologi, bukan eksperimen baru."
+      "notes": "handoff v12: GT v9 (5 organizer fixes) + matcher v2 (abbr subsequence, anti-false-positive). MACRO exact 58.9->60.2%, organizer 33.8->39.2%. Metrologi, bukan eksperimen baru.",
+      "per_field_src": "tests/benchmark_runs/run_llm_v4_20260805_163541/summary_gt_v9_reval.json"
     },
     {
       "id": "nc_001",
@@ -243,7 +251,8 @@
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru."
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru.",
+      "per_field_src": "tests/benchmark_runs/organizer_v3_20260810_135842/summary_organizer_v3.json"
     }
   ],
   "documents": {
