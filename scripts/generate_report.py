@@ -703,31 +703,63 @@ def _per_field_by_experiment(data: dict) -> list[dict]:
 
 
 def _render_per_field_exp_sheet(wb, S, data: dict):
+    from openpyxl.styles import Alignment as _Align
+
     rows = _per_field_by_experiment(data)
     hdr = ["Field", "Metric"] + [f"{r['id']} ({r['gt']})" for r in rows]
     ws = wb.create_sheet("Per-Field by Experiment")
     ws.append(["Per-Field by Experiment — level eksperimen (bandingkan hanya dalam kolom GT yang sama)"])
+
+    # Grup metrologi utk highlight best (opsi B): raw / v8 (fixed_v8+v8) / v9
+    def gt_group(gt: str) -> str:
+        return "raw" if gt == "raw" else ("v8" if gt in ("fixed_v8", "v8") else "v9")
+
+    groups: dict[str, list[int]] = {}
+    for i, r in enumerate(rows):
+        groups.setdefault(gt_group(r["gt"]), []).append(i + 3)  # kolom eksperimen i = 3+i (1-based)
+
+    labels = ["nama_kegiatan", "penyelenggara", "waktu_mulai", "waktu_selesai", "nomor", "tingkat", "MACRO"]
     for metric in ("exact", "fuzzy"):
         ws.append(hdr)
         hr = ws.max_row
-        for label in ["nama_kegiatan", "penyelenggara", "waktu_mulai", "waktu_selesai", "nomor", "tingkat", "MACRO"]:
+        for j, label in enumerate(labels):
             row_vals = []
             for r in rows:
                 pf = r["per_field"] or {}
                 v = (pf.get(label) or {}).get(metric)
                 row_vals.append(_pct_str(v * 100) if v is not None else "n/a")
             ws.append([label, metric] + row_vals)
+            # styling data row: border + ALT_FILL selang-seling (pola _style_rows)
+            for c in range(1, len(hdr) + 1):
+                cell = ws.cell(hr + 1 + j, c)
+                cell.border = S["BORDER"]
+                if j % 2 == 0:
+                    cell.fill = S["ALT_FILL"]
+            # highlight best per grup GT (nilai terisi saja, bukan n/a)
+            for cols in groups.values():
+                best_col, best_val = None, -1.0
+                for c in cols:
+                    raw = ws.cell(hr + 1 + j, c).value
+                    p = _pct(raw)
+                    if p is not None and p > best_val:
+                        best_col, best_val = c, p
+                if best_col is not None:
+                    cell = ws.cell(hr + 1 + j, best_col)
+                    cell.font = S["BOLD_FONT"]
+                    cell.fill = S["GREEN_FILL"]
         for c in range(1, len(hdr) + 1):
             cell = ws.cell(hr, c)
             cell.fill = S["HEADER_FILL"]
             cell.font = S["HEADER_FONT"]
             cell.border = S["BORDER"]
+            cell.alignment = _Align(vertical="center", horizontal="center", wrap_text=True)
         ws.append([])
     ws.append(["Catatan: OCR eksperimen (ocr_a_*, nc_001, ocr_006, hyb_001, nc_002) tidak punya per-field — "
                "dievaluasi pada korpus scan 49 cert (metrik terpisah, lihat sheet 'OCR Line'); hasil MACRO scan "
                "34.3-47.3%, lebih rendah dari pipeline teks — jangan dibandingkan langsung atau dianggap lebih tinggi."])
     ws.append(["Metrologi: raw = GT raw | fixed_v8/v8 = GT v8 | v9 = GT v9 + matcher v2. "
-               "Perbandingan yang sebanding hanya dalam kolom GT yang sama (mis. v9_reval vs org_003_v3)."])
+               "Perbandingan yang sebanding hanya dalam kolom GT yang sama (mis. v9_reval vs org_003_v3). "
+               "Best per baris di-highlight hijau per grup GT."])
     ws.freeze_panes = "C3"
     ws.column_dimensions["A"].width = 24
     ws.column_dimensions["B"].width = 8
