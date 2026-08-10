@@ -114,13 +114,15 @@ def inject_noise(text: str, level: float, rng: random.Random) -> str:
     return out
 
 
-def eval_corpus(texts: dict[str, str], gt: dict[str, dict], label: str) -> dict:
+def eval_corpus(texts: dict[str, str], gt: dict[str, dict], label: str, fn=None) -> dict:
     per_field = {f: {"total": 0, "exact": 0, "fuzzy": 0} for f in EVAL_FIELDS}
+    if fn is None:
+        fn = offline_fields
     for stem, text in texts.items():
         row = gt.get(stem)
         if row is None:
             continue
-        fields = offline_fields(text)
+        fields = fn(text)
         for f in EVAL_FIELDS:
             gv = (row.get(f) or "").strip()
             if not gv or gv == "-":
