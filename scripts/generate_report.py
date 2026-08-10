@@ -471,23 +471,31 @@ def render_xlsx(data: dict, path: str):
         ws2.column_dimensions[col].width = 11
 
     # --- Sheet 3: Per-Field (exact + fuzzy per metode) ---
+    per_v10 = _per_field_v10(data)
+    V10_HDR = "v10 organizer v3 (GT v9+matcher v2)"
     ws3 = wb.create_sheet("Per-Field")
-    ws3.append(["Field", "Metric"] + PER_FIELD_METHODS)
+    ws3.append(["Field", "Metric"] + PER_FIELD_METHODS + [V10_HDR])
     for i, row in enumerate(PER_FIELD_EXACT):
-        ws3.append([row[0], "exact"] + [f"{v}%" if v is not None else "-" for v in row[1:]])
+        label = row[0].replace("**", "")
+        v10 = per_v10.get(label) if per_v10 else None
+        v10_val = _pct_str(v10["exact"] * 100) if v10 else "—"
+        ws3.append([row[0], "exact"] + [f"{v}%" if v is not None else "-" for v in row[1:]] + [v10_val])
         best = _best_col(row[1:])
         if best is not None:
             ws3.cell(i + 2, best + 3).font = S["BOLD_FONT"]
             ws3.cell(i + 2, best + 3).fill = S["GREEN_FILL"]
     base = len(PER_FIELD_EXACT) + 2
     for i, row in enumerate(PER_FIELD_FUZZY):
-        ws3.append([row[0], "fuzzy"] + [f"{v}%" if v is not None else "-" for v in row[1:]])
+        label = row[0].replace("**", "")
+        v10 = per_v10.get(label) if per_v10 else None
+        v10_val = _pct_str(v10["fuzzy"] * 100) if v10 else "—"
+        ws3.append([row[0], "fuzzy"] + [f"{v}%" if v is not None else "-" for v in row[1:]] + [v10_val])
         best = _best_col(row[1:])
         if best is not None:
             ws3.cell(base + i, best + 3).font = S["BOLD_FONT"]
             ws3.cell(base + i, best + 3).fill = S["GREEN_FILL"]
-    _style_header(ws3, S, 8)
-    _style_rows(ws3, S, len(PER_FIELD_EXACT) + len(PER_FIELD_FUZZY), 8)
+    _style_header(ws3, S, 9)
+    _style_rows(ws3, S, len(PER_FIELD_EXACT) + len(PER_FIELD_FUZZY), 9)
     ws3.append([])
     ws3.append(["v9 per-field (GT v9 + matcher v2) — metrologi berbeda dari tabel di atas"])
     r0 = len(PER_FIELD_EXACT) + len(PER_FIELD_FUZZY) + 3
@@ -499,7 +507,7 @@ def render_xlsx(data: dict, path: str):
         ws3.cell(r0 + 1 + i, 1).value = f
         ws3.cell(r0 + 1 + i, 2).value = f"{ex}%"
         ws3.cell(r0 + 1 + i, 3).value = f"{fu}%"
-    for col in "ABCDEFGH":
+    for col in "ABCDEFGHI":
         ws3.column_dimensions[col].width = 13
     ws3.column_dimensions["A"].width = 30
 
@@ -579,6 +587,58 @@ def render_xlsx(data: dict, path: str):
             ws6.column_dimensions[col].width = 16
 
     wb.save(path)
+
+
+# ---------------------------------------------------------------------------
+# Helper sheet Per-Field: baca per-field v10 live dari summary_organizer_v3.json
+# (run dir eksperimen) — label GT di header, metrologi tidak dicampur diam-diam.
+# ---------------------------------------------------------------------------
+_FIELD_LABELS = [
+    ("nama_kegiatan_sertifikasi", "nama_kegiatan"),
+    ("waktu_mulai_pelaksanaan", "waktu_mulai"),
+    ("waktu_selesai_pelaksanaan", "waktu_selesai"),
+    ("penyelenggara_kegiatan", "penyelenggara"),
+    ("nomor_bukti_fisik_nomor_sertifikasi", "nomor"),
+    ("tingkat", "tingkat"),
+]
+
+
+def _per_field_v10(data: dict) -> dict[str, dict] | None:
+    """Baca per-field v10 dari summary_organizer_v3.json (run dir eksperimen)."""
+    for e in data["experiments"]:
+        if e.get("id") == "org_003_v3":
+            run_dir = e.get("run_dir") or ""
+            break
+    else:
+        return None
+    path = os.path.join(REPO, run_dir, "summary_organizer_v3.json")
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        s = json.load(f)
+    pf = s.get("per_field_v3") or {}
+    out = {}
+    for k, label in _FIELD_LABELS:
+        v = pf.get(k)
+        if v and v.get("total"):
+            out[label] = {
+                "exact": v["exact"] / v["total"],
+                "fuzzy": v["fuzzy"] / v["total"],
+            }
+    if out:
+        te = sum(v["exact"] for v in pf.values() if v.get("total"))
+        tf = sum(v["fuzzy"] for v in pf.values() if v.get("total"))
+        tt = sum(v["total"] for v in pf.values() if v.get("total"))
+        if tt:
+            out["MACRO"] = {"exact": te / tt, "fuzzy": tf / tt}
+    return out
+
+
+def _pct_str(v: float | None) -> str:
+    if v is None:
+        return "—"
+    return f"{v:.1f}%"
+
 
 
 # ---------------------------------------------------------------------------

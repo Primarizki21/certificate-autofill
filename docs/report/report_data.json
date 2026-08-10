@@ -235,7 +235,7 @@
       "phase": "v10",
       "label": "F1 organizer v3 (R0-R5, 0 LLM)",
       "variant": "organizer_v3",
-      "run_dir": "tests/benchmark_runs/organizer_v3_20260810_111514",
+      "run_dir": "tests/benchmark_runs/organizer_v3_20260810_135842",
       "tingkat": "81.1%",
       "macro": "59.6%",
       "tokens_cert": 0,
@@ -243,7 +243,7 @@
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru."
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru."
     }
   ],
   "documents": {
