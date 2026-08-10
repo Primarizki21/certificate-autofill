@@ -17,45 +17,198 @@
     "router_coverage": "45/74 @100% precision"
   },
   "results": [
-    {"field": "nama_kegiatan_sertifikasi", "exact": "25.7%", "fuzzy": "52.7%"},
-    {"field": "waktu_mulai_pelaksanaan", "exact": "81.8%", "fuzzy": "81.8%"},
-    {"field": "waktu_selesai_pelaksanaan", "exact": "81.8%", "fuzzy": "81.8%"},
-    {"field": "penyelenggara_kegiatan", "exact": "39.2%", "fuzzy": "79.7%"},
-    {"field": "nomor_bukti_fisik_nomor_sertifikasi", "exact": "59.6%", "fuzzy": "59.6%"},
-    {"field": "tingkat", "exact": "83.8%", "fuzzy": "89.2%"}
+    {
+      "field": "nama_kegiatan_sertifikasi",
+      "exact": "25.7%",
+      "fuzzy": "52.7%"
+    },
+    {
+      "field": "waktu_mulai_pelaksanaan",
+      "exact": "81.8%",
+      "fuzzy": "81.8%"
+    },
+    {
+      "field": "waktu_selesai_pelaksanaan",
+      "exact": "81.8%",
+      "fuzzy": "81.8%"
+    },
+    {
+      "field": "penyelenggara_kegiatan",
+      "exact": "39.2%",
+      "fuzzy": "79.7%"
+    },
+    {
+      "field": "nomor_bukti_fisik_nomor_sertifikasi",
+      "exact": "59.6%",
+      "fuzzy": "59.6%"
+    },
+    {
+      "field": "tingkat",
+      "exact": "83.8%",
+      "fuzzy": "89.2%"
+    }
   ],
   "stages": [
-    {"stage": "1", "name": "Text Extraction", "module": "pdf_fast_path / docling_parser / ocr_fallback", "fn": "extract_text_with_pymupdf / parse_with_docling / extract_text_with_ocr", "role": "Teks PDF: PyMuPDF (embedded), Docling (fallback bila teks < 80 char), OCR RapidOCR+Tesseract (dipaksa bila field tanggal masih kosong). 2-pass nomor terintegrasi tapi OFF (flag ENABLE_OCR_NUMBER_2PASS)."},
-    {"stage": "2", "name": "Field Extraction (regex)", "module": "field_extractor.py", "fn": "extract_certificate_fields", "role": "Regex untuk tanggal (dgn alias kesalahan OCR bulan: AGUSTU5 -> AGUSTUS), role, nama kegiatan, nomor sertifikat, organizer v1."},
-    {"stage": "3", "name": "Organizer v2", "module": "organizer_v2.py", "fn": "extract_organizer_v2", "role": "Ekstraktor penyelenggara (v9/ORG-001): preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')."},
-    {"stage": "4", "name": "Form Mapping", "module": "form_mapper.py", "fn": "map_fields_to_form", "role": "Mapping ke form KHP: kelompok, jenis, tingkat, jabatan, jenis_penyelenggara + validate_with_needs_review (confidence < 0.80 -> review)."},
-    {"stage": "5", "name": "Tingkat Router", "module": "tingkat_router.py", "fn": "route_tingkat", "role": "13 rule deterministik berbasis sinyal teks (lomba/hima/dept/univ/luar/nasw/sem/fak/bem). 45/74 keputusan @100% precision (ROUTER-002/003)."},
-    {"stage": "6", "name": "LLM Tingkat (fallback)", "module": "llm_tingkat.py", "fn": "infer_tingkat", "role": "Prompt f_bias via Ollama utk cert yang tak ter-rute (29/74). Minimisasi teks per kesulitan (140/200/300 char), context block (nama kegiatan, penyelenggara, peran), temperature 0."},
-    {"stage": "7", "name": "Persistence", "module": "database / models.py", "fn": "ExtractedField + needs_review", "role": "Simpan field + confidence ke PostgreSQL; flag needs_review utk review manusia."}
+    {
+      "stage": "1",
+      "name": "Text Extraction",
+      "module": "pdf_fast_path / docling_parser / ocr_fallback",
+      "fn": "extract_text_with_pymupdf / parse_with_docling / extract_text_with_ocr",
+      "role": "Teks PDF: PyMuPDF (embedded), Docling (fallback bila teks < 80 char), OCR RapidOCR+Tesseract (dipaksa bila field tanggal masih kosong). 2-pass nomor terintegrasi tapi OFF (flag ENABLE_OCR_NUMBER_2PASS)."
+    },
+    {
+      "stage": "2",
+      "name": "Field Extraction (regex)",
+      "module": "field_extractor.py",
+      "fn": "extract_certificate_fields",
+      "role": "Regex untuk tanggal (dgn alias kesalahan OCR bulan: AGUSTU5 -> AGUSTUS), role, nama kegiatan, nomor sertifikat, organizer v1."
+    },
+    {
+      "stage": "3",
+      "name": "Organizer v2",
+      "module": "organizer_v2.py",
+      "fn": "extract_organizer_v2",
+      "role": "Ekstraktor penyelenggara (v9/ORG-001): preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')."
+    },
+    {
+      "stage": "4",
+      "name": "Form Mapping",
+      "module": "form_mapper.py",
+      "fn": "map_fields_to_form",
+      "role": "Mapping ke form KHP: kelompok, jenis, tingkat, jabatan, jenis_penyelenggara + validate_with_needs_review (confidence < 0.80 -> review)."
+    },
+    {
+      "stage": "5",
+      "name": "Tingkat Router",
+      "module": "tingkat_router.py",
+      "fn": "route_tingkat",
+      "role": "13 rule deterministik berbasis sinyal teks (lomba/hima/dept/univ/luar/nasw/sem/fak/bem). 45/74 keputusan @100% precision (ROUTER-002/003)."
+    },
+    {
+      "stage": "6",
+      "name": "LLM Tingkat (fallback)",
+      "module": "llm_tingkat.py",
+      "fn": "infer_tingkat",
+      "role": "Prompt f_bias via Ollama utk cert yang tak ter-rute (29/74). Minimisasi teks per kesulitan (140/200/300 char), context block (nama kegiatan, penyelenggara, peran), temperature 0."
+    },
+    {
+      "stage": "7",
+      "name": "Persistence",
+      "module": "database / models.py",
+      "fn": "ExtractedField + needs_review",
+      "role": "Simpan field + confidence ke PostgreSQL; flag needs_review utk review manusia."
+    }
   ],
   "router_rules": [
-    {"rule": "tingkat_nasional", "signals": "TINGKAT NASIONAL / LOMBA NASIONAL eksplisit", "decision": "Nasional"},
-    {"rule": "lomba+org", "signals": "lomba dan (hima | univ | nasw | luar | fak | bem)", "decision": "Nasional"},
-    {"rule": "lomba_merged+org", "signals": "kata tergabung OCR (CUP/academicweeks) dan (hima|univ|fak|bem)", "decision": "Nasional"},
-    {"rule": "dept+sem", "signals": "dept dan seminar, tanpa lomba/nasw", "decision": "Departemen/Program Studi"},
-    {"rule": "hima+luar", "signals": "hima dan organisasi luar", "decision": "Nasional"},
-    {"rule": "univ+luar", "signals": "univ dan luar, tanpa fak", "decision": "Nasional"},
-    {"rule": "dept+fak", "signals": "dept dan fak", "decision": "Departemen/Program Studi"},
-    {"rule": "dept+hima+univ", "signals": "dept dan hima dan univ", "decision": "Departemen/Program Studi"},
-    {"rule": "fak+univ", "signals": "fak dan univ, tanpa sem/nasw/lomba", "decision": "Fakultas"},
-    {"rule": "bem+sem", "signals": "bem dan sem, tanpa lomba/hima/nasw", "decision": "Fakultas"},
-    {"rule": "bem_no_univ", "signals": "bem tanpa konteks univ/lomba/nasw/luar/hima", "decision": "Fakultas"},
-    {"rule": "bem+hima", "signals": "bem dan hima (panitia internal FTMM)", "decision": "Fakultas"},
-    {"rule": "sem+univ", "signals": "sem dan univ, tanpa fak/bem/hima/lomba", "decision": "Universitas"}
+    {
+      "rule": "tingkat_nasional",
+      "signals": "TINGKAT NASIONAL / LOMBA NASIONAL eksplisit",
+      "decision": "Nasional"
+    },
+    {
+      "rule": "lomba+org",
+      "signals": "lomba dan (hima | univ | nasw | luar | fak | bem)",
+      "decision": "Nasional"
+    },
+    {
+      "rule": "lomba_merged+org",
+      "signals": "kata tergabung OCR (CUP/academicweeks) dan (hima|univ|fak|bem)",
+      "decision": "Nasional"
+    },
+    {
+      "rule": "dept+sem",
+      "signals": "dept dan seminar, tanpa lomba/nasw",
+      "decision": "Departemen/Program Studi"
+    },
+    {
+      "rule": "hima+luar",
+      "signals": "hima dan organisasi luar",
+      "decision": "Nasional"
+    },
+    {
+      "rule": "univ+luar",
+      "signals": "univ dan luar, tanpa fak",
+      "decision": "Nasional"
+    },
+    {
+      "rule": "dept+fak",
+      "signals": "dept dan fak",
+      "decision": "Departemen/Program Studi"
+    },
+    {
+      "rule": "dept+hima+univ",
+      "signals": "dept dan hima dan univ",
+      "decision": "Departemen/Program Studi"
+    },
+    {
+      "rule": "fak+univ",
+      "signals": "fak dan univ, tanpa sem/nasw/lomba",
+      "decision": "Fakultas"
+    },
+    {
+      "rule": "bem+sem",
+      "signals": "bem dan sem, tanpa lomba/hima/nasw",
+      "decision": "Fakultas"
+    },
+    {
+      "rule": "bem_no_univ",
+      "signals": "bem tanpa konteks univ/lomba/nasw/luar/hima",
+      "decision": "Fakultas"
+    },
+    {
+      "rule": "bem+hima",
+      "signals": "bem dan hima (panitia internal FTMM)",
+      "decision": "Fakultas"
+    },
+    {
+      "rule": "sem+univ",
+      "signals": "sem dan univ, tanpa fak/bem/hima/lomba",
+      "decision": "Universitas"
+    }
   ],
   "field_methods": [
-    {"field": "nama_kegiatan_sertifikasi", "method": "Regex template + keyword", "mechanism": "pola 'seminar X yang diselenggarakan', 'talkshow', PKKMB; fallback keyword AIRNOLOGY/KAKIWIMA/SPECTA/BRIEF", "module": "field_extractor.py (extract_activity_name)"},
-    {"field": "waktu_mulai / waktu_selesai", "method": "Regex 5-tier + alias bulan OCR", "mechanism": "interval numerik -> English month-first -> tanggal tunggal -> same-month -> token-scan; MONTH_ALIASES (AGUSTU5 -> AGUSTUS)", "module": "field_extractor.py (extract_dates)"},
-    {"field": "raw_role (jabatan)", "method": "Regex + keyword fallback", "mechanism": "pola 'as a' / 'sebagai' / 'Atas partisipasinya sebagai'; fallback keyword PANITIA/PESERTA/KETUA", "module": "field_extractor.py (extract_role)"},
-    {"field": "nomor_bukti_fisik_nomor_sertifikasi", "method": "Regex 3 pola", "mechanism": "NO./NOMOR + digit + tahun (mis. 212/E/BEM-FKM/UNAIR/X/2023)", "module": "field_extractor.py (extract_certificate_number)"},
-    {"field": "penyelenggara_kegiatan", "method": "Rule-based organizer_v2", "mechanism": "preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')", "module": "organizer_v2.py (extract_organizer_v2)"},
-    {"field": "tingkat", "method": "Router 13 rule -> LLM fallback", "mechanism": "sinyal teks deterministik 45/74 @100% precision; LLM llama3.1:8b utk 29/74 cert yang tak ter-rute", "module": "tingkat_router.py + llm_tingkat.py"},
-    {"field": "kelompok / jenis / jabatan form / jenis_penyelenggara", "method": "Rule mapper", "mechanism": "form_mapper rules + threshold confidence < 0.80 -> needs_review (human-in-the-loop)", "module": "form_mapper.py (map_fields_to_form)"}
+    {
+      "field": "nama_kegiatan_sertifikasi",
+      "method": "Regex template + keyword",
+      "mechanism": "pola 'seminar X yang diselenggarakan', 'talkshow', PKKMB; fallback keyword AIRNOLOGY/KAKIWIMA/SPECTA/BRIEF",
+      "module": "field_extractor.py (extract_activity_name)"
+    },
+    {
+      "field": "waktu_mulai / waktu_selesai",
+      "method": "Regex 5-tier + alias bulan OCR",
+      "mechanism": "interval numerik -> English month-first -> tanggal tunggal -> same-month -> token-scan; MONTH_ALIASES (AGUSTU5 -> AGUSTUS)",
+      "module": "field_extractor.py (extract_dates)"
+    },
+    {
+      "field": "raw_role (jabatan)",
+      "method": "Regex + keyword fallback",
+      "mechanism": "pola 'as a' / 'sebagai' / 'Atas partisipasinya sebagai'; fallback keyword PANITIA/PESERTA/KETUA",
+      "module": "field_extractor.py (extract_role)"
+    },
+    {
+      "field": "nomor_bukti_fisik_nomor_sertifikasi",
+      "method": "Regex 3 pola",
+      "mechanism": "NO./NOMOR + digit + tahun (mis. 212/E/BEM-FKM/UNAIR/X/2023)",
+      "module": "field_extractor.py (extract_certificate_number)"
+    },
+    {
+      "field": "penyelenggara_kegiatan",
+      "method": "Rule-based organizer_v2",
+      "mechanism": "preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')",
+      "module": "organizer_v2.py (extract_organizer_v2)"
+    },
+    {
+      "field": "tingkat",
+      "method": "Router 13 rule -> LLM fallback",
+      "mechanism": "sinyal teks deterministik 45/74 @100% precision; LLM llama3.1:8b utk 29/74 cert yang tak ter-rute",
+      "module": "tingkat_router.py + llm_tingkat.py"
+    },
+    {
+      "field": "kelompok / jenis / jabatan form / jenis_penyelenggara",
+      "method": "Rule mapper",
+      "mechanism": "form_mapper rules + threshold confidence < 0.80 -> needs_review (human-in-the-loop)",
+      "module": "form_mapper.py (map_fields_to_form)"
+    }
   ],
   "ner_status": "NER TIDAK dipakai di v9. NER v1 (pre-trained) = 12.8% MACRO (FAIL, closed di ledger); hybrid NER+regex v3 = 47.7% (superseded). Semua field ditentukan oleh regex + rule-based extractor; LLM hanya fallback utk field tingkat.",
   "llm": {
@@ -63,12 +216,23 @@
     "prompt": "f_bias (v4_bias) — koreksi bias bahasa Inggris",
     "temperature": 0,
     "num_predict": 30,
-    "budget_chars": {"strong": 140, "normal": 200, "poor_ocr": 300},
-    "context_fields": ["nama_kegiatan_sertifikasi", "penyelenggara_kegiatan", "raw_role"],
+    "budget_chars": {
+      "strong": 140,
+      "normal": 200,
+      "poor_ocr": 300
+    },
+    "context_fields": [
+      "nama_kegiatan_sertifikasi",
+      "penyelenggara_kegiatan",
+      "raw_role"
+    ],
     "host": "http://127.0.0.1:11434"
   },
   "production": {
-    "promoted": ["backend/app/services/organizer_v2.py", "backend/app/services/tingkat_router.py"],
+    "promoted": [
+      "backend/app/services/organizer_v2.py",
+      "backend/app/services/tingkat_router.py"
+    ],
     "enable_llm_tingkat": false,
     "enable_ocr_number_2pass": false,
     "enable_ocr_fallback": true,
@@ -77,13 +241,104 @@
     "note": "Produksi deterministik tanpa LLM (ENABLE_LLM_TINGKAT=false default). 2-pass nomor terintegrasi tapi OFF (keputusan deploy-time: gain +3pt nomor dengan cost +2-10s/cert). Re-eval pasca-promosi (GT v9 + matcher v2): scan MACRO 45.8 -> 47.3%, organizer 20.4 -> 26.5%."
   },
   "progression": [
-    {"phase": "v4", "method": "LLM A1 (per-field)", "tingkat": "47.3%", "macro": "49.0%", "tok": 834, "calls": 125},
-    {"phase": "v4", "method": "LLM A2 v2 (full-text)", "tingkat": "36.5%", "macro": "58.3%", "tok": 834, "calls": 74},
-    {"phase": "v6", "method": "LLM v3 Variant B", "tingkat": "39.2%", "macro": "46.4%", "tok": 479, "calls": 74},
-    {"phase": "v7", "method": "P3 router rule-based", "tingkat": "71.6%", "macro": "53.1%", "tok": 191, "calls": 42},
-    {"phase": "v7", "method": "P4 e_hybrid + router", "tingkat": "77.0%", "macro": "54.2%", "tok": 202, "calls": 39},
-    {"phase": "v8", "method": "f_bias + router", "tingkat": "82.4%", "macro": "55.2%", "tok": 214, "calls": 35},
-    {"phase": "v9", "method": "organizer_v2 + router", "tingkat": "83.8%", "macro": "58.9%", "tok": 176, "calls": 29},
-    {"phase": "v9", "method": "re-baseline GT v9 + matcher v2", "tingkat": "83.8%", "macro": "60.2%", "tok": 176, "calls": 29}
-  ]
+    {
+      "phase": "v4",
+      "method": "LLM A1 (per-field)",
+      "tingkat": "47.3%",
+      "macro": "49.0%",
+      "tok": 834,
+      "calls": 125
+    },
+    {
+      "phase": "v4",
+      "method": "LLM A2 v2 (full-text)",
+      "tingkat": "36.5%",
+      "macro": "58.3%",
+      "tok": 834,
+      "calls": 74
+    },
+    {
+      "phase": "v6",
+      "method": "LLM v3 Variant B",
+      "tingkat": "39.2%",
+      "macro": "46.4%",
+      "tok": 479,
+      "calls": 74
+    },
+    {
+      "phase": "v7",
+      "method": "P3 router rule-based",
+      "tingkat": "71.6%",
+      "macro": "53.1%",
+      "tok": 191,
+      "calls": 42
+    },
+    {
+      "phase": "v7",
+      "method": "P4 e_hybrid + router",
+      "tingkat": "77.0%",
+      "macro": "54.2%",
+      "tok": 202,
+      "calls": 39
+    },
+    {
+      "phase": "v8",
+      "method": "f_bias + router",
+      "tingkat": "82.4%",
+      "macro": "55.2%",
+      "tok": 214,
+      "calls": 35
+    },
+    {
+      "phase": "v9",
+      "method": "organizer_v2 + router",
+      "tingkat": "83.8%",
+      "macro": "58.9%",
+      "tok": 176,
+      "calls": 29
+    },
+    {
+      "phase": "v9",
+      "method": "re-baseline GT v9 + matcher v2",
+      "tingkat": "83.8%",
+      "macro": "60.2%",
+      "tok": 176,
+      "calls": 29
+    }
+  ],
+  "v10_experiments": {
+    "base": "v9",
+    "f0_stat_validation": {
+      "router": "45/74 @100% precision (5-fold semua rule min-fold 100%)",
+      "rule_low_n": "8/13 rule fire <5 (LOW-N)",
+      "macro_exact_ci95": "56.0-64.4%",
+      "macro_fuzzy_ci95": "70.3-78.3%",
+      "router_coverage_ci95": "50.0-71.6%"
+    },
+    "f0_ood_probe": {
+      "offline_macro_exact": "55.7% (74 cert; produksi 47.3% = subset scan 49)",
+      "mutation_free_inst_drop": "-1.2pt (tingkat -4.1pt = kerapuhan riil)",
+      "noise_10_25_50": "-8.6/-16.4/-24.2pt"
+    },
+    "f1_org_norm": {
+      "nomor_exact": "59.6 -> 76.9% (+17.3pt, pattern SERT- + fallback raw text)",
+      "organizer_exact": "37.8 -> 39.2% (+1.4pt, gate FAIL)",
+      "verdict": "PARTIAL PASS"
+    },
+    "f2_rule_mining": {
+      "router_coverage": "45 -> 50/74 @100% precision",
+      "new_rules": [
+        "ukm_org (3/3)",
+        "hima_dept (2/2)"
+      ],
+      "llm_calls": "29 -> 24",
+      "verdict": "PASS"
+    },
+    "f6_needs_review": {
+      "cert_level_recall": "98.6% (68/69 wrong-cert flagged)",
+      "fp": "1 cert (satu-satunya exact-all)",
+      "flagged_certs": "73/74 butuh review (trade-off safety net)",
+      "verdict": "PASS"
+    }
+  }
 }
