@@ -65,32 +65,45 @@ _DATE_ONLY = re.compile(rf"\s+(?:on\s+)?{_MONTH}\s+\d{{1,2}},?\s+\d{{4}}\s*$", r
 # --- R5: dash pada jenjang studi ---------------------------------------------
 _DASH_NORM = re.compile(r"\bS\s*-\s*(\d)\b", re.IGNORECASE)
 
+_ALL_RULES = {"R0", "PREFIX_HELD", "R2", "R3", "R4", "R1", "R5"}
 
-def _norm_organizer_v3(value: str | None, raw_text: str) -> str | None:
+
+def _norm_organizer_v3(value: str | None, raw_text: str, enabled: set[str] | None = None) -> str | None:
+    """enabled: subset aturan aktif (default semua) — untuk ablation OOD probe v3."""
+    on = _ALL_RULES if enabled is None else set(enabled)
     v = value or ""
     v = _PREFIX_JUNK.sub("", v).strip()
     upper_raw = (raw_text or "").upper()
     has_unair = bool(re.search(r"UNAIR|UNIVERSITAS\s*AIRLANGGA|AIRLANGGA", upper_raw))
     if has_unair:
-        v = _TRAILING_ORG.sub(r"\1", v).strip()  # R0: bug fix — dulu sub("", v) hapus semua
+        if "R0" in on:
+            v = _TRAILING_ORG.sub(r"\1", v).strip()  # R0: fix bug — dulu sub("", v) hapus semua
+        else:
+            v = _TRAILING_ORG.sub("", v).strip()  # perilaku baseline (bug lama)
         v = _UNIV_TRAIL.sub(" Universitas Airlangga", v).strip()
     # Lapisan baru F1b
-    v = _PREFIX_HELD.sub("", v).strip()
-    v = _PREFIX_JUNK_WORDS.sub("", v).strip()
-    v = _UP_TO_OLEH.sub("", v).strip()
-    v = _DATE_SUFFIX.sub("", v)
-    v = _DATE_ONLY.sub("", v)
-    v = _SUFFIX_DEPT.sub("", v).strip()
-    v = _DASH_NORM.sub(r"S\1", v).strip()
+    if "PREFIX_HELD" in on:
+        v = _PREFIX_HELD.sub("", v).strip()
+    if "R2" in on:
+        v = _PREFIX_JUNK_WORDS.sub("", v).strip()
+    if "R3" in on:
+        v = _UP_TO_OLEH.sub("", v).strip()
+    if "R4" in on:
+        v = _DATE_SUFFIX.sub("", v)
+        v = _DATE_ONLY.sub("", v)
+    if "R1" in on:
+        v = _SUFFIX_DEPT.sub("", v).strip()
+    if "R5" in on:
+        v = _DASH_NORM.sub(r"S\1", v).strip()
     return v or None
 
 
-def offline_v3(text: str) -> dict[str, str]:
+def offline_v3(text: str, enabled: set[str] | None = None) -> dict[str, str]:
     extracted = extract_certificate_fields(text)
     v2 = extract_organizer_v2(text)
     if v2:
         extracted["penyelenggara_kegiatan"] = ExtractedValue(v2, 0.84, "organizer_v2")
-    org = _norm_organizer_v3((extracted.get("penyelenggara_kegiatan") or ExtractedValue(None, 0, "")).value, text)
+    org = _norm_organizer_v3((extracted.get("penyelenggara_kegiatan") or ExtractedValue(None, 0, "")).value, text, enabled)
     if org:
         extracted["penyelenggara_kegiatan"] = ExtractedValue(org, 0.84, "organizer_v2")
     nomor = _norm_nomor(text)
