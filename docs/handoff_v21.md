@@ -52,6 +52,26 @@ Semua = tests-only; port ke produksi butuh keputusan eksplisit user.
 4. **Eksperimen A (LLM per-field)**: TIDAK dijalankan — F1 v3 PASS gate
    (handoff v20: hanya jika F1 gagal).
 
+## Tambahan sesi ini — OOD probe lapisan v3 (OOD-002, committed `59cb038`)
+
+Pertanyaan user: apakah approach v3 robust/generalize terhadap varian sertif
+baru? Jawaban terukur (N=74, 0 LLM, `tests/ood_probe_v3.py`):
+
+- **Mutation (template baru): 0 kerapuhan aturan** — extra drop organizer v3
+  (20.3% vs v9 16.2%) = 100% kontaminasi GT (nilai v3 justru mengikuti
+  institusi baru, GT lama tak di-update). Metrik bebas institusi v3 = v9 PERSIS.
+- **Noise OCR: 2 aturan rapuh** — R4 (strip tanggal, mati sejak 10%: digit
+  rusak `July 30`→`July 3O`) & R1 (strip dept, mati sejak 25%: kata merge
+  `Facultyof`). R0/R2/PREFIX_HELD bertahan s.d. 50%. Extra drop organizer:
+  10% +1.4pt, 25% +1.3pt, 50% +4.1pt (50% = 2 matcher-digit `S1`→`SI` + 1 R4).
+- **Ablation**: R3 = NO_FIX (ubah 2 nilai tanpa perbaikan), R5 = DEAD (tak
+  pernah ubah nilai) → **hapus saat port produksi**. Semua aturan hanya
+  1 fix-cert (LOW_N) → klaim robust per-aturan butuh data baru.
+- **Verdict: FAIL gate drop-relatif**, tapi gain absolut v3 tetap positif di
+  semua kondisi (noise 10%: organizer 44.5% vs v9 37.8%).
+- **Rekomendasi port produksi**: R0/R2/PREFIX_HELD KEEP, R1/R4 = GUARD (wajib
+  ditemani needs_review F6 sebagai jaring), R3/R5 hapus.
+
 ## Frontier tertunda (sama dengan v20)
 
 - F4 fingerprint dedup (butuh KB stabil), F5 distillation (butuh volume F3),
