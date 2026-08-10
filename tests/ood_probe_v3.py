@@ -61,7 +61,7 @@ OUT_MD = os.path.join(REPO, "docs", "report", "ood_probe_v3.md")
 
 TOL_10 = 0.01  # toleransi drop v3 vs v9: +1.0pt
 PIPELINES = {"v9": offline_fields, "v3": offline_v3}
-RULE_ORDER = ["R0", "PREFIX_HELD", "R1", "R2", "R3", "R4", "R5"]
+RULE_ORDER = ["R0", "PREFIX_HELD", "R1", "R2", "R3", "R4", "R5", "R6"]
 SURVIVAL_GATE = 0.60
 
 
@@ -225,7 +225,8 @@ def render_md(data: dict) -> str:
         "> Arti PASS: drop v3 tidak lebih besar dari drop v9 (toleransi +1.0pt "
         "di mutation & noise 10%; tanpa toleransi di noise 25%/50%) → lapisan v3 "
         "**tidak menambah kerapuhan** vs baseline. Verdict hanya menilai kerapuhan "
-        "relatif; keakuratan absolut diukur benchmark ORG-003 (organizer 45.9%).",
+        "relatif; keakuratan absolut diukur benchmark F1C-001 (organizer 54.1%, "
+        "MACRO 61.2%).",
         "",
         "## Baseline offline (corpus asli)",
         "",
@@ -315,28 +316,36 @@ def render_md(data: dict) -> str:
             L.append(f"- **{label}**: {len(rows)} fix v3 mati — kerapuhan "
                      f"teks-bergantung (GT statis; lihat daftar nilai di atas).")
     L += [
-        "- Mutation: extra drop organizer v3 (20.3% vs v9 16.2%) = 100% kontaminasi "
-        "GT — nilai v3 justru mengikuti institusi baru (mis. '...Universitas Negeri "
-        "Semarang Himpunan Mahasiswa TSD'), yang benar untuk template baru. Pada "
+        "- Mutation: extra drop organizer v3 (21.6% vs v9 16.2%) = 100% kontaminasi "
+        "GT — 4 cert (PRIMARIZKI_panitia_binary×2, SERTIF76, File Venedict ORM) yang "
+        "GT-nya memuat token institusi (termasuk SERTIF76 = fix R6 baru, GT "
+        "'...Universitas Airlangga' ikut mutasi). Nilai v3 justru mengikuti "
+        "institusi baru — benar untuk template baru, GT lama tak di-update. Pada "
         "metrik bebas institusi (free_inst, tingkat) v3 = v9 PERSIS.",
         "- Noise 10%: 1 kerapuhan nyata = R4 (strip tanggal gagal saat digit OCR "
-        "rusak: 'July 30' → 'July 3O'). Gain absolut v3 tetap positif di kondisi "
-        "noise (organizer 45.9→44.5% vs v9 37.8%): v3 unggul ~+6.7pt di baseline "
-        "dan masih unggul ~+6.7pt di noise 10% — hanya gate drop-relatif yang "
-        "terlewat (toleransi +1.0pt vs drop 1.4%).",
+        "rusak: 'July 30' → 'July 3O', 2955331). Gain absolut v3 tetap positif di "
+        "kondisi noise (organizer 54.1→52.7% vs v9 37.8%): v3 unggul ~+16pt di "
+        "baseline dan ~+15pt di noise 10% — hanya gate drop-relatif yang terlewat "
+        "(toleransi +1.0pt vs drop 1.4%).",
         "- Noise 25%: Rasio_Faiz mati — R1 gagal saat kata merge ('Facultyof' — "
         "regex butuh koma+spasi). Noise 50%: 2 extra drop (PRIMARIZKI×2) BUKAN "
         "aturan strip — nilai v3 benar secara substansi, hanya digit noise "
         "'S1'→'SI' membuat matcher exact gagal (kerapuhan matcher digit, bukan "
-        "strip). R4 tetap mati di 25% & 50%.",
+        "strip). R4 tetap mati di 25% & 50% (2955331).",
         "- Kesimpulan kerapuhan aturan: **0 aturan rapuh di mutation** (semua "
         "extra drop = kontaminasi GT); **2 aturan rapuh teks-bergantung di "
         "noise**: R4 (mati sejak 10% — digit tanggal) & R1 (mati sejak 25% — "
-        "kata merge). R0/R2/PREFIX_HELD bertahan sampai 50%.",
+        "kata merge). R0/R2/PREFIX_HELD/R6 bertahan sampai 50%.",
+        "- **R6 (F1C-001) = KEEP tanpa catatan GUARD**: 6 fix-cert, regress 0, "
+        "survival 100% di noise 10%, 0 fix mati di noise 25%/50% & mutation "
+        "(non-kontaminasi) — lebih robust dari R1/R4. Alasan: compact-equality "
+        "baris tahan char-confusion, typo map OCR menangani merge, join beruntun "
+        "tak bergantung spasi.",
         "- R3 = NO_FIX (mengubah 2 nilai tanpa memperbaiki apa pun — risiko murni), "
         "R5 = DEAD (tak pernah mengubah nilai) → kandidat hapus saat port produksi.",
-        "- Semua aturan fix HANYA 1 cert (LOW_N, <3) → klaim robustness per-aturan "
-        "butuh data baru (STAT-001: jangan klaim robust utk fire <5).",
+        "- R0-R4 fix HANYA 1 cert (LOW_N, <3); R6 = 6 fix-cert (≥3) → klaim robust "
+        "R6 valid di level korpus ini (STAT-001: fire ≥5 bisa diklaim; tetap "
+        "validasi data baru untuk generalisasi).",
         "- DEAD/HARMFUL di ablation = aturan tidak membawa manfaat terukur di "
         "korpus (rekomendasi hapus/nonaktif saat port produksi). KEEP/GUARD/LOW_N "
         "= aman dipromosikan; GUARD wajib ditemani needs_review (F6) sebagai jaring.",
