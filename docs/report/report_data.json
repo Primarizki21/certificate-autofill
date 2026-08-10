@@ -241,18 +241,18 @@
     {
       "id": "org_003_v3",
       "phase": "v10",
-      "label": "F1 organizer v3 (R0-R5, 0 LLM)",
+      "label": "F1 organizer v3 + R6 (0 LLM)",
       "variant": "organizer_v3",
-      "run_dir": "tests/benchmark_runs/organizer_v3_20260810_135842",
+      "run_dir": "tests/benchmark_runs/organizer_v3_20260810_160232",
       "tingkat": "81.1%",
-      "macro": "59.6%",
+      "macro": "61.2%",
       "tokens_cert": 0,
       "calls": 0,
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->45.9% (+6.7pt, 5 fix: R0 bug rule B, R1 suffix dept Inggris, R2 Library Class, R4 tanggal, PREFIX_HELD), MACRO 58.3->59.6% no-regress. Tingkat 81.1% = baseline offline (v3 tak menyentuh tingkat, no-regress); delta merah vs v9 = beda metrologi offline-vs-LLM (pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-002: mutation 0 kerapuhan aturan nyata, R4/R1 rapuh di noise OCR (GUARD + needs_review F6), R3/R5 tanpa manfaat terukur (hapus saat port). Semua aturan 1 fix-cert (LOW_N) - klaim robust butuh data baru.",
-      "per_field_src": "tests/benchmark_runs/organizer_v3_20260810_135842/summary_organizer_v3.json"
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->54.1% (R0-R5 strip/normalisasi ORG-003 45.9%, R6 enrich kurang_lengkap F1C-001 +6.2pt), MACRO 58.3->61.2% no-regress. Tingkat 81.1% = baseline offline (lapisan organizer tak menyentuh tingkat; delta merah vs v9 = beda metrologi offline-vs-LLM, pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-003: R6 = KEEP (6 fix-cert, survival 100%, 0 mati di noise/mutation — lebih robust dari R1/R4), R4/R1 = GUARD (noise >=10-25%, needs_review F6), R3/R5 = tanpa manfaat terukur (hapus saat port).",
+      "per_field_src": "tests/benchmark_runs/organizer_v3_20260810_160232/summary_organizer_v3.json"
     }
   ],
   "documents": {
@@ -4852,11 +4852,23 @@
       },
       {
         "t": "h2",
+        "x": "F1C-001: enrich kurang_lengkap organizer (R6)"
+      },
+      {
+        "t": "p",
+        "x": "Lanjutan ORG-003: lengkapi organizer pendek dari konteks teks (0 LLM): join baris beruntun berkata-kunci org (2954933: camel-split + typo OCR 'llmu'->'ilmu'), Biro-prefix (SERTIF76), Himasada + baris 'DEKAN FAKUETASILMU KOMPUTER', IRIS: baris org tepat di atas baris fakultas, dept OCR-merge 'INFORMATIONSYSTEMSSTUDYPROGRAM' (Ananda Agentic AI + E-certificate (1)). Guard keras: v tanpa penanda fakultas/kampus, baris lanjutan beruntun max 2, dedup != v. Hasil: organizer exact 45.9% -> 54.1% (+6.2pt, 6 fix), MACRO 59.6% -> 61.2% no-regress, 0 regress, 0 LLM. Kasus tak fixable dari teks (skip): 2160238 (masalah scoring), NIC_Faiz & SDC Unisba (OCR rusak)."
+      },
+      {
+        "t": "h2",
         "x": "Robustness OOD probe lapisan v3 (OOD-002)"
       },
       {
         "t": "p",
         "x": "Uji kerapuhan aturan v3 saat varian sertifikat baru: template mutation (institusi/event diganti) + OCR noise 10/25/50% + ablation per aturan + noise survival fix-cert. Verdict: FAIL gate drop-relatif — tapi mutation 0 kerapuhan aturan nyata (extra drop = 100% kontaminasi GT, nilai v3 justru mengikuti institusi baru); noise: R4 rapuh sejak 10% (digit tanggal rusak 'July 30'→'July 3O') & R1 sejak 25% (kata merge 'Facultyof'); R0/R2/PREFIX_HELD bertahan s.d. 50%. R3 = NO_FIX & R5 = DEAD (tanpa manfaat terukur, kandidat hapus). Gain absolut v3 tetap positif di semua kondisi (noise 10%: organizer 44.5% vs v9 37.8%)."
+      },
+      {
+        "t": "p",
+        "x": "Re-run OOD probe dengan R6 (RULE_ORDER + 'R6'). Verdict: FAIL gate drop-relatif (struktur kerapuhan SAMA dengan OOD-002) tapi R6 menambah 0 kerapuhan: fix 6, regress 0, survival 100% di noise 10%, 0 fix mati di noise 25/50% & mutation non-kontaminasi — lebih robust dari R1/R4 (compact-equality tahan char-confusion, typo map OCR menangani merge). Mutation: drop organizer v3 21.6% vs v9 16.2% = 100% kontaminasi GT (4 cert). Noise: extra drop identik OOD-002 (10% +1.4 / 25% +1.3 / 50% +4.1pt) — R4 sejak 10%, R1 sejak 25%, 50% = matcher digit S1->SI (bukan aturan strip). Gain absolut v3 tetap positif (noise 50%: 41.9% vs v9 29.7%)."
       },
       {
         "t": "h2",
@@ -4865,10 +4877,10 @@
       {
         "t": "b",
         "x": [
-          "R0, R2, PREFIX_HELD: KEEP — aman dipromosikan.",
+          "R0, R2, PREFIX_HELD, R6: KEEP — aman dipromosikan.",
           "R1, R4: GUARD — rapuh di noise OCR, wajib ditemani needs_review (F6) sebagai jaring pengaman.",
           "R3, R5: hapus — tanpa manfaat terukur di korpus.",
-          "Semua aturan hanya 1 fix-cert (LOW_N, <3) — klaim robustness per-aturan butuh validasi data baru (cert non-UNAIR/FTMM)."
+          "R6 = satu-satunya aturan dengan >=3 fix-cert (6) — klaim robust valid di level korpus; validasi data baru tetap wajib untuk generalisasi (cert non-UNAIR/FTMM)."
         ]
       }
     ]
