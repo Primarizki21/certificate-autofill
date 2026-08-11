@@ -25,6 +25,75 @@ Next action
 
 ---
 
+## KB-003 | 2026-08-11 | normalisasi key v2 (fragmentasi FST)
+
+**Hipotesis.** Normalisasi key (stem / alias / both) menyatukan org logis yang
+terpecah exact-match (FST DEPT: "INFORMATION SYSTEMS DEPT" vs "Information
+System Dept.", 7 cert) → hit KB naik, tanpa collision baru.
+
+**Dataset & konfigurasi.** 74 cert, GT v9 + matcher v2, pipeline run v9 + router
+CURRENT, 0 LLM runtime. 4 varian: plain / stem / alias / both (key version
+`v1-{variant}`). Metrik: ceiling seeded (GT cert pertama), collision, shadow 3x
+N=20, noise 25%.
+
+**Perubahan kode.**
+- `tests/kb/key.py` — `build_key(..., variant)` + `KEY_ALIASES` (FST pair) +
+  `_stem_org` + demo varian.
+- `tests/benchmark_kb_norm.py` (baru) — evaluasi 4 varian.
+
+**Hasil terukur.**
+- plain: 55 key / 3 repeat (9 cert) / shadow hit 3.
+- stem, alias, both: 54 key / 2 repeat (9 cert, FST menyatu) / ceiling hit 9
+  (=) / **shadow hit 5 (+2)** / collision 0 / wrong 0 / disagree 0 / noise
+  wrong 0.
+
+**Gate / Verdict.** **PASS** — G1 collision 0, G2 wrong 0 (seeded+noise),
+G3 hit ≥9 (imbang), G4 shadow no-regress. Normalisasi key menaikkan shadow hit
+3→5 tanpa efek samping di korpus.
+
+**Risiko.**
+- stem = agresif ("universitas"→"universita") — over-merge risk di data baru;
+  alias = konservatif tapi hanya 1 baris (FST). Pilih varian berdasar audit
+  data riil (`tests/kb/audit.py --variant ...`).
+- Alias menarget bentuk key persis ("...INFORMATION SYSTEMS DEPT") — rapuh
+  terhadap perubahan titleize; pasangkan dgn stem/both utk ketahanan.
+
+**Commit terkait.** (commit sesi ini)
+
+**Next action.** Audit data riil per varian (KB-004 siap); keputusan varian
+final saat data datang.
+
+---
+
+## KB-004 | 2026-08-11 | instrumen audit korpus (gate data riil)
+
+**Hipotesis.** Gate produksi tidak boleh terblokir oleh tidak adanya GT: alat
+audit yang mengukur repeat key, collision, dan proyeksi saved LLM langsung dari
+teks (tanpa LLM/OCR) memungkinkan keputusan cepat saat data lintas fakultas
+datang.
+
+**Dataset & konfigurasi.** Dry-run korpus 74 (path default `run_20260728_131835/
+extracted_texts`); variant plain; proyeksi 3x confirm, warm 20, urutan sorted.
+
+**Perubahan kode.** `tests/kb/audit.py` (baru) — CLI `--dir --variant --out`.
+
+**Hasil terukur.** Dry-run: keys 55==55, repeated 3==3 → **SELFCHECK PASS**
+(konsisten KB-001); collision 0; saved_llm 0 (konsisten KB-001/002).
+
+**Gate / Verdict.** **PASS** — alat berfungsi & angka konsisten; siap dipakai
+pada korpus riil.
+
+**Risiko.** Proyeksi saved LLM memakai urutan sorted-stem (proxy kronologis) —
+di data riil dengan timestamp, urutan waktu lebih akurat.
+
+**Commit terkait.** (commit sesi ini)
+
+**Next action.** `uv run python -m tests.kb.audit --dir <data_riil>` → ukur
+gate produksi: repeated keys, collision, saved_llm. Juga `--variant stem/alias`
+utk perbandingan normalisasi.
+
+---
+
 ## KB-002 | 2026-08-11 | seeded persistent KB (ceiling human-seed + persistence)
 
 **Hipotesis.** KB yang SUDAH terisi knowledge terverifikasi (seed human_review)

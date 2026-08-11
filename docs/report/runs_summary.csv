@@ -1,4 +1,5 @@
 run_dir,date,kind,model,prompt_version,gt,router,organizer,variant,tingkat,macro,tokens_cert,calls,latency_ms,notes
+kb_norm_20260811_105237,2026-08-11,other,,,,,,,—,83.8%,—,—,—,
 kb_seed_20260811_103804,2026-08-11,other,,,,,,,—,83.8%,—,—,—,
 kb_shadow_20260811_103552,2026-08-11,other,,,,,,,—,84.4%,—,—,—,
 kb_warmup_20260810_111952,2026-08-10,other,,,,,,,—,84.4%,—,—,—,
