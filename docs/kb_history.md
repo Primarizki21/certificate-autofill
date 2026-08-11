@@ -25,6 +25,60 @@ Next action
 
 ---
 
+## KB-002 | 2026-08-11 | seeded persistent KB (ceiling human-seed + persistence)
+
+**Hipotesis.** KB yang SUDAH terisi knowledge terverifikasi (seed human_review)
+aman (0 wrong) dan persisten (snapshot JSON identik antar-run); dan 1x confirm
+(yang tadinya tidak teruji karena bug konfig) tidak aman.
+
+**Koreksi KB-001/F3.** Mutasi `WARMUP_CONFIRMS` lewat package namespace
+(`from tests import kb as kbmod`) TIDAK mengubah module `tests.kb.kb` — konfig
+"1x" di F3-001 & KB-001 sebenarnya jalan dengan default 3x. Kesimpulan keduanya
+tetap valid (3x = 0 wrong); angka "1x" yang dilaporkan = 3x. Fix:
+`import tests.kb.kb as kbimpl` (module langsung).
+
+**Dataset & konfigurasi.** 74 cert, GT v9 + matcher v2, pipeline run v9 + router
+CURRENT, 0 LLM runtime. Seed = GT cert pertama utk key berulang (freq≥2,
+source human_review, authoritative segera). Noise 25%. Persist configs:
+1x/N=10 & 3x/N=20.
+
+**Perubahan kode.**
+- `tests/kb/store.py` (baru) — save/load JSON + key_version check + round-trip.
+- `tests/kb/kb.py` — `items()` utk snapshot.
+- `tests/benchmark_kb_seed.py` (baru) — smoke + ceiling + noise + persist + fragmentasi.
+- Fix konfig di `benchmark_kb_shadow.py` + `benchmark_kb_warmup.py`.
+
+**Hasil terukur.**
+- Smoke: seed human_review authoritative langsung; konflik → non-auth (nilai
+  asli utuh); key ber-noise → miss; round-trip identik.
+- Ceiling seeded: 3 seed keys / 9 certs, hit 9, **saved_llm 0**, wrong 0,
+  disagree 0. Noise 25%: hit 9, wrong 0.
+- Persistence: mem == persist identik (1x: 51 hit / 13 saved / **5 wrong**;
+  3x: 3 hit / 0 saved / 0 wrong).
+- Fragmentasi: FST DEPT = 1 org logis terpecah 2 key (7 cert) → exact-match
+  kehilangan hit (key "SYSTEMS" vs "SYSTEM").
+
+**Gate / Verdict.** **PASS** — G1 round-trip identik, G2 seeded wrong 0
+(+noise), G3 persist == mem, G4 saved_llm jujur. Temuan kunci: **1x confirm =
+GATE FAIL precision** (error LLM label terkunci, wrong 5) → warm-up ≥3 wajib;
+seeded ceiling saved 0 → korpus 74 tetap pembatas.
+
+**Risiko.**
+- Fragmentasi key = kerugian hit yang terukur (7 cert di 1 org) — kandidat
+  normalisasi key case/punct/stem ATAU alias table saat produksi (hati-hati:
+  over-merge = collision baru).
+- `hit_count` per lookup (write contention) — counter batch di produksi.
+
+**Commit terkait.** (commit sesi ini)
+
+**Next action.**
+1. Sampling data riil lintas fakultas (repeat key & collision) — gate utama.
+2. Keputusan: normalisasi key lanjutan (fragmentasi) vs alias table.
+3. Keputusan user: `jenis_kegiatan` beneran utk key (schema produksi).
+4. `report_data.json` — butuh keputusan user (preseden v23/v24).
+
+---
+
 ## KB-001 | 2026-08-11 | shadow replay key v1 (alur router → KB → LLM)
 
 **Hipotesis.** Key v1 `(organizer v3+R6, role map_jabatan, KEY_VERSION)` menaikkan
@@ -58,6 +112,9 @@ urutan deterministik (sorted-stem). Konfig 1x vs 3x confirm. Noise OCR 10/25/50%
 - Noise 10/25/50%: wrong_hits 0, disagree 0 → safety by construction (exact
   key match; noise → miss, bukan salah-hit).
 - Tingkat exact pipe 84.4/81.5/83.8% (konsisten F3/pipeline, variasi subset).
+- **Koreksi (KB-002)**: konfig 1x tadinya tidak efektif (bug mutasi) — re-run
+  1x = hit 51, saved 13, **wrong 5** → 1x confirm TIDAK aman; semua angka
+  di atas adalah konfig 3x (default) dan tetap valid.
 
 **Gate / Verdict.** PASS (shadow) — no-regress, 0 wrong, 0 konflik terpakai.
 Catatan jujur: gain LLM call belum terbukti (0 di 74 cert) — korpus tidak punya
