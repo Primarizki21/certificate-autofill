@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 66 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 69 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -69,8 +69,11 @@
 
 | run_dir | date | kind | variant | tingkat | macro | tok/cert | calls | router | notes |
 |---|---|---|---|---|---|---|---|---|---|
+| `kb_shadow_20260811_101034` | 2026-08-11 | other |  | — | 84.4% | — | — |  |  |
 | `kb_warmup_20260810_111952` | 2026-08-10 | other |  | — | 84.4% | — | — |  |  |
+| `ood_probe_v3_20260810_114145` | 2026-08-10 | other |  | — | 59.6% | — | — |  |  |
 | `ood_probe_v3_20260810_161809` | 2026-08-10 | other |  | — | 61.2% | — | — |  |  |
+| `organizer_v3_20260810_135842` | 2026-08-10 | other |  | — | 59.6% | — | — |  |  |
 | `organizer_v3_20260810_160232` | 2026-08-10 | other |  | — | 61.2% | — | — |  |  |
 | `run_20260728_131835` | 2026-07-28 | baseline_regex |  | — | 42.2% | — | — |  |  |
 | `run_fulltext_llm_20260730_201832` | 2026-07-30 | llm_fulltext |  | 23.0% | 47.7% | 614 | 74 |  |  |
