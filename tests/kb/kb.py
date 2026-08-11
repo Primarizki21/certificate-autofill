@@ -67,6 +67,10 @@ class TingkatKB:
     def __len__(self) -> int:
         return len(self._store)
 
+    def items(self) -> list[tuple[tuple[str, str | None], KBEntry]]:
+        """Snapshot view utk persistence (tests/kb/store.py)."""
+        return list(self._store.items())
+
 
 def _demo() -> None:
     kb = TingkatKB()

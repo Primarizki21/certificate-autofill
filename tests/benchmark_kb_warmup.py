@@ -32,7 +32,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 from app.services.field_extractor import extract_certificate_fields
 from tests.benchmark_organizer_v3 import _norm_organizer_v3
 from tests.evaluation_framework import load_csv
-from tests import kb as kbmod
+import tests.kb.kb as kbimpl
 from tests.kb.kb import KBEntry, TingkatKB
 from tests.llm_router_v4 import route_tingkat_trace
 from tests.matchers import match_field
@@ -170,7 +170,7 @@ def main() -> None:
 
     runs = []
     for label, confirms in CONFIGS:
-        kbmod.WARMUP_CONFIRMS = confirms
+        kbimpl.WARMUP_CONFIRMS = confirms
         for n in WARMUP_SIZES:
             rng = random.Random(SEED)
             r = replay(texts, gt, tingkat_pipe, n, rng)

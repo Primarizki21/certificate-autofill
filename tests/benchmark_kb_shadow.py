@@ -37,7 +37,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
 from app.services.field_extractor import extract_certificate_fields
-from tests import kb as kbmod
+import tests.kb.kb as kbimpl
 from tests.benchmark_kb_warmup import load_pipeline_tingkat
 from tests.kb.kb import KBEntry, TingkatKB
 from tests.kb.key import KEY_VERSION, build_key
@@ -61,7 +61,8 @@ def replay(texts: dict[str, str], gt: dict[str, dict], tingkat_pipe: dict[str, s
            n_warm: int, confirms: int) -> dict:
     """Satu pass deterministik: sorted-stem; warm = N pertama."""
     kb = TingkatKB()
-    kbmod.WARMUP_CONFIRMS = confirms
+    # mutasi langsung di module (bukan package namespace) — konfig 1x/3x efektif
+    kbimpl.WARMUP_CONFIRMS = confirms
     stems = sorted(texts)
     warm, eval_stems = set(stems[:n_warm]), stems[n_warm:]
 
