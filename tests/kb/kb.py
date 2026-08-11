@@ -24,11 +24,14 @@ class KBEntry:
     confidence: float = 0.8
     hit_count: int = 0
     confirms: int = 1
+    conflicts: int = 0  # KB-001: key sama, tingkat beda → non-authoritative
     last_verified_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
     @property
     def authoritative(self) -> bool:
-        return self.confirms >= WARMUP_CONFIRMS
+        # Konflik menurunkan status permanen sampai human review — jangan
+        # pernah autofill dari entry yang labelnya pernah bertentangan.
+        return self.confirms >= WARMUP_CONFIRMS and self.conflicts == 0
 
 
 class TingkatKB:
@@ -43,6 +46,10 @@ class TingkatKB:
             entry.hit_count += 1
         return entry
 
+    def peek(self, key: tuple[str, str | None]) -> KBEntry | None:
+        """Baca tanpa mutasi (shadow eval: tidak menghitung hit_count)."""
+        return self._store.get(key)
+
     def write(self, key: tuple[str, str | None], entry: KBEntry) -> None:
         existing = self._store.get(key)
         if existing:
@@ -50,13 +57,37 @@ class TingkatKB:
                 existing.confirms += 1
                 existing.hit_count += 1
             else:
-                existing.tingkat = entry.tingkat
-                existing.confirms = 1
-                existing.source = entry.source
-                existing.created_from_cert_id = entry.created_from_cert_id
+                # Konflik: tingkat berbeda utk key sama. JANGAN timpa diam-diam —
+                # entry turun status non-authoritative (sampai human review).
+                existing.conflicts += 1
             existing.last_verified_at = entry.last_verified_at
             return
         self._store[key] = entry
 
     def __len__(self) -> int:
         return len(self._store)
+
+
+def _demo() -> None:
+    kb = TingkatKB()
+    key = ("BEM FTMM Universitas Airlangga", "Peserta")
+    for _ in range(3):
+        kb.write(key, KBEntry("Fakultas", "router_rule", "cert-1"))
+    e = kb.lookup(key)
+    assert e and e.authoritative, "3 confirm konsisten harus authoritative"
+    assert e.tingkat == "Fakultas"
+    # konflik: key sama, tingkat beda → non-authoritative, nilai asli dipertahankan
+    kb.write(key, KBEntry("Nasional", "llm", "cert-2"))
+    e = kb.lookup(key)
+    assert e and not e.authoritative, "konflik harus non-authoritative"
+    assert e.tingkat == "Fakultas" and e.conflicts == 1, "nilai asli tidak boleh ditimpa"
+    # entry berbeda tetap authoritative setelah warm-up cukup
+    other = ("BEM FEB UNAIR", "Peserta")
+    for _ in range(3):
+        kb.write(other, KBEntry("Fakultas", "router_rule", "cert-3"))
+    assert kb.lookup(other).authoritative
+    print("ok: kb.kb conflict semantics")
+
+
+if __name__ == "__main__":
+    _demo()
