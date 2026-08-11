@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 71 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 73 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -69,6 +69,8 @@
 
 | run_dir | date | kind | variant | tingkat | macro | tok/cert | calls | router | notes |
 |---|---|---|---|---|---|---|---|---|---|
+| `kb_alias_20260811_110930` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
+| `kb_event_20260811_110636` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_norm_20260811_105237` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_seed_20260811_103804` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_shadow_20260811_103552` | 2026-08-11 | other |  | — | 84.4% | — | — |  |  |
