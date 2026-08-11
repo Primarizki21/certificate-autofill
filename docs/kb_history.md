@@ -25,6 +25,97 @@ Next action
 
 ---
 
+## KB-005 | 2026-08-11 | event_type utk key (role vs jenis vs kelompok)
+
+**Hipotesis.** `jenis_kegiatan`/`kelompok_kegiatan` (dari `map_kelompok_dan_jenis`,
+0 LLM) memberi key lebih presisi daripada role proxy → repeat keys lebih tinggi
+tanpa collision.
+
+**Dataset & konfigurasi.** 74 cert, GT v9 + matcher v2, pipeline run v9 + router
+CURRENT. 4 varian × 3 event = 12 kombinasi (cache label per cert sekali).
+Metrik: keys/repeat/empty rate/collision/ceiling/shadow 3x/noise 25%.
+
+**Perubahan kode.**
+- `tests/kb/key.py` — `EVENTS`, `compute_event`, `make_key`, `build_key(event=...)`.
+- `tests/benchmark_kb_event.py` (baru) — 12 kombinasi + noise.
+
+**Hasil terukur.**
+- **role**: collision 0 (satu-satunya), empty 13, repeat 3(9), ceiling hit 9,
+  shadow hit 5 (stem/alias/both), wrong 0, noise 0.
+- **jenis**: empty 52 (70% key mati — `"--"`), collision 1, wrong 1 → tidak layak.
+- **kelompok**: repeat 5 (14 cert, tertinggi) TAPI collision 1, wrong 2 →
+  over-merge 5 kategori, GATE FAIL.
+
+**Gate / Verdict.** **PASS (role)** — G1 collision 0 hanya role; G2 wrong 0;
+G3 shadow ≥5; G4 empty jujur. **Jawaban desain #1: tidak perlu ekstrak
+`jenis_kegiatan` beneran — role proxy cukup dan paling aman** (menutup
+pertanyaan schema produksi KB).
+
+**Risiko.** kelompok_kegiatan hanya layak bila collision di-audit per key di
+data riil (audit.py).
+
+**Commit terkait.** (commit sesi ini)
+
+**Next action.** — (jalur KB tuntas; lihat Verdict Final di bawah)
+
+---
+
+## KB-006 | 2026-08-11 | alias mining data-driven
+
+**Hipotesis.** Kandidat alias bisa di-mining otomatis (stem-org sama + role
+sama + tingkat pipeline sama) dengan keamanan yang sama seperti alias manual —
+review manusia tetap, tapi kandidatnya tidak lagi manual.
+
+**Dataset & konfigurasi.** 74 cert, GT v9 + matcher v2; kandidat divalidasi vs
+GT (konsisten semua cert group); dampak diukur shadow 3x N=20 + ceiling + noise 25%.
+
+**Perubahan kode.** `tests/kb/alias.py` (baru) — build_cache, mine_alias_candidates,
+make_alias_map + demo; `tests/benchmark_kb_alias.py` (baru).
+
+**Hasil terukur.** Mining menemukan PERSIS kandidat yang sama dengan alias
+manual KB-003 (FST pair, 2/5), valid=True. auto-alias: shadow hit 5 (= manual),
+wrong 0, disagree 0; noise 25% wrong 0. Precision kandidat 100% (0 over-merge).
+
+**Gate / Verdict.** **PASS** — precision 100%, shadow ≥5, wrong 0; auto-alias =
+alias manual di korpus ini (otomasi tanpa kehilangan keamanan).
+
+**Risiko.** Validitas kandidat di data baru wajib diukur ulang (GT korpus baru
+atau sampling manual) — stem bisa over-merge nama yang mirip tapi beda org.
+
+**Commit terkait.** (commit sesi ini)
+
+**Next action.** Siap dipakai bila data riil muncul: mine → review → make_key(aliases=...).
+
+---
+
+## Verdict Final Jalur KB | 2026-08-11 | penutup eksperimen (tanpa data baru)
+
+**Posisi (keputusan user):** KB = eksperimen murni. Tidak masuk produksi sampai
+ada pipeline yang menonjol; dan tidak ada data di luar korpus 74 (user
+konfirmasi tidak bisa menambah data).
+
+**Apa yang tervalidasi (KB-001..006, semuanya PASS di gates-nya):**
+- Mekanisme aman: 0 wrong hit, noise-safe (exact-match → miss), konflik →
+  non-authoritative, persistence JSON + version check, warm-up ≥3 confirm
+  wajib (1x = 5 wrong), normalisasi key (stem/alias) menaikkan shadow hit
+  3→5, role = event terbaik (jenis_kegiatan 70% empty, kelompok over-merge),
+  alias mining otomatis = manual.
+
+**Apa yang TIDAK bisa dibuktikan (batas korpus 74):**
+- Gain LLM call: `saved_llm = 0` di semua konfigurasi aman (55 key unik, 3
+  berulang, semuanya router-routed). Tanpa data baru, angka ini tidak akan
+  berubah — **KB tidak akan menjadi pipeline pemenang pada metrik efisiensi
+  di korpus ini**.
+
+**Kesimpulan:** jalur KB ditutup sebagai eksperimen yang tuntas (desain
+terjawab, alat siap: `audit.py`, `alias.py`, `store.py`). Bila suatu saat ada
+data baru: jalankan `tests/kb/audit.py` → keputusan varian key → review alias
+→ baru pertimbangkan produksi. Sampai saat itu, fokus pencarian "pipeline yang
+menonjol" beralih ke jalur akurasi (organizer v3+R6, scoring, matcher) yang
+sudah terukur naik tanpa data baru.
+
+---
+
 ## KB-003 | 2026-08-11 | normalisasi key v2 (fragmentasi FST)
 
 **Hipotesis.** Normalisasi key (stem / alias / both) menyatukan org logis yang
