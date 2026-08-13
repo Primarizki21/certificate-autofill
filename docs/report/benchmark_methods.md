@@ -895,6 +895,7 @@ The table below lists all functions referenced in this document. Functions are l
 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 45/74 @100% | v9 | Aug 5 |
 | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% | 0 | 0 | - | v9 | Aug 6 |
 | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 | Aug 6 |
+| OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% | 0 | 0 | - | v9 | Aug 13 |
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 | Aug 6 |
 | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 | Aug 6 |
 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 | Aug 10 |
@@ -918,6 +919,7 @@ The table below lists all functions referenced in this document. Functions are l
 | v12 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% |
 | ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
 | ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
+| ocr | OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
 | v10 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% |

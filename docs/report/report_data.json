@@ -209,6 +209,21 @@
       "is_winner": false
     },
     {
+      "id": "ocr_007_lfm25",
+      "phase": "ocr",
+      "label": "OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan)",
+      "variant": "lfm25_vl_3b",
+      "run_dir": "tests/benchmark_runs/ocr_experiment/lfm25_ocr_20260813_151134",
+      "tingkat": "n/a",
+      "macro": "44.4%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 13",
+      "notes": "GATE PASS — engine OCR pertama yang tidak regress nomor. Like-for-like 10 stem (GT v9 + matcher v2, sama dgn OCR-006): nomor 28.6% (= baseline rapid_tess; paddle 39.4/easyocr 15.2/doctr 36.4 di full scan), dates 88.9% (=), organizer exact 0%->20% (fuzzy 50->60%), MACRO 40.0->44.4%. Varian terendah RAM/quant: GGUF Q4_0 (1520MB) + mmproj Q8_0 (556MB) via llama.cpp llama-server b10405. 10/10 ok, 0 error, ~77s/cert (~9x baseline), server RSS ~4.9GB (host 5.3GB tersedia, Docker mati). Transkripsi polos kualitas tinggi (FIT_Faiz NIP/NIM, Hology 7.0 utuh). nama_kegiatan 0% (= baseline, harness OCR-only). Full run 74 belum dijalankan (~95 min); hybrid per-field LFM(org/dates)+rapid_tess(nomor) = kandidat HYB-001 lanjutan.",
+      "is_winner": false
+    },
+    {
       "id": "hyb_001",
       "phase": "ocr",
       "label": "HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor)",
