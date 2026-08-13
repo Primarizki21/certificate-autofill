@@ -1,6 +1,6 @@
 # F1 lanjutan — Perbaikan Pemilihan Penyelenggara (v3, tanpa AI)
 
-> Generasi: 2026-08-10 16:02:32 | GT v9 + matcher v2 | baseline = offline_variant F1 (ORG-002) | 0 LLM call
+> Generasi: 2026-08-13 09:53:01 | GT v9 + matcher v2 | baseline = offline_variant F1 (ORG-002) | 0 LLM call
 
 ## Hasil
 
