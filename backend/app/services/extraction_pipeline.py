@@ -77,6 +77,20 @@ def run_extraction_pipeline(
     if v2_org:
         extracted["penyelenggara_kegiatan"] = ExtractedValue(v2_org, 0.84, "organizer_v2")
 
+    # PROD-002: normalisasi organizer & nomor pasca-organizer_v2 (0 LLM).
+    # DEFAULT OFF (config) — aktifkan hanya setelah re-eval disetujui user.
+    if settings.enable_organizer_normalization:
+        from app.services.organizer_normalize import normalize_nomor, normalize_organizer
+
+        norm_org = normalize_organizer(extracted.get("penyelenggara_kegiatan").value, raw_text)
+        if norm_org:
+            extracted["penyelenggara_kegiatan"] = ExtractedValue(norm_org, 0.84, "organizer_v2")
+        norm_nomor = normalize_nomor(raw_text)
+        if norm_nomor:
+            extracted["nomor_bukti_fisik_nomor_sertifikasi"] = ExtractedValue(
+                norm_nomor, 0.95, "regex_certificate_number"
+            )
+
     mapped = map_fields_to_form(extracted, tahun_akademik=tahun_akademik, bukti_fisik=bukti_fisik)
 
     return PipelineResult(

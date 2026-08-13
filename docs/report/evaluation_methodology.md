@@ -385,3 +385,4 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 |
 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% | 0 | 0 | - | v9 |
 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 |
+| PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% | 0 | 0 | - | v9 |
