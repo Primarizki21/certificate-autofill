@@ -898,6 +898,8 @@ The table below lists all functions referenced in this document. Functions are l
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 | Aug 6 |
 | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 | Aug 6 |
 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 | Aug 10 |
+| F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% | 0 | 0 | - | v9 | Aug 10 |
+| ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 | Aug 13 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -917,3 +919,5 @@ The table below lists all functions referenced in this document. Functions are l
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
 | v10 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% |
+| v10 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% |
+| v10 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% |

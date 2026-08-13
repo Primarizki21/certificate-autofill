@@ -179,6 +179,8 @@ ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallb
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
 | v10 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% |
+| v10 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% |
+| v10 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% |
 
 ## Handoff v18–v21 Addendum — F1 Organizer v3 (0 LLM) & Robustness OOD Probe
 

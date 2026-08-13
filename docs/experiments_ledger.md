@@ -67,10 +67,10 @@
 3. Kolom `Re-try condition` = kondisi eksplisit yang membuat pendekatan layak
    dicoba ulang. Jika tidak ada, tulis "tidak ada".
 4. Commit bersama kode eksperimen & update `runs_summary.md` (workflow B9-B11).
-5. Referensi detail: `docs/handoff_v12.md` + `docs/report/runs_summary.md`.
+5. Referensi detail: `docs/handoff_v28.md` + `docs/report/runs_summary.md`.
 
 ## Hubungan dengan dokumen lain
 
-- `handoff_v17.md` = **open frontier** (supersedes v16) (baseline + hipotesis terbuka).
+- `handoff_v28.md` = **open frontier** (supersedes v27) (baseline + hipotesis terbuka).
 - `runs_summary.md` = **angka terukur** (semua run).
 - `experiments_ledger.md` (ini) = **closed list** (yang sudah dicoba & ditutup).

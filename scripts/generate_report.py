@@ -662,6 +662,12 @@ def _load_per_field_src(path: str) -> dict | None:
         pf = s["per_field_v3"]
     elif "fields" in s and isinstance(s["fields"], dict):
         pf = s["fields"]
+    elif "variant" in s and isinstance(s["variant"], dict) and "per_field" in s["variant"]:
+        # Format summary lama (org_norm / org_format): per-field di variant.
+        v = s["variant"]
+        pf = v["per_field"]
+        if "macro_avg" not in s or not isinstance(s["macro_avg"], dict):
+            s["macro_avg"] = {"exact_acc": v.get("macro_exact"), "fuzzy_acc": v.get("macro_fuzzy")}
     else:
         pf = s
 

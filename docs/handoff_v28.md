@@ -55,6 +55,18 @@
    user rewrite extractor + re-baseline penuh.
 4. **KB**: TUTUP (v27 Verdict Final) — dibuka bila data baru (`audit.py`).
 
+### Peta dokumen (agar agent sesi berikutnya tidak salah alamat)
+
+- **KB** (eksperimen KB-001..006 + verdict) → `docs/report/team_review_kb.md`
+  (agent) + `team_review_kb.xlsx` (user, lokal — `*.xlsx` di-gitignore, bikin
+  ulang via skill xlsx dari isi md bila perlu).
+- **ORG** (F1/ORG-003/F1C/ORG-004/ORG-005) → `docs/experiments_ledger.md`
+  (ledger) + `docs/report/report_data.json` (laporan resmi: org_002_f1 +
+  org_003_v3 + org_004_format) → `scripts/generate_report.py` (docx/md/xlsx).
+- Jika eksperimen baru: ledger SELALU diisi; masukkan ke report_data.json
+  HANYA eksperimen yang relevan untuk perbandingan laporan (bukan probe/
+  failed seperti ORG-005).
+
 ## Frontier tertunda (sama v24-v27)
 
 - F4 fingerprint dedup, F5 distillation, F7 infra OCR queue, Eksperimen A
@@ -81,5 +93,5 @@
 | `tests/benchmark_org_format.py` | ORG-004 — canonicalisasi format (9 fix) |
 | `tests/benchmark_organizer_v3.py` | Lapisan v3 (R0-R6) — baseline ORG-004 |
 | `docs/report/f1_organizer_format.md` | Report ORG-004 |
-| `docs/report/team_review_akurasi.md` | Dokumen review tim (KB + jalur akurasi) |
+| `docs/report/team_review_kb.md` | Review tim KB (md utk agent; xlsx utk user, lokal) |
 | `docs/experiments_ledger.md` | ORG-004 PASS + ORG-005 FAIL |

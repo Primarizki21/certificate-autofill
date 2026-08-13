@@ -383,3 +383,5 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 |
 | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 |
 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 |
+| F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% | 0 | 0 | - | v9 |
+| ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 |

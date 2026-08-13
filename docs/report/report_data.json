@@ -253,6 +253,38 @@
       "is_winner": false,
       "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: organizer exact 39.2->54.1% (R0-R5 strip/normalisasi ORG-003 45.9%, R6 enrich kurang_lengkap F1C-001 +6.2pt), MACRO 58.3->61.2% no-regress. Tingkat 81.1% = baseline offline (lapisan organizer tak menyentuh tingkat; delta merah vs v9 = beda metrologi offline-vs-LLM, pipeline LLM tingkat 83.8%). Per-field exact/fuzzy tersedia di summary_organizer_v3.json (sheet Per-Field xlsx). Robustness OOD-003: R6 = KEEP (6 fix-cert, survival 100%, 0 mati di noise/mutation — lebih robust dari R1/R4), R4/R1 = GUARD (noise >=10-25%, needs_review F6), R3/R5 = tanpa manfaat terukur (hapus saat port).",
       "per_field_src": "tests/benchmark_runs/organizer_v3_20260810_160232/summary_organizer_v3.json"
+    },
+    {
+      "id": "org_002_f1",
+      "phase": "v10",
+      "label": "F1 normalisasi organizer & nomor (0 LLM)",
+      "variant": "org_norm",
+      "run_dir": "tests/benchmark_runs/org_norm_20260810_082848",
+      "tingkat": "81.1%",
+      "macro": "58.3%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 10",
+      "is_winner": false,
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2: nomor 59.6->76.9% (+17.3pt, pattern SERT + fallback raw text), organizer 39.2% (+1.4pt, GATE FAIL organizer - normalisasi murni habis), MACRO 58.3% no-regress. Baseline = offline_fields (v9 tanpa LLM).",
+      "per_field_src": "tests/benchmark_runs/org_norm_20260810_082848/summary.json"
+    },
+    {
+      "id": "org_004_format",
+      "phase": "v10",
+      "label": "ORG-004 canonicalisasi format (0 LLM)",
+      "variant": "org_format",
+      "run_dir": "tests/benchmark_runs/org_format_20260813_100441",
+      "tingkat": "81.1%",
+      "macro": "63.5%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 13",
+      "is_winner": false,
+      "notes": "Evaluasi OFFLINE (0 LLM), GT v9 + matcher v2, baseline = offline_v3 (F1C-001): organizer exact 54.1->66.2% (+12.1pt, 9 fix: alias map IS DEPT x5, APHSABEMFKM, STUDISL, Facultyof+UB, BEM FKM suffix), MACRO 61.2->63.5% no-regress. OOD: mutation drop +0.5pt (toleransi +1pt), noise 10/25/50% identik v3. GT inkonsisten (FMIPA dan, HIMA pendek/panjang) -> F2/F4/HIMASTA dilarang. ORG-005 probe FAIL (scoring 1/12 fixable).",
+      "per_field_src": "tests/benchmark_runs/org_format_20260813_100441/summary_org_format.json"
     }
   ],
   "documents": {
