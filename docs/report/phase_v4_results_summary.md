@@ -182,6 +182,7 @@ ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallb
 | v10 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% |
 | v10 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% |
 | v10 | PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% |
+| v10 | AKT-002 deteksi nama_kegiatan v2 (0 LLM) | 81.1% | 68.8% |
 
 ## Handoff v18–v21 Addendum — F1 Organizer v3 (0 LLM) & Robustness OOD Probe
 

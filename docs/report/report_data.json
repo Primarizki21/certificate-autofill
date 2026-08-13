@@ -301,6 +301,22 @@
       "is_winner": false,
       "notes": "Port produksi lapisan eksperimen 0 LLM (organizer_v2 sudah di produksi ORG-001/PROD-001): KEEP R0/PREFIX_HELD/R2/R3/R6 + F1 alias + F3 BEM FKM + nomor D/E; SKIP R1/R4 (keputusan user, 2 fix dikorbankan); DROP R5. KOREKSI R3: ablation OOD 'R3=NO_FIX' diukur pre-ORG-004 tanpa lapisan alias; di port final R3 membuka alias F1 APHSA (1952296/2030335 = 2 fix). GATE PASS: port fidelity prod==ref 0 mismatch; organizer 37.8->63.5% (47/74), nomor 59.6->76.9%, MACRO 55.7->63.0%, 28 fix / 0 regress, 0 LLM. Flag ENABLE_ORGANIZER_NORMALIZATION default FALSE (produksi tak berubah sampai flip). Full eksperimen ORG-004 66.2% organizer = port + R1/R4.",
       "per_field_src": "tests/benchmark_runs/prod_port_20260813_135019/summary_prod_port.json"
+    },
+    {
+      "id": "akt_002_detection",
+      "phase": "v10",
+      "label": "AKT-002 deteksi nama_kegiatan v2 (0 LLM)",
+      "variant": "akt2",
+      "run_dir": "tests/benchmark_runs/akt2_20260813_142451",
+      "tingkat": "81.1%",
+      "macro": "68.8%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 13",
+      "is_winner": false,
+      "notes": "GATE PASS (GT v9 + matcher v2, baseline = offline_prod PROD-002): nama_kegiatan exact 6.8->36.5% (5->27/74, +29.7pt, 22 fix), fuzzy 17.6->56.8%, MACRO 63.0->68.8%, 0 regress, 0 LLM. Berbasis taksonomi AKT-001 (kosong 57/69 = masalah DETEKSI): 16 anchor pattern baru (Kepengurusan penuh, Dalam acara/kegiatan/memperingati, pada ajang/kegiatan/kompetisi, pada X yang dilaksanakan, entitled/titled, kutip agenda/kegiatan, participation at, the X organized by, winner of the, at the X, as a participant at) + repair OCR word-merge (dalam/of/yang/oleh/kompetisi/masa/bakti/pada + batas digit-huruf) + strip junk 'untuk kategori' + guard \bpada (fix KEPADA false-positive). OOD noise (QA): drop ekstra 10% +2.7pt, 25% +8.1pt (anchor teks-bergantung, gain absolut positif semua level) -> pola KEEP/GUARD bila di-port produksi. Eksperimen tests-only.",
+      "per_field_src": "tests/benchmark_runs/akt2_20260813_142451/summary_akt2.json"
     }
   ],
   "documents": {
