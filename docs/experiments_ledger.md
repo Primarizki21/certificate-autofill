@@ -74,6 +74,6 @@
 
 ## Hubungan dengan dokumen lain
 
-- `handoff_v31.md` = **open frontier** (supersedes v30) (baseline + hipotesis terbuka).
+- `handoff_v32.md` = **open frontier** (supersedes v31) (baseline + hipotesis terbuka + rencana AKT-003/AKT-004).
 - `runs_summary.md` = **angka terukur** (semua run).
 - `experiments_ledger.md` (ini) = **closed list** (yang sudah dicoba & ditutup).
