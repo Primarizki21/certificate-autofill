@@ -364,6 +364,22 @@
       "is_winner": false,
       "notes": "GATE PASS — gate scope-kecil >=+2 exact (keputusan user, handoff v33; 2-3 cert sasaran, +5pt = FAIL by design). GT v9 + matcher v2: nama_kegiatan exact 51.4->54.1% (38->40/74, +2 exact), MACRO 71.6->72.1%, 35 fix / 0 regress, 0 LLM. Anchor: 'dalam Event X' (Girifest, capture ikut Event + repair OCR-alias Nis C->NISC pasca camel-split), 'lomba tingkat Nasional \"X\"' (SDC Uniska = WRONG: cert 'Statistic' vs GT 'Statistics' -> kandidat GT v10), 'seminar on \"X\"' (2954283 exact). OOD noise drop ekstra 10% +4.1 / 25% +9.5pt (tidak naik vs AKT-003). Eksperimen tests-only.",
       "per_field_src": "tests/benchmark_runs/akt4_20260814_141802/summary_akt4.json"
+    },
+    {
+      "id": "akt_005_detection",
+      "phase": "v10",
+      "label": "AKT-005 deteksi nama_kegiatan v5: grup D all-caps/spacing (0 LLM)",
+      "variant": "akt5",
+      "run_dir": "tests/benchmark_runs/akt5_20260814_142534",
+      "tingkat": "81.1%",
+      "macro": "73.7%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 14",
+      "is_winner": false,
+      "notes": "GATE PASS (GT v9 + matcher v2, no-regress juga vs AKT-004): nama_kegiatan exact 54.1->62.2% (40->46/74, +6 exact), MACRO 72.1->73.7%, 41 fix / 0 regress, 0 LLM. Grup D: collapse run huruf-berjarak >=3 (SDC Unisba), split keyword all-caps (synreaach, Gelar Rasa, ACIC), UXDESIGN+(?i)competition+(?i)dengan pre-camel (2954685), join2 anchor kutip+sisa [ACIC] span newline, sentinel \\n sebelum Himpunan digit-bound. OOD: drop ekstra 10% +4.1 / 25% +13.5pt (grup D paling noise-fragile; gain absolut positif semua level). 2 regress vs AKT-004 tertangkap saat iterasi (competition lowercase bunuh camel-boundary -> post-repair re-split). BINARY SKIP (OCR 2o23 vs GT 3.0 -> GT v10). RANGKAIAN AKT SELESAI: 6.8->62.2% kumulatif. TIDAK di-port produksi (keputusan user). Eksperimen tests-only.",
+      "per_field_src": "tests/benchmark_runs/akt5_20260814_142534/summary_akt5.json"
     }
   ],
   "documents": {

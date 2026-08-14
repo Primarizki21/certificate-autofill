@@ -186,6 +186,7 @@ ENABLE_OCR_NUMBER_2PASS default FALSE — 2-pass nomor terintegrasi di ocr_fallb
 | v10 | AKT-002 deteksi nama_kegiatan v2 (0 LLM) | 81.1% | 68.8% |
 | v10 | AKT-003 deteksi nama_kegiatan v3: Sebagai Peserta + atthe/inthe (0 LLM) | 81.1% | 71.6% |
 | v10 | AKT-004 deteksi nama_kegiatan v4: Event/lomba/seminar on (0 LLM, gate scope-kecil) | 81.1% | 72.1% |
+| v10 | AKT-005 deteksi nama_kegiatan v5: grup D all-caps/spacing (0 LLM) | 81.1% | 73.7% |
 
 ## Handoff v18–v21 Addendum — F1 Organizer v3 (0 LLM) & Robustness OOD Probe
 
