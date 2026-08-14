@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 82 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 85 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -78,6 +78,9 @@
 | `kb_event_20260811_110636` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_norm_20260811_105237` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_scale_20260814_151147` | 2026-08-14 | kb_scale |  | — | — | — | — |  |  |
+| `kb_scale_conf_20260814_153359` | 2026-08-14 | kb_scale |  | — | — | — | — |  |  |
+| `kb_scale_e2e_20260814_153505` | 2026-08-14 | kb_scale |  | — | — | — | — |  |  |
+| `kb_scale_map_20260814_153304` | 2026-08-14 | kb_scale |  | — | — | — | — |  |  |
 | `kb_seed_20260811_103804` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_shadow_20260811_103552` | 2026-08-11 | other |  | — | 84.4% | — | — |  |  |
 | `kb_warmup_20260810_111952` | 2026-08-10 | other |  | — | 84.4% | — | — |  |  |

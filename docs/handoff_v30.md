@@ -1,99 +1,91 @@
-# Handoff v30 — AKT-001 (taksonomi nama_kegiatan, report-only) + arah AKT-002
+# Handoff v30 — KB-SCALE lengkap: peta hemat PASS, 2x confirm FAIL, akurasi+biaya PASS
 
-> Supersedes `docs/handoff_v29.md`. Sesi ini = track baru **AKT** (activity
-> name): taksonomi mismatch `nama_kegiatan_sertifikasi` (6.8% exact, field
-> terlemah) — report-only (preceden F1B), bukan eksperimen gate. Hasil:
-> **masalah = DETEKSI, bukan normalisasi** (berbeda fundamental dari organizer).
+> Supersedes `docs/handoff_v29.md`. Sesi ini = lanjutan pertanyaan "KB lebih
+> efisien saat produksi besar?" — tiga eksperimen melengkapi bukti:
+> **KB-SCALE-003** (peta hemat volume×keyspace×skew, GATE PASS), **KB-SCALE-004**
+> (confirm 2x vs 3x + alias, GATE FAIL — 3x tetap wajib), **KB-SCALE-005**
+> (akurasi & biaya end-to-end, GATE PASS — KB sekaligus menaikkan akurasi).
 
 ---
 
-## Hasil sesi
+## Hasil sesi (committed: `09ebd29` + commit ini)
 
 | Langkah | Hasil | Verdict |
 |---|---|---|
-| 1. Inspeksi awal (dump extracted vs GT, 74 cert) | exact 5 · fuzzy 8 · wrong 61; 61/69 non-exact = `(kosong)` → deteksi, bukan normalisasi | DONE |
-| 2. `tests/akt1_activity_taxonomy.py` — taksonomi (mirror F1b, kategori activity-name + kolom `in_text`) | 1 file tests/ baru, 0 produksi disentuh | DONE |
-| 3. Run taksonomi pada jalur produksi PROD-002 (flag ON), GT v9 + matcher v2 | **kosong 57** (52/57 GT ada di teks), salah_kegiatan 4, kurang_lengkap 3, kelebihan 3, format_ocr 2 | PASS (report-only) |
-| 4. Spot check `in_text` (12 kasus kosong) | Anchor pattern nyata di teks: `Dalam acara X`, `pada ajang X dengan tema`, `As a participant at X`, `Dalam memperingati X yang diselenggarakan` | VALID |
-| 5. QA | pytest **58 passed** (tak berubah — tool baru report-only); diff = 2 file baru, 0 modif | DONE |
+| 1. KB-SCALE-003 peta hemat (75 kombinasi, key sintetis zipf, routed 61% terukur) | 36k @80/20: **92% (1k key) / 78% (5k) / 72% (10k)** — semua ≥50%; volume kecil + keyspace besar rendah (500/10k = 35%) | **PASS** — asumsi kb_design layak dgn skew |
+| 2. KB-SCALE-004 confirm 2x vs 3x + alias (korpus 74) | wrong 2x **304** vs 3x **284** (+20); hemat N=500 naik 24% vs 5% tapi tidak sebanding; alias efek tipis | **FAIL** — 3x confirm TETAP wajib |
+| 3. KB-SCALE-005 akurasi & biaya end-to-end (nilai terukur: router 100%, KB serve 97.2%, LLM 58.6%) | 80/20 N=5000: akurasi **96.3% → 99.3%**, hemat biaya **87%** (57 vs 446 calls) | **PASS** |
+| 4. QA | pytest **60 passed**; runs_summary + ledger + kb_history + handoff | DONE |
 
 ---
 
 ## Temuan penting sesi ini
 
-1. **`nama_kegiatan` = masalah DETEKSI (kosong 57/69), bukan normalisasi.**
-   `extract_activity_name` hanya fire pada pola sempit (`seminar X yang
-   diselenggarakan`, `talkshow X`, keyword hardcode AIRNOLOGY/KAKIWIMA/SPECTA/
-   BRIEF). Mayoritas cert pakai anchor lain yang tak tertangkap.
-2. **52/57 kasus kosong: GT MUNCUL di teks raw** (compact/overlap ≥0.5) →
-   deteksi regex **feasible**, tinggal pattern coverage + repair OCR-merge.
-   Hanya 5 kasus yang nama kegiatannya tidak terwakili di teks (butuh LLM/OCR).
-3. **Anchor pattern baru yang terlihat di teks** (bahan AKT-002):
-   - `Dalam acara X` (2030372 Economic Week, 2954707 Competition of Design)
-   - `pada ajang X dengan tema` (gammafest GAMMAFEST 2025)
-   - `As a participant at X, themed` (data slayer Data Slayer 2.0)
-   - `Dalam memperingati X yang diselenggarakan` (1930354 Hari Anak Nasional)
-4. **False-positive keyword hardcode** (salah_kegiatan 4): `SPECTA` fire di
-   PRIMARIZKI_binary_2025 (GT = BINARY), PKKMB fire di VENEDICT_panitia_karsa
-   (GT = KARSA FTMM 2024), `Mawacana` fire di 1963507 (GT = Webinar) — perlu
-   guard: keyword hanya fallback bila tak ada pattern lain yang match.
-5. **Junk suffix** (kelebihan 3): `Untuk Kategori Sma/sederajat Dan Mahasiswa`
-   (Dataquest×2), `Pada Perlombaan Io T Tech Competition` (BTF) — strip murah.
-6. Ceiling: kosong = 83.8%, salah_kegiatan = 12.2%, kurang_lengkap = 10.8%,
-   kelebihan = 10.8%, format_ocr = 9.5% (kumulatif kalau semua diperbaiki).
+1. **KB = cache yang LEBIH AKURAT dari LLM**: serve KB 97.2% vs LLM fallback
+   58.6% (terukur). KB bukan cuma hemat biaya — menaikkan akurasi akhir
+   (99.3% vs 96.3%) karena key populer = jawaban terverifikasi 3x.
+2. **Peta hemat (SCALE-003)**: hemat berasal dari KEY POPULER (top-20% key
+   menampung 80% request). Request/key rata-rata global MENYESATKAN: 36k/10k
+   = 3.6 req/key rata-rata tetap hemat 72%. Volume kecil + keyspace besar =
+   tidak layak (500/10k = 35%).
+3. **2x confirm = hemat palsu**: wrong +20 (304 vs 284) — error pipeline
+   terkunci lebih cepat. Konsisten KB-002 (1x = wrong 5). 3x wajib.
+4. **Rangkaian KB-SCALE selesai**: 001 hemat 87% @produksi + 002 aman
+   multi-worker + 003 peta keputusan + 004 3x wajib + 005 akurasi+biaya.
 
 ---
 
 ## Frontier berikutnya (urutan saran)
 
-1. **AKT-002 — deteksi nama_kegiatan** (eksperimen ber-gate, 0 LLM):
-   - Perluas pola regex: anchor `Dalam acara X`, `pada ajang X`, `Dalam
-     memperingati X`, `As a participant at X`, `dengan tema "..."` (X = nama).
-   - Repair OCR word-merge: pola `_preprocess` organizer_v2 (`dalamkegiatan`,
-     `dalamrangkaianacara`, camel-split) di-extend ke teks activity.
-   - Guard keyword hardcode: SPECTA/BRIEF/PKKMB hanya fallback (fire bila tak
-     ada pattern lain).
-   - Strip junk suffix (`Untuk Kategori...`, `Pada Perlombaan...`).
-   - Gate: nama_kegiatan exact +5pt (≥11.8%), no-regress field lain, 0 LLM.
-   - Ceiling realistis dari kosong 57: target 30-40% (40-60% dari 57).
-2. **GT v10** — fix inkonsistensi GT v9 (FMIPA "dan", HIMA pendek/panjang) —
-   keputusan user.
-3. **R1/R4 + GUARD F6** — port needs_review → organizer 63.5→66.2%.
-4. **Scoring organizer_v2** — data >74 atau keputusan rewrite (ORG-005 FAIL).
-5. **KB**: TUTUP (v27) — buka bila data riil.
+1. **Port produksi organizer v3+R6+format** (R0/R2/PREFIX_HELD/R6 + F1 alias
+   map + F3 BEM FKM KEEP; R1/R4 GUARD; R3/R5 hapus) — re-eval GT v9 pasca-port.
+2. **Fix GT v9 inkonsistensi** (FMIPA "dan" 2954933 vs ACTION; HIMA
+   pendek/panjang) → GT v10 (butuh keputusan user) — membuka F2/HIMASTA.
+3. **KB produksi**: bukti lengkap hemat 87% + akurasi +3pt + aman
+   multi-worker (lock; PG tetap otoritas). Data riil → `tests.kb.audit` gate.
+   Keputusan user: kapan (ada data riil?) & skema (PG, key role, confirm 3x).
+4. **Scoring organizer_v2**: hanya bila data baru ATAU keputusan user rewrite
+   extractor + re-baseline penuh.
 
 ### Peta dokumen (agar agent sesi berikutnya tidak salah alamat)
 
-- **AKT** (activity name) → `docs/experiments_ledger.md` (ledger) +
-  `docs/report/akt1_activity_taxonomy.md` (report). Preceden F1B: taksonomi
-  report-only TIDAK masuk report_data.json — hanya eksperimen ber-gate yang
-  masuk (org_002_f1, org_003_v3, org_004_format, prod_002_port).
-- **ORG/PROD** → ledger + report_data.json → `scripts/generate_report.py`.
-
-## Frontier tertunda (sama v24-v29)
-
-- F4 fingerprint dedup, F5 distillation, F7 infra OCR queue, Eksperimen A
-  (LLM per-field), R1/R4 + GUARD F6, HYB-001 integrasi OCR hybrid.
+- **KB** (KB-001..006 Verdict Final + KB-SCALE-001..005) → `docs/kb_history.md`
+  (naratif) + `docs/experiments_ledger.md` (ringkas) + `docs/report/kb_scale*.md`
+  (angka: kb_scale, kb_scale_map, kb_scale_conf, kb_scale_e2e) +
+  `docs/report/team_review_kb.md`/`team_review_kb.xlsx` (review tim, xlsx
+  lokal — `*.xlsx` di-gitignore, bikin ulang via skill xlsx bila perlu).
+- **ORG** (F1/ORG-003/F1C/ORG-004/ORG-005) → `docs/experiments_ledger.md` +
+  `docs/report/report_data.json` → `scripts/generate_report.py`.
+- **AKT** (AKT-001..005) → `docs/report/akt{1..5}_activity_*.md`.
+- Jika eksperimen baru: ledger SELALU diisi; report_data.json HANYA eksperimen
+  relevan perbandingan laporan (bukan probe/failed seperti ORG-005/KB-SCALE-004).
 
 ---
 
-## Pekerjaan user / jangan lakukan
+## File terkait sesi ini
 
-- `pipeline_best.docx` diedit manual — JANGAN jalankan `generate_pipeline_doc.py`
-- Jangan ubah `Ground_Truth_Sertifikat_v8.csv` / raw `Ground_Truth_Sertifikat.csv`
-- Benchmark WAJIB `GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`
-- Eksperimen tetap di `tests/` (produksi: PROD-002 flag masih default OFF)
-- Jangan push — commit saja; user yang push (SSH passphrase)
-- Jangan re-run closed: EXP5-001, OCR-001..006, LLM-001..003, ROUTER-001, NC-001/002, ORG-005
-- Pytest: `uv run python -m pytest tests/ -q` (58 passed)
-- `results_comparison.xlsx` tidak di-commit — regenerate lokal bila perlu
-
-## Key Files
-
-| File | Peran |
+| File | Keterangan |
 |---|---|
-| `tests/akt1_activity_taxonomy.py` | AKT-001 — taksonomi nama_kegiatan (report-only) |
-| `docs/report/akt1_activity_taxonomy.md` | Report AKT-001 (ceiling + daftar per cert + in_text) |
-| `docs/experiments_ledger.md` | AKT-001 PASS + PROD-002 PASS (v29) |
-| `backend/app/services/organizer_normalize.py` | PROD-002 (v29) — normalisasi organizer+nomor |
-| `tests/benchmark_prod_port.py` | PROD-002 re-eval (v29) |
+| `tests/benchmark_kb_scale_map.py` | SCALE-003 (peta; key sintetis zipf) |
+| `tests/benchmark_kb_scale_conf.py` | SCALE-004 (2x/3x + alias) |
+| `tests/benchmark_kb_scale_e2e.py` | SCALE-005 (akurasi + biaya) |
+| `docs/report/kb_scale_map.md` | Peta hemat (3 tabel skew) |
+| `docs/report/kb_scale_conf.md` | Konfigurasi (verdict FAIL jujur) |
+| `docs/report/kb_scale_e2e.md` | Akurasi + biaya (verdict PASS) |
+| `docs/kb_history.md` | Entri SCALE-003/004/005 (naratif) |
+| `docs/experiments_ledger.md` | SCALE-003 PASS + SCALE-004 FAIL + SCALE-005 PASS |
+| `docs/report/runs_summary.md/csv` | + 3 run kb_scale_* |
+
+---
+
+## Gotchas sesi ini
+
+- `replay_workload` (SCALE-001) menghitung `hits` utk SEMUA request (routed +
+  non-routed) — jangan pakai `hits` utk akurasi end-to-end; SCALE-005 pakai
+  `saved`/`non_routed_miss` saja (double-count bug ditemukan & diperbaiki).
+- Angka terukur korpus (0 LLM runtime): router 100% (45/45 routed), LLM
+  tingkat 58.6% (17/29 non-routed, extracted_fields v9), token/call 176 (v9).
+- SCALE-003/005 pakai key sintetis/assumsi — dilaporkan eksplisit sbg
+  proyeksi; SCALE-004 = korpus murni (bukti paling kuat).
+- Konfigurasi final KB produksi: **confirm 3x wajib** (2x = wrong +20),
+  key role (KB-005), alias opsional di data riil.

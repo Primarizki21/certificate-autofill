@@ -148,6 +148,87 @@ cukup, ponytail).
 
 ---
 
+## KB-SCALE-003 | 2026-08-14 | peta hemat KB (volume × key space × skew)
+
+**Konteks.** kb_design.md berasumsi 1.000-10.000 unique organizer utk 36k
+request — belum tervalidasi. Peta memvalidasi/menyanggah asumsi tsb.
+
+**Hipotesis.** Hemat proporsional request per key populer; volume besar +
+skew → warmup terbayar.
+
+**Dataset & konfigurasi.** Grid 5 volume {500..36k} × 5 key space {55..10k} ×
+3 skew (75 kombinasi); key sintetis freq zipf; routed share 61% (terukur
+korpus); confirm 3x; SEED=42; 0 LLM.
+
+**Perubahan kode.** `tests/benchmark_kb_scale_map.py` (baru); reuse
+`alpha_for_skew`/`replay_workload` dari SCALE-001.
+
+**Hasil terukur.** 36k @80/20: saved **92% (1k key) / 78% (5k) / 72% (10k)** —
+semua ≥50%. Volume kecil + key space besar = rendah (500 req / 10k = 35%).
+Insight: hemat dari key POPULER (top-20% menampung 80% request); 36k/10k =
+3.6 req/key rata-rata tetap 72%.
+
+**Gate / Verdict.** **PASS** — asumsi kb_design layak dgn skew; peta =
+cold-start worst case.
+
+**Risiko.** Key sintetis zipf = asumsi; distribusi riil tetap butuh audit.py.
+
+**Next action.** KB persist lintas periode (KB-002) mengubah matematika —
+warmup sekali, hemat selamanya; pertimbangkan di desain produksi.
+
+---
+
+## KB-SCALE-004 | 2026-08-14 | konfigurasi KB: confirm 2x vs 3x, key alias
+
+**Konteks.** 1x confirm sudah gagal (KB-002: wrong 5); **2x belum pernah
+diuji**. Di volume menengah (N=500) warmup 3x menelan porsi (SCALE-001: 12%).
+
+**Hipotesis.** 2x mempercepat warmup → hemat naik, tanpa menambah salah.
+
+**Dataset & konfigurasi.** Grid confirm {2,3} × key {plain, alias} × N
+{500, 5000} × skew 80/20; korpus 74 (bukan sintetis); 0 LLM.
+
+**Perubahan kode.** `tests/benchmark_kb_scale_conf.py` (baru).
+
+**Hasil terukur.** **GATE FAIL**: wrong 2x **304** vs 3x **284** (+20 — error
+pipeline terkunci lebih cepat); hemat N=500 naik (24% vs 5%) tapi tidak
+sebanding dgn salah ekstra. Alias: keys 55→54, hit naik tipis @N=500 (409 vs
+407), efek kecil (FST pair non-populer).
+
+**Gate / Verdict.** **FAIL** — 3x confirm TETAP wajib; 2x = hemat palsu.
+
+**Next action.** 2x jangan dipakai produksi; alias tetap kandidat di data
+riil (fragmentasi lebih banyak di luar korpus).
+
+---
+
+## KB-SCALE-005 | 2026-08-14 | proyeksi akurasi & biaya produksi end-to-end
+
+**Konteks.** SCALE-001 hitung hemat CALLS, belum kualitas akhir. Di sini
+digabungkan dgn nilai terukur korpus.
+
+**Hipotesis.** KB = cache yang LEBIH akurat dari LLM fallback (key populer =
+jawaban terverifikasi 3x) → akurasi akhir naik + biaya turun.
+
+**Dataset & konfigurasi.** Model (nilai TERUKUR): router 100% (45/45), KB
+serve 97.2% (SCALE-001), LLM 58.6% (17/29 non-routed), 176 tok/call (v9);
+grid N {500, 5000} × skew {70-90%}.
+
+**Perubahan kode.** `tests/benchmark_kb_scale_e2e.py` (baru).
+
+**Hasil terukur.** 80/20 N=5000: akurasi **96.3% → 99.3%** (dgn KB ≥ tanpa
+KB di SEMUA kombinasi), hemat biaya **87%** (57 vs 446 LLM calls).
+
+**Gate / Verdict.** **PASS** — KB menaikkan akurasi akhir & hemat biaya ≥50%.
+
+**Risiko.** Label korpus terukur, tapi distribusi request simulasi; validasi
+akhir audit.py data riil.
+
+**Next action.** Cerita lengkap KB: hemat 87% + akurasi +3pt — bahan
+keputusan produksi ke tim.
+
+---
+
 ## Verdict Final Jalur KB | 2026-08-11 | penutup eksperimen (tanpa data baru)
 
 **Posisi (keputusan user):** KB = eksperimen murni. Tidak masuk produksi sampai
