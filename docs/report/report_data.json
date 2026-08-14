@@ -348,6 +348,22 @@
       "is_winner": false,
       "notes": "GATE PASS (GT v9 + matcher v2, baseline = offline_prod PROD-002): nama_kegiatan exact 6.8->51.4% (5->38/74, +13.5pt dari AKT-002, +44.6pt kumulatif), fuzzy 17.6->74.3%, MACRO 63.0->71.6%, 33 fix / 0 regress, 0 LLM. Grup A 'Sebagai [:] Peserta X' (7 fix: Public Health x2, Airlangga Job Preparation, Magang UKM x3, KIM — prefix Sebagai WAJIB anti header/role, stop bare Dalam|Pada, newline-boundary, negative lookahead Talkshow|campaign), grup B 'Sebagai Peserta \"X\"' (ORM exact, ACIC fuzzy), grup C repair atthe/inthe/AT THE/organizedby/digit-merge (Hology, Poisson exact; FIT partial all-caps). OOD noise: drop ekstra 10% +4.1pt, 25% +9.5pt (gain absolut positif semua level) -> pola KEEP/GUARD saat port produksi. Changed non-exact 5 wajar (ACIC fuzzy, 2954571 partial in_text=tidak, ACW GT 2025/2026 -> GT v10, hakim OCR, FIT all-caps). Eksperimen tests-only.",
       "per_field_src": "tests/benchmark_runs/akt3_20260814_135024/summary_akt3.json"
+    },
+    {
+      "id": "akt_004_detection",
+      "phase": "v10",
+      "label": "AKT-004 deteksi nama_kegiatan v4: Event/lomba/seminar on (0 LLM, gate scope-kecil)",
+      "variant": "akt4",
+      "run_dir": "tests/benchmark_runs/akt4_20260814_141802",
+      "tingkat": "81.1%",
+      "macro": "72.1%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 14",
+      "is_winner": false,
+      "notes": "GATE PASS — gate scope-kecil >=+2 exact (keputusan user, handoff v33; 2-3 cert sasaran, +5pt = FAIL by design). GT v9 + matcher v2: nama_kegiatan exact 51.4->54.1% (38->40/74, +2 exact), MACRO 71.6->72.1%, 35 fix / 0 regress, 0 LLM. Anchor: 'dalam Event X' (Girifest, capture ikut Event + repair OCR-alias Nis C->NISC pasca camel-split), 'lomba tingkat Nasional \"X\"' (SDC Uniska = WRONG: cert 'Statistic' vs GT 'Statistics' -> kandidat GT v10), 'seminar on \"X\"' (2954283 exact). OOD noise drop ekstra 10% +4.1 / 25% +9.5pt (tidak naik vs AKT-003). Eksperimen tests-only.",
+      "per_field_src": "tests/benchmark_runs/akt4_20260814_141802/summary_akt4.json"
     }
   ],
   "documents": {
