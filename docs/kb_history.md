@@ -88,6 +88,66 @@ atau sampling manual) — stem bisa over-merge nama yang mirip tapi beda org.
 
 ---
 
+## KB-SCALE-001 | 2026-08-14 | simulasi workload produksi skewed
+
+**Konteks.** Verdict Final v27 menutup KB karena saved_llm = 0 di korpus 74
+seragam. Pertanyaan baru: **efisiensi saat scale produksi besar** — produksi
+tidak seragam (beberapa organizer/event dominan, request ribuan). Dimensi ini
+belum pernah diuji; verdict lama tidak dibatalkan (berlaku utk klaim data
+riil), KB-SCALE = proyeksi pola + parameter.
+
+**Hipotesis.** Hemat LLM proporsional request per key: di workload skew besar,
+warmup 3x terbayar → mayoritas request non-routed dijawab KB.
+
+**Dataset & konfigurasi.** Key space 55 (korpus 74), N=500 & N=5000 request
+sintetis (SEED=42), skew 70/30/80/20/90/10 (20% key terpopuler menampung R%
+request, bobot freq^alpha), replay ROUTER→KB→LLM, confirm 3x, label pipeline
+= `audit.pipeline_label` (0 LLM runtime), GT v9 + matcher v2.
+
+**Perubahan kode.** `tests/benchmark_kb_scale.py` (baru); `scripts/
+generate_runs_summary.py` (kind `kb_scale`).
+
+**Hasil terukur.** N=5000 80/20: saved 391/448 = **87%**, hit 97%, wrong 2.8%
+(136) — **GATE PASS** (≥50% saved, ≥60% hit, <5% wrong). N=500 80/20: saved
+12% — **FAIL volume kecil** (warmup menelan porsi). Est. latency saved ~978s/
+5000 req (2.5s/call v4, ESTIMASI). 55/55 key authoritative. Wrong = warisan
+error pipeline (key populer benar → serve error 2.8% < pipeline ~19%).
+
+**Gate / Verdict.** **PASS** di volume produksi (5000) — KB efisien saat scale
+besar + skew; volume kecil tidak. Synthetic = proyeksi pola, bukan bukti riil.
+
+**Risiko.** Distribusi produksi asumsi (Pareto) belum tervalidasi; angka hemat
+bergantung request/key aktual. Gate data riil tetap `tests.kb.audit`.
+
+**Commit terkait.** (commit KB-SCALE-001/002).
+
+**Next action.** Data riil lintas fakultas → audit.py; bila request/key ≥ ~10
+dgn skew → KB layak produksi (keputusan user).
+
+---
+
+## KB-SCALE-002 | 2026-08-14 | race tulis multi-worker
+
+**Konteks.** Produksi = multi-worker (api + db_worker). KB in-memory per worker
+= cache terpisah + race saat tulis key sama → lost update `confirms` (entry
+tak pernah authoritative walau 3x).
+
+**Hipotesis.** `threading.Lock` di TingkatKB membuat write deterministik.
+
+**Perubahan kode.** `tests/kb/kb.py` (lock di write/lookup/peek, produksi
+tetap zero-touch); `tests/test_kb_scale_concurrency.py` (baru).
+
+**Hasil terukur.** 8 thread × 500 write key sama: confirms == 4000, tanpa lock
+test gagal; 20 key deterministik: per key == 8×300. 0 lost update.
+
+**Gate / Verdict.** **PASS** — write aman multi-worker; PG production tetap
+otoritas (lock = prototipe in-memory).
+
+**Next action.** Per-key lock bila profiling butuh (sekarang global lock
+cukup, ponytail).
+
+---
+
 ## Verdict Final Jalur KB | 2026-08-11 | penutup eksperimen (tanpa data baru)
 
 **Posisi (keputusan user):** KB = eksperimen murni. Tidak masuk produksi sampai
