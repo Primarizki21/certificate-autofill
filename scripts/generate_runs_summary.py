@@ -66,6 +66,8 @@ def _kind(name: str) -> str:
         return "ner_v1"
     if name.startswith("run_20260728"):
         return "baseline_regex"
+    if name.startswith("kb_scale"):
+        return "kb_scale"
     if name.startswith("layout_texts"):
         return "corpus"
     return "other"
