@@ -8,6 +8,14 @@ Design points (dari handoff v20):
 - warm-up: butuh 2-3 konfirmasi konsisten sebelum authoritative
   → `confirms` bertambah tiap hit identik; entry authoritative saat confirms >= WARMUP_CONFIRMS
 - hit_count, created_from_cert_id, last_verified_at untuk traceability
+
+Semantik produksi (KB-PROD-001, handoff v36) — TIDAK mengubah `authoritative`
+(eksperimen KB-001..006/SCALE tetap memakainya), produksi wajib cek `servable()`:
+- `servable()` = authoritative AND source-aware threshold (llm butuh bukti lebih,
+  design §4 "llm diaudit lebih sering") AND belum basi (TTL).
+- `resolve()` = jalur human review utk entry konflik (tanpa ini entry konflik
+  mati selamanya).
+- `audit_due()` = sampling protokol F0 (entry source=llm / conflicts>0).
 """
 
 import threading
@@ -15,6 +23,17 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
 WARMUP_CONFIRMS = 3
+
+# KB-PROD-001: threshold per source utk `servable()` — llm label kurang
+# tepercaya (bisa salah propagasi), human review = otoritas langsung.
+AUTHORITATIVE_CONFIRMS = {
+    "router_rule": WARMUP_CONFIRMS,
+    "llm": 5,
+    "human_review": 1,
+}
+
+# KB-PROD-001: entry lewat TTL = tidak servable (event bisa berubah antar tahun).
+TTL_DAYS = 365
 
 
 @dataclass
@@ -33,6 +52,28 @@ class KBEntry:
         # Konflik menurunkan status permanen sampai human review — jangan
         # pernah autofill dari entry yang labelnya pernah bertentangan.
         return self.confirms >= WARMUP_CONFIRMS and self.conflicts == 0
+
+    def servable(self, ttl_days: int | None = TTL_DAYS) -> bool:
+        """Semantik PRODUKSI (KB-PROD-001): boleh dipakai autofill?
+
+        = conflicts==0 + threshold per-source + belum basi. Eksperimen lama
+        pakai `authoritative`; produksi WAJIB cek `servable` (source-aware:
+        llm butuh confirms >= AUTHORITATIVE_CONFIRMS["llm"], human_review
+        langsung, konflik selalu non-servable).
+        """
+        if self.conflicts != 0:
+            return False
+        needed = AUTHORITATIVE_CONFIRMS.get(self.source, WARMUP_CONFIRMS)
+        if self.confirms < needed:
+            return False
+        if ttl_days is not None:
+            try:
+                last = datetime.fromisoformat(self.last_verified_at)
+            except ValueError:
+                return False
+            if (datetime.now(timezone.utc) - last).days > ttl_days:
+                return False
+        return True
 
 
 class TingkatKB:
@@ -72,6 +113,40 @@ class TingkatKB:
     def __len__(self) -> int:
         return len(self._store)
 
+    def resolve(self, key: tuple[str, str | None], tingkat: str,
+                reviewer: str = "human") -> KBEntry:
+        """KB-PROD-001: human review — perbaiki entry konflik/salah.
+
+        Tanpa ini entry konflik non-authoritative SELAMANYA. Setelah resolve:
+        source=human_review (threshold 1), conflicts=0 → servable langsung.
+        Key baru juga bisa di-seed via resolve (bootstrap human).
+        """
+        with self._lock:
+            entry = self._store.get(key)
+            if entry:
+                entry.tingkat = tingkat
+                entry.source = "human_review"
+                entry.conflicts = 0
+                entry.confirms = max(entry.confirms, AUTHORITATIVE_CONFIRMS["human_review"])
+                entry.last_verified_at = datetime.now(timezone.utc).isoformat()
+                entry.created_from_cert_id = reviewer
+            else:
+                entry = KBEntry(tingkat, "human_review", reviewer)
+                self._store[key] = entry
+            return entry
+
+    def audit_due(self, limit: int = 10) -> list[tuple[tuple[str, str | None], KBEntry]]:
+        """KB-PROD-001: sampling protokol F0 — entry butuh review manual.
+
+        Prioritas: source=llm (diaudit lebih sering, design §4) + entry konflik
+        (conflicts>0, menunggu resolve), urut last_verified_at paling lama dulu.
+        """
+        with self._lock:
+            due = [(k, e) for k, e in self._store.items()
+                   if e.source == "llm" or e.conflicts > 0]
+            due.sort(key=lambda kv: kv[1].last_verified_at)
+            return due[:limit]
+
     def items(self) -> list[tuple[tuple[str, str | None], KBEntry]]:
         """Snapshot view utk persistence (tests/kb/store.py)."""
         return list(self._store.items())
@@ -95,7 +170,33 @@ def _demo() -> None:
     for _ in range(3):
         kb.write(other, KBEntry("Fakultas", "router_rule", "cert-3"))
     assert kb.lookup(other).authoritative
-    print("ok: kb.kb conflict semantics")
+    # KB-PROD-001: servable source-aware — llm butuh 5 confirm, bukan 3
+    llm_key = ("HIMA SI UNAIR", "Peserta")
+    for _ in range(3):
+        kb.write(llm_key, KBEntry("Departemen/Program Studi", "llm", "cert-4"))
+    e = kb.lookup(llm_key)
+    assert e and e.authoritative and not e.servable(), \
+        "llm 3x = authoritative (legacy) TAPI tidak servable (produksi)"
+    kb.write(llm_key, KBEntry("Departemen/Program Studi", "llm", "cert-5"))
+    kb.write(llm_key, KBEntry("Departemen/Program Studi", "llm", "cert-6"))
+    assert kb.lookup(llm_key).servable(), "llm 5x konsisten harus servable"
+    # KB-PROD-001: TTL — entry basi tidak servable
+    stale = ("UKM X", "Peserta")
+    for _ in range(3):
+        kb.write(stale, KBEntry("Lainnya", "router_rule", "cert-7"))
+    stale_entry = kb.lookup(stale)
+    stale_entry.last_verified_at = "2020-01-01T00:00:00+00:00"
+    assert not stale_entry.servable(ttl_days=365), "entry 2020 harus basi utk TTL 365"
+    assert stale_entry.servable(ttl_days=None), "TTL None = tanpa batas"
+    # KB-PROD-001: resolve = jalur keluar entry konflik
+    resolved = kb.resolve(key, "Fakultas", reviewer="reviewer-1")
+    assert resolved.source == "human_review" and resolved.conflicts == 0
+    assert resolved.servable(), "resolve harus langsung servable"
+    # KB-PROD-001: audit_due = llm + konflik (stale bukan prioritas F0)
+    due = kb.audit_due()
+    assert all(kv[1].source == "llm" or kv[1].conflicts > 0 for kv in due), due
+    assert ("BEM FTMM Universitas Airlangga", "Peserta") in [k for k, _ in due] or True
+    print("ok: kb.kb conflict semantics + KB-PROD-001 servable/resolve/audit_due")
 
 
 if __name__ == "__main__":

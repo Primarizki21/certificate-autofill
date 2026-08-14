@@ -2,8 +2,10 @@
 
 > Status: desain final (keputusan user sesi v19, handoff v20) + prototipe replay
 > (F3 `tests/benchmark_kb_warmup.py`) + **KB-001 shadow v1** (`tests/kb/key.py` +
-> `tests/benchmark_kb_shadow.py`, 2026-08-11). Produksi **belum** disentuh.
-> Perkembangan naratif: `docs/kb_history.md`.
+> `tests/benchmark_kb_shadow.py`, 2026-08-11) + **KB-SCALE-001..005** (2026-08-14,
+> `docs/report/kb_scale*.md`) + **semantik produksi KB-PROD-001** (`tests/kb/kb.py`
+> `servable`/`resolve`/`audit_due`, 2026-08-14, handoff v36). Produksi **belum**
+> disentuh. Perkembangan naratif: `docs/kb_history.md`.
 
 ## 1. Key — opsi B: komposit `(normalized_organizer, event_type)`
 
@@ -43,7 +45,7 @@
 ```
 organizer_tingkat_kb
 - normalized_organizer   text  (PK, komposit)
-- event_type             text  (PK, komposit; NULL = tidak tahu)
+- role                   text  (PK, komposit; = event proxy, KB-005 — TIDAK perlu event_type)
 - tingkat                text
 - confidence             float
 - source                 enum (router_rule | llm | human_review)
@@ -52,6 +54,11 @@ organizer_tingkat_kb
 - last_verified_at       timestamp
 - created_from_cert_id   text  (traceability)
 ```
+
+> **KB-005 (keputusan desain #1)**: `role` (via `map_jabatan`) = satu-satunya
+> event yang collision 0 & aman. `jenis_kegiatan` tidak diekstrak pipeline
+> (70% key mati), `kelompok_kegiatan` over-merge (collision 1, wrong 2).
+> Skema produksi memakai `role`, bukan `event_type`.
 
 ## 3. Runtime flow (extend Stage 5, sebelum router)
 
@@ -75,15 +82,32 @@ Lookup exact-match saja — tanpa fuzzy (fuzzy = risiko salah-propagasi).
 
 - **Salah propagate ke ribuan mahasiswa** → audit sampling: X% KB hit direview
   manual per batch (protokol F0). Entry `source=llm` diaudit lebih sering.
+  **KB-PROD-001**: `TingkatKB.audit_due()` (prototipe) = sampling entry
+  source=llm + conflicts>0 utk review manual.
 - **Warm-up**: 2-3 konfirmasi konsisten sebelum authoritative (prototipe:
   `WARMUP_CONFIRMS=3`); jangan trust 1 hit.
+- **Propagasi router-salah / LLM kurang tepercaya** → **KB-PROD-001**:
+  `servable()` source-aware — threshold per source
+  (`AUTHORITATIVE_CONFIRMS = {router_rule: 3, llm: 5, human_review: 1}`).
+  LLM label butuh bukti lebih banyak sebelum dipakai autofill.
+  (`authoritative` lama tetap dipakai eksperimen KB-001..006/SCALE; produksi
+  wajib cek `servable`.)
+- **Entry basi (event berubah antar tahun)** → **KB-PROD-001**: `servable()`
+  cek `last_verified_at` dalam `TTL_DAYS` (default 365); entry lewat TTL =
+  non-servable → di-refresh via LLM/human.
 - **Collision** (key sama, tingkat beda): **sudah diimplementasi KB-001** —
   `write()` konflik → `conflicts += 1`, nilai asli dipertahankan, entry
   non-authoritative permanen (sampai human review). Tidak pernah autofill dari
-  entry konflik.
+  entry konflik. **KB-PROD-001**: `TingkatKB.resolve()` = jalur human review —
+  entry konflik bisa di-resolve (source=human_review, conflicts=0, langsung
+  servable). Tanpa resolve, entry konflik mati selamanya.
 - `hit_count`, `last_verified_at`, `created_from_cert_id` untuk traceability.
   Catatan: `hit_count` per lookup = write contention di produksi → counter
   batch/queue saat promosi.
+- **Concurrency multi-worker (api + db_worker)** → SCALE-002: `threading.Lock`
+  validasi semantik in-memory. **Produksi WAJIB DB atomic upsert**
+  (`INSERT ... ON CONFLICT (normalized_organizer, role)
+  DO UPDATE SET confirms = CASE WHEN ... END`), bukan lock Python (per-proses).
 
 ## 5. Hasil prototipe
 
@@ -113,11 +137,13 @@ Lookup exact-match saja — tanpa fuzzy (fuzzy = risiko salah-propagasi).
 
 ## 6. Keputusan terbuka (belum dieksekusi)
 
-1. Pipeline perlu ekstrak `jenis_kegiatan` (event_type presisi) atau cukup role?
-   (KB-001 memakai role proxy; keputusan memengaruhi schema)
+1. ~~Pipeline perlu ekstrak `jenis_kegiatan` (event_type presisi) atau cukup role?~~
+   **RESOLVED (KB-005)**: role proxy cukup & paling aman — TIDAK ekstrak
+   `jenis_kegiatan`; skema pakai `role` (lihat §2).
 2. **Sampling data riil unique organizer lintas fakultas** = prasyarat gate
-   produksi (korpus 74: hanya 3 key berulang). Bisa paralel.
+   produksi (korpus 74: hanya 3 key berulang). Bisa paralel. **TERTUNDA — data
+   riil belum tersedia (2026-08-14)**.
 3. Prototipe `tests/kb/` → tabel `models.py` + flag `ENABLE_KB_TINGKAT` hanya
    saat promosi produksi (keputusan user, masih jauh).
-4. Konfig 1x vs 3x confirm identik di korpus ini (tak ada key ter-confirm >1x)
-   — validasi ulang di data riil.
+4. ~~Konfig 1x vs 3x confirm identik di korpus ini~~ **RESOLVED (KB-SCALE-004)**:
+   3x wajib (2x = wrong +20). Threshold per-source: `AUTHORITATIVE_CONFIRMS`.
