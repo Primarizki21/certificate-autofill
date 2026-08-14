@@ -332,6 +332,22 @@
       "is_winner": false,
       "notes": "GATE PASS (GT v9 + matcher v2, baseline = offline_prod PROD-002): nama_kegiatan exact 6.8->36.5% (5->27/74, +29.7pt, 22 fix), fuzzy 17.6->56.8%, MACRO 63.0->68.8%, 0 regress, 0 LLM. Berbasis taksonomi AKT-001 (kosong 57/69 = masalah DETEKSI): 16 anchor pattern baru (Kepengurusan penuh, Dalam acara/kegiatan/memperingati, pada ajang/kegiatan/kompetisi, pada X yang dilaksanakan, entitled/titled, kutip agenda/kegiatan, participation at, the X organized by, winner of the, at the X, as a participant at) + repair OCR word-merge (dalam/of/yang/oleh/kompetisi/masa/bakti/pada + batas digit-huruf) + strip junk 'untuk kategori' + guard \bpada (fix KEPADA false-positive). OOD noise (QA): drop ekstra 10% +2.7pt, 25% +8.1pt (anchor teks-bergantung, gain absolut positif semua level) -> pola KEEP/GUARD bila di-port produksi. Eksperimen tests-only.",
       "per_field_src": "tests/benchmark_runs/akt2_20260813_142451/summary_akt2.json"
+    },
+    {
+      "id": "akt_003_detection",
+      "phase": "v10",
+      "label": "AKT-003 deteksi nama_kegiatan v3: Sebagai Peserta + atthe/inthe (0 LLM)",
+      "variant": "akt3",
+      "run_dir": "tests/benchmark_runs/akt3_20260814_135024",
+      "tingkat": "81.1%",
+      "macro": "71.6%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 13",
+      "is_winner": false,
+      "notes": "GATE PASS (GT v9 + matcher v2, baseline = offline_prod PROD-002): nama_kegiatan exact 6.8->51.4% (5->38/74, +13.5pt dari AKT-002, +44.6pt kumulatif), fuzzy 17.6->74.3%, MACRO 63.0->71.6%, 33 fix / 0 regress, 0 LLM. Grup A 'Sebagai [:] Peserta X' (7 fix: Public Health x2, Airlangga Job Preparation, Magang UKM x3, KIM — prefix Sebagai WAJIB anti header/role, stop bare Dalam|Pada, newline-boundary, negative lookahead Talkshow|campaign), grup B 'Sebagai Peserta \"X\"' (ORM exact, ACIC fuzzy), grup C repair atthe/inthe/AT THE/organizedby/digit-merge (Hology, Poisson exact; FIT partial all-caps). OOD noise: drop ekstra 10% +4.1pt, 25% +9.5pt (gain absolut positif semua level) -> pola KEEP/GUARD saat port produksi. Changed non-exact 5 wajar (ACIC fuzzy, 2954571 partial in_text=tidak, ACW GT 2025/2026 -> GT v10, hakim OCR, FIT all-caps). Eksperimen tests-only.",
+      "per_field_src": "tests/benchmark_runs/akt3_20260814_135024/summary_akt3.json"
     }
   ],
   "documents": {

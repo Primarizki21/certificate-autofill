@@ -388,3 +388,4 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 |
 | PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% | 0 | 0 | - | v9 |
 | AKT-002 deteksi nama_kegiatan v2 (0 LLM) | 81.1% | 68.8% | 0 | 0 | - | v9 |
+| AKT-003 deteksi nama_kegiatan v3: Sebagai Peserta + atthe/inthe (0 LLM) | 81.1% | 71.6% | 0 | 0 | - | v9 |
