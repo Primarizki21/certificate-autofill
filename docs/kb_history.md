@@ -229,6 +229,45 @@ keputusan produksi ke tim.
 
 ---
 
+## KB-PROD-001 | 2026-08-14 | semantik produksi: servable, resolve, audit_due
+
+**Konteks.** Eksperimen selesai (KB-001..006 + SCALE-001..005), tapi gap
+produksi yang EKSPERIMEN tak bisa jawab belum ter-kode: propagasi label llm
+kurang tepercaya, entry konflik mati selamanya (tanpa human review), entry
+basi antar tahun. Data riil belum tersedia → semua gap ini bisa dikerjakan
+di prototipe tanpa data.
+
+**Hipotesis.** Produksi butuh semantik yang lebih ketat dari `authoritative`
+(threshold seragam 3): llm butuh bukti lebih, human review = otoritas
+langsung, entry basi = jangan dipakai.
+
+**Perubahan kode.** `tests/kb/kb.py`: `servable()` (source-aware +
+TTL, `AUTHORITATIVE_CONFIRMS = {router_rule: 3, llm: 5, human_review: 1}`,
+`TTL_DAYS = 365`), `resolve()` (human review: conflicts=0, source=human,
+servable langsung), `audit_due()` (sampling F0: source=llm + conflicts>0).
+`authoritative` TIDAK diubah — eksperimen lama (benchmark_kb_scale/seed/
+shadow, test concurrency) tetap valid. `tests/test_kb_production_semantics.py`
+(baru, 4 test). `docs/kb_design.md` §4/§6 diperbarui (keputusan #1/#4
+RESOLVED, skema `event_type`→`role`).
+
+**Hasil terukur.** Pytest 60 → 64 passed, 0 regress. Demo: llm 3x =
+authoritative legacy tapi non-servable → 5x servable; human_review langsung
+servable; entry 2020 non-servable utk TTL 365, servable utk TTL None; resolve
+membuka entry konflik; audit_due = llm+konflik saja.
+
+**Gate / Verdict.** **PASS** — semantik produksi ter-kode di prototipe,
+zero-touch produksi.
+
+**Risiko.** `AUTHORITATIVE_CONFIRMS`/`TTL_DAYS` = nilai default yang perlu
+validasi saat data riil datang; konflik utk `servable` masih permanen sampai
+resolve (by design).
+
+**Next action.** Port produksi (TIDAK dieksekusi): PG atomic upsert ganti
+`threading.Lock` (multi-proses), hit_count counter batch, ukur tok/call path
+produksi, gate data riil `audit.py`.
+
+---
+
 ## Verdict Final Jalur KB | 2026-08-11 | penutup eksperimen (tanpa data baru)
 
 **Posisi (keputusan user):** KB = eksperimen murni. Tidak masuk produksi sampai
