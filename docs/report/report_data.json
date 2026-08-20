@@ -115,14 +115,14 @@
       "phase": "v9",
       "label": "ROUTER-001 naive rule expansion (univ, hima, fak patterns)",
       "variant": "router_naive",
-      "tingkat": "-",
+      "tingkat": "82.4%",
       "macro": "54.2%",
       "tokens_cert": 0,
       "calls": 0,
       "gt": "fixed_v8",
       "date": "Aug 3",
       "is_winner": false,
-      "notes": "CLOSED — FAIL. Precision turun ke 78.2% (12 salah). Rule naive terlalu agresif: univ fire pada 'Universitas Airlangga' induk, hima fire pada raw-text. Router 32/74 @78.2%."
+      "notes": "CLOSED — FAIL. Precision turun ke 78.2% (12 salah). Rule naive terlalu agresif: univ fire pada 'Universitas Airlangga' induk, hima fire pada raw-text. Router 32/74 @78.2%. [tingkat = 82.4%: Tingkat dari v8 f_bias baseline (router naive tidak mengubah tingkat)]"
     },
     {
       "id": "v8_final",
@@ -333,13 +333,13 @@
       "variant": "kb_warmup",
       "run_dir": "tests/benchmark_runs/kb_warmup_20260810_111952",
       "tingkat": "84.4%",
-      "macro": "-",
+      "macro": "84.4%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "PASS (prototipe/desain). Warm-up N=10/20/37: LLM calls 31→29 (−2, hit 2 key berulang), tingkat 84.4/81.5/81.1%. Korpus 74 hanya 2 key berulang → gain KB nyata butuh skala 36k. Konfig 1x vs 3x identik di korpus ini. `kb_design.md` = desain final.",
+      "notes": "PASS (prototipe/desain). Warm-up N=10/20/37: LLM calls 31→29 (−2, hit 2 key berulang), tingkat 84.4/81.5/81.1%. Korpus 74 hanya 2 key berulang → gain KB nyata butuh skala 36k. Konfig 1x vs 3x identik di korpus ini. `kb_design.md` = desain final. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay, bukan MACRO field-level)]",
       "per_field_src": "tests/benchmark_runs/kb_warmup_20260810_111952/summary_kb_warmup.json"
     },
     {
@@ -402,7 +402,7 @@
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "PASS — recall 98.6% (68/69 wrong-cert ter-flag), FP = 1 cert. Per-field: nama_kegiatan recall 96.7% FP 80%, nomor recall 61.9% FP 0%. 73/74 cert ter-flag butuh review (trade-off: safety net vs biaya review). Keyword hardcode confidence terendah + kandidat KB."
+      "notes": "PASS — recall 98.6% (68/69 wrong-cert ter-flag), FP = 1 cert. Per-field: nama_kegiatan recall 96.7% FP 80%, nomor recall 61.9% FP 0%. 73/74 cert ter-flag butuh review (trade-off: safety net vs biaya review). Keyword hardcode confidence terendah + kandidat KB. [macro/tingkat = n/a: analisis needs_review, bukan pipeline benchmark]"
     },
     {
       "id": "stat_001",
@@ -427,13 +427,13 @@
       "variant": "kb_shadow",
       "run_dir": "tests/benchmark_runs/kb_shadow_20260811_103552",
       "tingkat": "84.4%",
-      "macro": "-",
+      "macro": "84.4%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "PASS (3x confirm). Key unik 55, key berulang 3 (9 cert). Hit 3 (semua exact vs GT), saved_llm 0, wrong 0, collision 0. Noise 10/25/50% wrong 0. 1x confirm = GATE FAIL (wrong 5 — error LLM label terkunci). Koreksi: mutasi WARMUP_CONFIRMS via package namespace TIDAK efektif.",
+      "notes": "PASS (3x confirm). Key unik 55, key berulang 3 (9 cert). Hit 3 (semua exact vs GT), saved_llm 0, wrong 0, collision 0. Noise 10/25/50% wrong 0. 1x confirm = GATE FAIL (wrong 5 — error LLM label terkunci). Koreksi: mutasi WARMUP_CONFIRMS via package namespace TIDAK efektif. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay 3x confirm)]",
       "per_field_src": "tests/benchmark_runs/kb_shadow_20260811_103552/summary_kb_shadow.json"
     },
     {
@@ -443,13 +443,13 @@
       "variant": "kb_seed",
       "run_dir": "tests/benchmark_runs/kb_seed_20260811_103804",
       "tingkat": "83.8%",
-      "macro": "-",
+      "macro": "83.8%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Ceiling seeded: 3 keys/9 cert, hit 9, saved_llm 0, wrong 0. Persistence: mem==persist identik (1x: hits 51/wrong 5, 3x: hits 3/wrong 0). Noise 25% wrong 0. Fragmentasi: 1 org logis terpecah 2 key (7 cert) → exact-match kehilangan hit. 1x confirm dilarang produksi.",
+      "notes": "PASS. Ceiling seeded: 3 keys/9 cert, hit 9, saved_llm 0, wrong 0. Persistence: mem==persist identik (1x: hits 51/wrong 5, 3x: hits 3/wrong 0). Noise 25% wrong 0. Fragmentasi: 1 org logis terpecah 2 key (7 cert) → exact-match kehilangan hit. 1x confirm dilarang produksi. [macro = 83.8%: Pipeline tingkat accuracy (seeded ceiling 3 keys/9 cert)]",
       "per_field_src": "tests/benchmark_runs/kb_seed_20260811_103804/summary_kb_seed.json"
     },
     {
@@ -459,13 +459,13 @@
       "variant": "kb_norm",
       "run_dir": "tests/benchmark_runs/kb_norm_20260811_105237",
       "tingkat": "83.8%",
-      "macro": "-",
+      "macro": "83.8%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Plain: 55 key, 3 repeat, shadow hit 3. Stem/alias/both: 54 key, 2 repeat (FST pair menyatu), shadow hit 5 (+2), collision 0, wrong 0. Normalisasi key menaikkan hit 3→5 tanpa efek samping.",
+      "notes": "PASS. Plain: 55 key, 3 repeat, shadow hit 3. Stem/alias/both: 54 key, 2 repeat (FST pair menyatu), shadow hit 5 (+2), collision 0, wrong 0. Normalisasi key menaikkan hit 3→5 tanpa efek samping. [macro = 83.8%: Pipeline tingkat accuracy (best: stem/alias/both, shadow hit 5)]",
       "per_field_src": "tests/benchmark_runs/kb_norm_20260811_105237/summary_kb_norm.json"
     },
     {
@@ -481,7 +481,7 @@
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS — selfcheck. Dry-run korpus 74: keys 55==55, repeated 3==3. Collision 0, saved_llm proyeksi 0. Alat siap dipakai pada korpus lintas fakultas. --variant stem/alias/both tersedia."
+      "notes": "PASS — selfcheck. Dry-run korpus 74: keys 55==55, repeated 3==3. Collision 0, saved_llm proyeksi 0. Alat siap dipakai pada korpus lintas fakultas. --variant stem/alias/both tersedia. [macro/tingkat = n/a: alat audit korpus, bukan pipeline benchmark]"
     },
     {
       "id": "kb_005_event_type",
@@ -490,13 +490,13 @@
       "variant": "kb_event",
       "run_dir": "tests/benchmark_runs/kb_event_20260811_110636",
       "tingkat": "83.8%",
-      "macro": "-",
+      "macro": "83.8%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS (role). Role: collision 0, empty 13, repeat 3(9), shadow hit 3-5, wrong 0. Jenis: empty 52 (70% key mati!), collision 1, wrong 1 → TIDAK layak. Kelompok: repeat 5(14) TAPI collision 1, wrong 2 → GATE FAIL. Jawaban desain: role = event proxy cukup & paling aman.",
+      "notes": "PASS (role). Role: collision 0, empty 13, repeat 3(9), shadow hit 3-5, wrong 0. Jenis: empty 52 (70% key mati!), collision 1, wrong 1 → TIDAK layak. Kelompok: repeat 5(14) TAPI collision 1, wrong 2 → GATE FAIL. Jawaban desain: role = event proxy cukup & paling aman. [macro = 83.8%: Pipeline tingkat accuracy (role = event proxy terbaik)]",
       "per_field_src": "tests/benchmark_runs/kb_event_20260811_110636/summary_kb_event.json"
     },
     {
@@ -506,13 +506,13 @@
       "variant": "kb_alias",
       "run_dir": "tests/benchmark_runs/kb_alias_20260811_110930",
       "tingkat": "83.8%",
-      "macro": "-",
+      "macro": "83.8%",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Mining menemukan FST pair (2/5 cert, valid=True). Auto-alias: keys 54, seeds 2, shadow hit 5 (= manual), wrong 0, noise 25% wrong 0. Auto-alias = alias manual di korpus ini (terotomasi tanpa kehilangan keamanan).",
+      "notes": "PASS. Mining menemukan FST pair (2/5 cert, valid=True). Auto-alias: keys 54, seeds 2, shadow hit 5 (= manual), wrong 0, noise 25% wrong 0. Auto-alias = alias manual di korpus ini (terotomasi tanpa kehilangan keamanan). [macro = 83.8%: Pipeline tingkat accuracy (auto-alias = manual)]",
       "per_field_src": "tests/benchmark_runs/kb_alias_20260811_110930/summary_kb_alias.json"
     },
     {
@@ -542,7 +542,7 @@
       "gt": "v9",
       "date": "Aug 13",
       "is_winner": false,
-      "notes": "PASS (report-only). Exact 5/74 (6.8%). Taksonomi 69 non-exact: kosong 57 (52 GT muncul di teks → deteksi regex feasible), salah_kegiatan 4, kurang_lengkap 3, kelebihan 3, format_ocr 2. Masalah = DETEKSI, bukan normalisasi."
+      "notes": "PASS (report-only). Exact 5/74 (6.8%). Taksonomi 69 non-exact: kosong 57 (52 GT muncul di teks → deteksi regex feasible), salah_kegiatan 4, kurang_lengkap 3, kelebihan 3, format_ocr 2. Masalah = DETEKSI, bukan normalisasi. [macro/tingkat = n/a: taksonomi analisis, bukan pipeline benchmark]"
     },
     {
       "id": "akt_002_detection",
@@ -597,14 +597,14 @@
       "phase": "v10",
       "label": "ORG-005 probe scoring extractor (sisa 12 kasus)",
       "variant": "org_scoring",
-      "tingkat": "-",
+      "tingkat": "81.1%",
       "macro": "63.5%",
       "tokens_cert": 0,
       "calls": 0,
       "gt": "v9",
       "date": "Aug 13",
       "is_winner": false,
-      "notes": "FAIL (probe). Hanya 1/12 fixable murah (Hitech 'oleh Politeknik Caltex Riau'). Sisa 11 butuh rewrite scoring extractor (blast radius luas) dengan risiko regress (HIMASTA-expand regress 12). Full run TIDAK layak di korpus 74 tanpa GT baru."
+      "notes": "FAIL (probe). Hanya 1/12 fixable murah (Hitech 'oleh Politeknik Caltex Riau'). Sisa 11 butuh rewrite scoring extractor (blast radius luas) dengan risiko regress (HIMASTA-expand regress 12). Full run TIDAK layak di korpus 74 tanpa GT baru. [tingkat = 81.1%: Tingkat dari offline baseline (probe hanya 12 kasus organizer)]"
     },
     {
       "id": "prod_002_port",
@@ -666,7 +666,7 @@
       "gt": "v9",
       "date": "Aug 14",
       "is_winner": false,
-      "notes": "PASS. servable() source-aware: AUTHORITATIVE_CONFIRMS={router_rule:3, llm:5, human_review:1} + TTL 365 hari. resolve() human review langsung authoritative. audit_due() prioritasi source=llm+conflicts>0. Pytest 60→64 passed, 0 regress. Gap produksi: PG atomic upsert, hit_count batch, gate data riil."
+      "notes": "PASS. servable() source-aware: AUTHORITATIVE_CONFIRMS={router_rule:3, llm:5, human_review:1} + TTL 365 hari. resolve() human review langsung authoritative. audit_due() prioritasi source=llm+conflicts>0. Pytest 60→64 passed, 0 regress. Gap produksi: PG atomic upsert, hit_count batch, gate data riil. [macro/tingkat = n/a: prototipe semantik produksi, zero-touch]"
     },
     {
       "id": "kb_scale_001",
@@ -681,7 +681,7 @@
       "gt": "v9",
       "date": "Aug 14",
       "is_winner": false,
-      "notes": "PASS. 80/20 N=5000: saved_llm 87% (391/448 non-routed), hit 97%, wrong 2.8% < pipeline 19%. N=500: saved 12% → FAIL volume kecil (warmup menelan porsi besar). Est. latency saved ~978s/5000 req. 55/55 key authoritative.",
+      "notes": "PASS. 80/20 N=5000: saved_llm 87% (391/448 non-routed), hit 97%, wrong 2.8% < pipeline 19%. N=500: saved 12% → FAIL volume kecil (warmup menelan porsi besar). Est. latency saved ~978s/5000 req. 55/55 key authoritative. [macro/tingkat = n/a: simulasi workload sintetis, bukan pipeline benchmark]",
       "per_field_src": "tests/benchmark_runs/kb_scale_20260814_151147/summary_kb_scale.json"
     },
     {
@@ -696,7 +696,7 @@
       "gt": "v9",
       "date": "Aug 14",
       "is_winner": false,
-      "notes": "PASS. 8 thread × 500 write key sama paralel. Tanpa lock: confirms lost-update. Dengan lock: deterministik, 0 lost update. Test: key sama (8×500) + 20 key acak-deterministik (8×300). Lock global cukup di skala ini."
+      "notes": "PASS. 8 thread × 500 write key sama paralel. Tanpa lock: confirms lost-update. Dengan lock: deterministik, 0 lost update. Test: key sama (8×500) + 20 key acak-deterministik (8×300). Lock global cukup di skala ini. [macro/tingkat = n/a: test race condition, bukan pipeline benchmark]"
     },
     {
       "id": "kb_scale_003",
@@ -711,7 +711,7 @@
       "gt": "v9",
       "date": "Aug 14",
       "is_winner": false,
-      "notes": "PASS. 36k@80/20: saved 92% (1k key) / 78% (5k) / 72% (10k), semua ≥50%. Insight: hemat dari key POPULER (top-20% menampung 80% request). 36k/10k = 3.6 req/key rata-rata TAPI tetap 72%.",
+      "notes": "PASS. 36k@80/20: saved 92% (1k key) / 78% (5k) / 72% (10k), semua ≥50%. Insight: hemat dari key POPULER (top-20% menampung 80% request). 36k/10k = 3.6 req/key rata-rata TAPI tetap 72%. [macro/tingkat = n/a: peta hemat simulasi, bukan pipeline benchmark]",
       "per_field_src": "tests/benchmark_runs/kb_scale_map_20260814_153304/summary_kb_scale_map.json"
     },
     {
@@ -727,7 +727,7 @@
       "gt": "v9",
       "date": "Aug 14",
       "is_winner": false,
-      "notes": "FAIL — 3x confirm TETAP wajib. 2x: wrong 304 vs 3x 284 (+20 — error pipeline terkunci lebih cepat). Hemat N=500 naik (24% vs 5%) TAPI tidak sebanding. Alias: efek kecil.",
+      "notes": "FAIL — 3x confirm TETAP wajib. 2x: wrong 304 vs 3x 284 (+20 — error pipeline terkunci lebih cepat). Hemat N=500 naik (24% vs 5%) TAPI tidak sebanding. Alias: efek kecil. [macro/tingkat = n/a: simulasi konfigurasi confirm, bukan pipeline benchmark]",
       "per_field_src": "tests/benchmark_runs/kb_scale_conf_20260814_153359/summary_kb_scale_conf.json"
     },
     {
