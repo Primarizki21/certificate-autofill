@@ -887,25 +887,49 @@ The table below lists all functions referenced in this document. Functions are l
 | LLM v3 Variant B | 39.2% | 46.4% | 479 | 74 | - | raw | Jul 31 |
 | v7 P3 router rule-based | 71.6% | 53.1% | 191 | 42 | - | raw | Aug 3 |
 | v7 P4 e_hybrid + router | 77.0% | 54.2% | 202 | 39 | 35/74 @100% | raw | Aug 3 |
+| LLM-001 g_evidence prompt (minta bukti sebelum jawaban) | 75.7% | 53.9% | 194 | 35 | - | fixed_v8 | Aug 3 |
+| LLM-002 layout representation (markdown/annotation ke prompt) | 77.0% | 50.8% | 235 | 39 | - | fixed_v8 | Aug 3 |
+| ROUTER-001 naive rule expansion (univ, hima, fak patterns) | - | 54.2% | 0 | 0 | - | fixed_v8 | Aug 3 |
 | v8 f_bias + router | 82.4% | 55.2% | 214 | 35 | 39/74 @100% | fixed_v8 | Aug 4 |
-| OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 | Aug 4 |
+| ROUTER-002 data-driven rules (bem_no_univ, bem+hima, sem+univ) | 83.8% | 58.9% | 176 | 29 | 42/74 @100% | fixed_v8 | Aug 4 |
+| ROUTER-003 dept/luar signal fix (raw_text OR organizer) | 83.8% | 58.9% | 176 | 29 | 45/74 @100% | fixed_v8 | Aug 4 |
 | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
 | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% | 0 | 0 | - | fixed_v8 | Aug 4 |
+| OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% | 0 | 0 | - | fixed_v8 | Aug 4 |
+| ORG-001 organizer_v2 (abbreviation map, strip, signer EN roles) | 83.8% | 58.9% | 176 | 29 | 45/74 @100% | v8 | Aug 5 |
 | v9 organizer_v2 + router fix | 83.8% | 58.9% | 176 | 29 | 45/74 @100% | v8 | Aug 5 |
 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% | 176 | 29 | 45/74 @100% | v9 | Aug 5 |
-| NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% | 0 | 0 | - | v9 | Aug 6 |
-| OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 | Aug 6 |
-| OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% | 0 | 0 | - | v9 | Aug 13 |
 | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% | 0 | 0 | - | v9 | Aug 6 |
+| NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% | 0 | 0 | - | v9 | Aug 6 |
 | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% | 0 | 0 | - | v9 | Aug 6 |
-| F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 | Aug 10 |
+| OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% | 0 | 0 | - | v9 | Aug 6 |
+| F3-001 KB prototype warmup in-memory (opsi B, key=organizer+role) | 84.4% | - | 0 | 29 | - | v9 | Aug 10 |
+| OOD-001 probe mutation + noise (template & OCR noise injection) | 83.8% | 55.7% | 0 | 0 | - | v9 | Aug 10 |
 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% | 0 | 0 | - | v9 | Aug 10 |
-| ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 | Aug 13 |
-| PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% | 0 | 0 | - | v9 | Aug 13 |
+| F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% | 0 | 0 | - | v9 | Aug 10 |
+| REVIEW-001 needs_review field lemah (confidence berbasis pola) | - | - | 0 | 0 | - | v9 | Aug 10 |
+| STAT-001 validasi statistik 5-fold + bootstrap CI 1000× | 83.8% | 60.1% | 0 | 29 | - | v9 | Aug 10 |
+| KB-001 shadow replay key v1 (router→KB→LLM) | 84.4% | - | 0 | 29 | - | v9 | Aug 10 |
+| KB-002 seeded persistent KB (smoke, ceiling, persistence, noise, fragmentasi) | 83.8% | - | 0 | 29 | - | v9 | Aug 11 |
+| KB-003 normalisasi key v2 (plain/stem/alias/both) | 83.8% | - | 0 | 29 | - | v9 | Aug 11 |
+| KB-004 alat audit korpus (tests/kb/audit.py) | - | - | 0 | 0 | - | v9 | Aug 11 |
+| KB-005 event_type=role terbaik (role/jenis/kelompok × 4 normalisasi) | 83.8% | - | 0 | 29 | - | v9 | Aug 11 |
+| KB-006 alias mining data-driven (auto-alias = manual) | 83.8% | - | 0 | 29 | - | v9 | Aug 11 |
+| OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% | 0 | 0 | - | v9 | Aug 13 |
+| AKT-001 taksonomi nama_kegiatan (report-only, 6.8% exact) | - | - | 0 | 0 | - | v9 | Aug 13 |
 | AKT-002 deteksi nama_kegiatan v2 (0 LLM) | 81.1% | 68.8% | 0 | 0 | - | v9 | Aug 13 |
 | AKT-003 deteksi nama_kegiatan v3: Sebagai Peserta + atthe/inthe (0 LLM) | 81.1% | 71.6% | 0 | 0 | - | v9 | Aug 13 |
+| ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% | 0 | 0 | - | v9 | Aug 13 |
+| ORG-005 probe scoring extractor (sisa 12 kasus) | - | 63.5% | 0 | 0 | - | v9 | Aug 13 |
+| PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% | 0 | 0 | - | v9 | Aug 13 |
 | AKT-004 deteksi nama_kegiatan v4: Event/lomba/seminar on (0 LLM, gate scope-kecil) | 81.1% | 72.1% | 0 | 0 | - | v9 | Aug 14 |
 | AKT-005 deteksi nama_kegiatan v5: grup D all-caps/spacing (0 LLM) | 81.1% | 73.7% | 0 | 0 | - | v9 | Aug 14 |
+| KB-PROD-001 semantik produksi (servable/resolve/audit_due) | - | - | 0 | 0 | - | v9 | Aug 14 |
+| KB-SCALE-001 simulasi workload skewed (500-5000 req) | - | - | 0 | 0 | - | v9 | Aug 14 |
+| KB-SCALE-002 race tulis multi-worker (threading.Lock fix) | - | - | 0 | 0 | - | v9 | Aug 14 |
+| KB-SCALE-003 peta hemat (5 volume × 5 key space × 3 skew) | - | - | 0 | 0 | - | v9 | Aug 14 |
+| KB-SCALE-004 confirm 2x vs 3x (wrong +20 @2x) | - | - | 0 | 0 | - | v9 | Aug 14 |
+| KB-SCALE-005 akurasi+biaya e2e (hemat 87%, akurasi 99.3%) | - | 99.3% | 0 | 0 | - | v9 | Aug 14 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -914,22 +938,46 @@ The table below lists all functions referenced in this document. Functions are l
 | v6 | LLM v3 Variant B | 39.2% | 46.4% |
 | v7 | v7 P3 router rule-based | 71.6% | 53.1% |
 | v7 | v7 P4 e_hybrid + router | 77.0% | 54.2% |
+| v8 | LLM-001 g_evidence prompt (minta bukti sebelum jawaban) | 75.7% | 53.9% |
+| v8 | LLM-002 layout representation (markdown/annotation ke prompt) | 77.0% | 50.8% |
+| v9 | ROUTER-001 naive rule expansion (univ, hima, fak patterns) | - | 54.2% |
 | v8 | v8 f_bias + router | 82.4% | 55.2% |
-| ocr | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% |
+| v9 | ROUTER-002 data-driven rules (bem_no_univ, bem+hima, sem+univ) | 83.8% | 58.9% |
+| v9 | ROUTER-003 dept/luar signal fix (raw_text OR organizer) | 83.8% | 58.9% |
 | ocr | OCR Trial A — EasyOCR (CPU, max-side 960) | n/a | 34.3% |
 | ocr | OCR Trial A — EasyOCR (GPU, full-res) | n/a | 39.3% |
+| ocr | OCR Trial A — PaddleOCR 2.9 (CPU) | n/a | 39.8% |
+| v9 | ORG-001 organizer_v2 (abbreviation map, strip, signer EN roles) | 83.8% | 58.9% |
 | v9 | v9 organizer_v2 + router fix ** | 83.8% | 58.9% |
 | v12 | v9 winner re-baseline (GT v9 + matcher v2) | 83.8% | 60.2% |
-| ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
-| ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
-| ocr | OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% |
 | ocr | HYB-001 hybrid OCR per-field (DocTR dates+organizer / baseline nomor) | n/a | 46.8% |
+| ocr | NC-001 nomor crop preprocessing (re-render region zoom 6x) | n/a | 46.3% |
 | ocr | NC-002 region-OCR murah (rapid / tess psm tunggal) utk 2-pass nomor | n/a | 47.3% |
-| v10 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% |
+| ocr | OCR-006 DocTR probe (mobilenet CPU, 10 scan) | n/a | 40.0% |
+| v10 | F3-001 KB prototype warmup in-memory (opsi B, key=organizer+role) | 84.4% | - |
+| v10 | OOD-001 probe mutation + noise (template & OCR noise injection) | 83.8% | 55.7% |
 | v10 | F1 normalisasi organizer & nomor (0 LLM) | 81.1% | 58.3% |
-| v10 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% |
-| v10 | PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% |
+| v10 | F1 organizer v3 + R6 (0 LLM) | 81.1% | 61.2% |
+| v10 | REVIEW-001 needs_review field lemah (confidence berbasis pola) | - | - |
+| v10 | STAT-001 validasi statistik 5-fold + bootstrap CI 1000× | 83.8% | 60.1% |
+| kb | KB-001 shadow replay key v1 (router→KB→LLM) | 84.4% | - |
+| kb | KB-002 seeded persistent KB (smoke, ceiling, persistence, noise, fragmentasi) | 83.8% | - |
+| kb | KB-003 normalisasi key v2 (plain/stem/alias/both) | 83.8% | - |
+| kb | KB-004 alat audit korpus (tests/kb/audit.py) | - | - |
+| kb | KB-005 event_type=role terbaik (role/jenis/kelompok × 4 normalisasi) | 83.8% | - |
+| kb | KB-006 alias mining data-driven (auto-alias = manual) | 83.8% | - |
+| ocr | OCR-007 LFM2.5-VL-3B probe (VLM OCR, GGUF Q4_0 + mmproj Q8_0, 10 scan) | n/a | 44.4% |
+| v10 | AKT-001 taksonomi nama_kegiatan (report-only, 6.8% exact) | - | - |
 | v10 | AKT-002 deteksi nama_kegiatan v2 (0 LLM) | 81.1% | 68.8% |
 | v10 | AKT-003 deteksi nama_kegiatan v3: Sebagai Peserta + atthe/inthe (0 LLM) | 81.1% | 71.6% |
+| v10 | ORG-004 canonicalisasi format (0 LLM) | 81.1% | 63.5% |
+| v10 | ORG-005 probe scoring extractor (sisa 12 kasus) | - | 63.5% |
+| v10 | PROD-002 port produksi organizer v3+R3+R6+format + nomor (flag-gated) | 81.1% | 63.0% |
 | v10 | AKT-004 deteksi nama_kegiatan v4: Event/lomba/seminar on (0 LLM, gate scope-kecil) | 81.1% | 72.1% |
 | v10 | AKT-005 deteksi nama_kegiatan v5: grup D all-caps/spacing (0 LLM) | 81.1% | 73.7% |
+| kb | KB-PROD-001 semantik produksi (servable/resolve/audit_due) | - | - |
+| kb | KB-SCALE-001 simulasi workload skewed (500-5000 req) | - | - |
+| kb | KB-SCALE-002 race tulis multi-worker (threading.Lock fix) | - | - |
+| kb | KB-SCALE-003 peta hemat (5 volume × 5 key space × 3 skew) | - | - |
+| kb | KB-SCALE-004 confirm 2x vs 3x (wrong +20 @2x) | - | - |
+| kb | KB-SCALE-005 akurasi+biaya e2e (hemat 87%, akurasi 99.3%) | - | 99.3% |
