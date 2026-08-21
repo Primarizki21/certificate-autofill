@@ -64,6 +64,88 @@ Hybrid pipeline dengan LLM fallback untuk 26 cert unrouted. Gabungan terbaik dar
 
 ### Router Rules (15 rules, 48/74 @100%)
 
+Router menentukan tingkat berdasarkan sinyal teks (regex) dan organizer. 15 rules tervalidasi @100% precision di 74 sertifikat.
+
+#### Signal Extraction (_sig function)
+
+Fungsi _sig() mengekstrak sinyal dari teks dan organizer menggunakan regex. Return dict dengan keys: lomba, lomba_merged, hima, hima_org, dept, univ, luar, nasw, nasw_explicit, sem, fak, bem.
+
+Contoh regex untuk deteksi sinyal:
+
+- lomba: r'\bLOMBA\b|\bKOMPETISI\b|\bCOMPETITION\b|\bOLIMPIADE\b|\bCHALLENGE\b|\bTOURNAMENT\b|\bJUARA\b|\bCUP\b|\bCHAMPIONSHIP\b|\bHACKATHON\b'
+- lomba_merged: kata tergabung OCR (CUP/academicweeks) tanpa spasi — menangkap 'ACADEMICWEEKS2026', 'INFographicCompetition'
+- hima: r'HIMPUNAN|HIMA' di organizer + r'\bHIMA\b|(?<![A-Z])HIMA(?=[A-Z0-9])|HIMPUNAN' di raw_text
+- dept: r'\bDEPT\b|DEPARTMENT|STUDY\s*PROGRAM|\bPRODI\b|PROGRAM STUDI' di teks/organizer
+- univ: r'UNIVERSITAS|UNIVERSITY|REKTORAT|DIREKTORAT|KEMAHASISWAAN' di organizer
+- luar: r'AIESEC|UNIMUS|UNISBA|UNS|UGM|IPB|BRAWIJAYA|BINUS|UNY|UNESA' (daftar kampus eksternal)
+- nasw: r'\bNASIONAL\b|\bNATIONAL\b' di teks
+- nasw_explicit: r'TINGKAT\s+NASIONAL|LOMBA\s+NASIONAL' — teks eksplisit
+- sem: r'\bSEMINAR\b|\bWORKSHOP\b|\bWEBINAR\b|\bGUEST LECTURE\b|\bTALKSHOW\b'
+- fak: r'FAKULTAS|FACULTY' di organizer
+- bem: r'\bBEM\b' di organizer + r'\bBEM\b|(?<![A-Z])BEM(?=[A-Z0-9])' di raw_text
+
+#### Decision Rules (_decide function)
+
+Rule dipanggil berurutan. Rule pertama yang match = keputusan. None = route ke LLM.
+
+Contoh code decision:
+
+- tingkat_nasional: if s['nasw_explicit'] → 'Nasional'
+-   Regex: r'TINGKAT\s+NASIONAL|LOMBA\s+NASIONAL'
+- 
+- lomba+org: if s['lomba'] and (hima|univ|nasw|luar|fak|bem) → 'Nasional'
+-   Regex: r'\bLOMBA\b|\bKOMPETISI\b|\bCOMPETITION\b' AND (hima OR univ OR nasw OR luar OR fak OR bem)
+- 
+- lomba_merged+org: if s['lomba_merged'] and (hima|univ|fak|bem) → 'Nasional'
+-   Untuk kata tergabung OCR: 'ACADEMICWEEKS2026', 'INFographicCompetition'
+- 
+- dept+sem: if s['dept'] and s['sem'] and not lomba and not nasw → 'Departemen/Program Studi'
+-   Regex: r'\bDEPT\b|DEPARTMENT' AND r'\bSEMINAR\b|\bWORKSHOP\b'
+- 
+- hima+luar: if s['hima'] and s['luar'] → 'Nasional'
+-   HIMA dari organizer + kampus eksternal (UGM, BINUS, etc)
+- 
+- univ+luar: if s['univ'] and s['luar'] and not fak → 'Nasional'
+-   Universitas + kampus eksternal, tanpa fakultas
+- 
+- dept+fak: if s['dept'] and s['fak'] → 'Departemen/Program Studi'
+-   Departemen/Prodi + Fakultas = tingkat fakultas
+- 
+- fak+univ: if s['fak'] and s['univ'] and not sem/nasw/lomba → 'Fakultas'
+-   Fakultas + Universitas, tanpa seminar/lomba
+- 
+- bem+sem: if s['bem'] and s['sem'] and not lomba/hima/nasw → 'Fakultas'
+-   BEM + seminar/workshop = tingkat fakultas
+- 
+- bem_no_univ: if s['bem'] and not univ/sem/lomba/nasw/luar/hima → 'Fakultas'
+-   BEM tanpa konteks universitas = tingkat fakultas
+- 
+- bem+hima: if s['bem'] and s['hima'] and not lomba/nasw/luar → 'Fakultas'
+-   BEM + HIMA partnership = tingkat fakultas
+- 
+- sem+univ: if s['sem'] and s['univ'] and not fak/bem/hima/lomba → 'Universitas'
+-   Seminar + Universitas (bukan fakultas) = tingkat universitas
+
+#### Contoh Kasus
+
+Sertifikat: 'LOMBA CIKAL 2024' + Organizer: 'Himpunan Mahasiswa Teknik'
+
+- Signal: lomba=True, hima=True, univ=False, fak=False, bem=False
+- Rule: lomba+org (lomba AND hima)
+- Decision: Nasional
+
+Sertifikat: 'Guest Lecture by BEM FTMM' + Organizer: 'BEM Fakultas Teknologi Multidisiplin'
+
+- Signal: bem=True, sem=True (guest lecture), lomba=False, hima=False
+- Rule: bem+sem (bem AND sem, NOT lomba)
+- Decision: Fakultas
+
+Sertifikat: 'Seminar Nasional Data Science' + Organizer: 'Universitas Airlangga'
+
+- Signal: sem=True, nasw=True, univ=True, fak=False, bem=False
+- Rule: TIDAK ADA RULE MATCH (sem+univ BUT nasw=True → guard violated)
+- Decision: None → route ke LLM
+
 | Rule | Signals | Decision |
 |---|---|---|
 | tingkat_nasional | TINGKAT NASIONAL / LOMBA NASIONAL eksplisit | Nasional |
