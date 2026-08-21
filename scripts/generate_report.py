@@ -441,6 +441,20 @@ def render_xlsx(data: dict, path: str):
     ws.append(["Legenda:", "Accuracy (Tingkat/MACRO): naik = hijau, turun = merah. "
               "Cost (tokens/calls): turun = hijau (hemat), naik = merah."])
     ws.append(["Winner row (v9):", "kuning. Delta dihitung vs eksperimen sebelumnya."])
+    ws.append([])
+    ws.append(["Keterangan field \"-\" (kosong):"])
+    ws.append(["  Tingkat/MACRO = \"-\"", "Bukan pipeline benchmark — simulasi sintetis (KB-SCALE), "
+              "prototipe (KB-PROD), analisis taksonomi (AKT-001), atau kebutuhan review (REVIEW-001). "
+              "Lihat kolom \"notes\" di report_data.json untuk penjelasan detail."])
+    ws.append(["  Tok/cert = 0, Calls = 0", "Eksperimen 0 LLM (offline) — pipeline tanpa LLM fallback. "
+              "Organizer normalization (ORG), needs_review (REVIEW), validasi statistik (STAT), "
+              "taksonomi (AKT), KB prototype (F3/KB-001..006)."])
+    ws.append(["  Router = \"-\"", "Pre-router era (v4/v6) atau eksperimen non-pipeline "
+              "(OOD probe, KB simulation, audit tool). Router diperkenalkan di v7."])
+    ws.append(["  Macro KB (83.8-84.4%)", "= pipeline tingkat accuracy (bukan MACRO field-level). "
+              "KB meniru pipeline — kalau pipeline benar, KB juga benar. "
+              "KB tidak menambah akurasi di korpus kecil (74 cert, 2 key berulang). "
+              "Dampak KB terasa di skala produksi (36k request): hemat 87% LLM calls."])
 
     # --- Sheet 2: Progression (ringkas, delta MACRO) ---
     ws2 = wb.create_sheet("Progression")

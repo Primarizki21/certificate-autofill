@@ -7,6 +7,70 @@
 > `servable`/`resolve`/`audit_due`, 2026-08-14, handoff v36). Produksi **belum**
 > disentuh. Perkembangan naratif: `docs/kb_history.md`.
 
+---
+
+## Perbedaan Eksperimen vs Produksi
+
+> **Penting:** KB yang diuji di eksperimen (tests/) berbeda dengan KB yang akan
+> dipakai di produksi (backend/). Berikut perbedaannya:
+
+| Aspek | Eksperimen (tests/) | Produksi (backend/) |
+|-------|--------------------|--------------------|
+| **Storage** | RAM (in-memory dict) | PostgreSQL (persistent) |
+| **Data hilang saat restart?** | ✅ Ya, reset ke 0 | ❌ Tidak, load dari DB |
+| **Confirm threshold** | 3x (WARMUP_CONFIRMS) | 3x + source-aware (`servable()`) |
+| **Servable check** | `authoritative` (legacy) | `servable()` (per-source + TTL) |
+| **Human review** | Tidak ada | `resolve()` → langsung servable |
+| **Audit** | Tidak ada | `audit_due()` → prioritas review |
+| **TTL** | Tidak ada | 365 hari (entry basi = non-servable) |
+| **Multi-worker safety** | `threading.Lock` (Python) | PG atomic upsert (INSERT ON CONFLICT) |
+| **Counter** | `hit_count` di RAM | Batch counter (write contention mitigated) |
+| **Flag** | Selalu aktif di tests | `ENABLE_KB_TINGKAT` default OFF |
+
+### Alur Kerja (keduanya sama)
+
+```
+Sertifikat masuk
+  → Pipeline ekstrak organizer + role (regex/NER, TANPA LLM)
+  → KB lookup: key = (organizer, role)
+     → Sudah 3x confirm? → Langsung jawab tingkat (0 LLM call) 🎉
+     → Belum?           → Tanya LLM → simpan ke KB (hit++)
+```
+
+### Contoh Kasus Ril (7 sertifikat Ananda Aqeel)
+
+```
+Sertifikat 1-3: "Faculty of Science and Technology Information System Dept." + "Peserta"
+  → KB: "Belum ada" → Tanya LLM → jawab "Departemen" → simpan (hit 1→2→3)
+  → Biaya: 3 LLM calls
+
+Sertifikat 4-7: organizer sama
+  → KB: "Sudah 3x confirm, AUTHORITATIVE!"
+  → Langsung jawab "Departemen" (0 LLM calls)
+  → Biaya: GRATIS 🎉
+
+Total: 3 calls (tanpa KB: 7 calls, hemat 57%)
+```
+
+### Kenapa Belum Diport ke Produksi?
+
+1. **Gate data riil belum lolos** — korpus 74 sertifikat terlalu sedikit
+   (hanya 2-3 key berulang). Butuh 1000+ cert lintas fakultas.
+2. **Butuh PostgreSQL schema** — tabel `organizer_tingkat_kb` + atomic upsert
+3. **Butuh integrasi pipeline** — flag `ENABLE_KB_TINGKAT` + service layer
+4. **User approval** — keputusan kapan diport = user
+
+### Dampak di Produksi (Simulasi SCALE-005)
+
+| Metrik | Tanpa KB | Dengan KB | Hemat |
+|--------|----------|-----------|-------|
+| LLM calls (36k req) | 446 | 57 | **87%** |
+| Akurasi | 96.3% | **99.3%** | +3.0pt |
+| Biaya | 100% | **13%** | 87% |
+
+KB = cache yang **lebih akurat dari LLM** (serve 97.2% vs fallback 58.6%) karena
+sudah terkonfirmasi 3x.
+
 ## 1. Key — opsi B: komposit `(normalized_organizer, event_type)`
 
 | | A (organizer saja) | **B (organizer + tipe kegiatan)** | C (fingerprint teks) |
