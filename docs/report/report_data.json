@@ -245,7 +245,7 @@
       "router": "45/74 @100%",
       "gt": "v8",
       "date": "Aug 5",
-      "is_winner": true,
+      "is_winner": false,
       "notes": "organizer_v2 + data-driven router; GT v8 [PROD-001] Sudah dipromosikan ke produksi (organizer_v2 + tingkat_router) — pasca-promosi baseline rapid_tess scan: organizer 20.4->26.5%, MACRO 45.8->47.3%.",
       "per_field_src": "tests/benchmark_runs/run_llm_v4_20260805_163541/summary.json"
     },
@@ -333,13 +333,13 @@
       "variant": "kb_warmup",
       "run_dir": "tests/benchmark_runs/kb_warmup_20260810_111952",
       "tingkat": "84.4%",
-      "macro": "84.4%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "PASS (prototipe/desain). Warm-up N=10/20/37: LLM calls 31→29 (−2, hit 2 key berulang), tingkat 84.4/81.5/81.1%. Korpus 74 hanya 2 key berulang → gain KB nyata butuh skala 36k. Konfig 1x vs 3x identik di korpus ini. `kb_design.md` = desain final. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay, bukan MACRO field-level)]",
+      "notes": "PASS (prototipe/desain). Warm-up N=10/20/37: LLM calls 31→29 (−2, hit 2 key berulang), tingkat 84.4/81.5/81.1%. Korpus 74 hanya 2 key berulang → gain KB nyata butuh skala 36k. Konfig 1x vs 3x identik di korpus ini. `kb_design.md` = desain final. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay, bukan MACRO field-level)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_warmup_20260810_111952/summary_kb_warmup.json"
     },
     {
@@ -427,13 +427,13 @@
       "variant": "kb_shadow",
       "run_dir": "tests/benchmark_runs/kb_shadow_20260811_103552",
       "tingkat": "84.4%",
-      "macro": "84.4%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 10",
       "is_winner": false,
-      "notes": "PASS (3x confirm). Key unik 55, key berulang 3 (9 cert). Hit 3 (semua exact vs GT), saved_llm 0, wrong 0, collision 0. Noise 10/25/50% wrong 0. 1x confirm = GATE FAIL (wrong 5 — error LLM label terkunci). Koreksi: mutasi WARMUP_CONFIRMS via package namespace TIDAK efektif. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay 3x confirm)]",
+      "notes": "PASS (3x confirm). Key unik 55, key berulang 3 (9 cert). Hit 3 (semua exact vs GT), saved_llm 0, wrong 0, collision 0. Noise 10/25/50% wrong 0. 1x confirm = GATE FAIL (wrong 5 — error LLM label terkunci). Koreksi: mutasi WARMUP_CONFIRMS via package namespace TIDAK efektif. [macro = 84.4%: Pipeline tingkat accuracy (shadow replay 3x confirm)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_shadow_20260811_103552/summary_kb_shadow.json"
     },
     {
@@ -443,13 +443,13 @@
       "variant": "kb_seed",
       "run_dir": "tests/benchmark_runs/kb_seed_20260811_103804",
       "tingkat": "83.8%",
-      "macro": "83.8%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Ceiling seeded: 3 keys/9 cert, hit 9, saved_llm 0, wrong 0. Persistence: mem==persist identik (1x: hits 51/wrong 5, 3x: hits 3/wrong 0). Noise 25% wrong 0. Fragmentasi: 1 org logis terpecah 2 key (7 cert) → exact-match kehilangan hit. 1x confirm dilarang produksi. [macro = 83.8%: Pipeline tingkat accuracy (seeded ceiling 3 keys/9 cert)]",
+      "notes": "PASS. Ceiling seeded: 3 keys/9 cert, hit 9, saved_llm 0, wrong 0. Persistence: mem==persist identik (1x: hits 51/wrong 5, 3x: hits 3/wrong 0). Noise 25% wrong 0. Fragmentasi: 1 org logis terpecah 2 key (7 cert) → exact-match kehilangan hit. 1x confirm dilarang produksi. [macro = 83.8%: Pipeline tingkat accuracy (seeded ceiling 3 keys/9 cert)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_seed_20260811_103804/summary_kb_seed.json"
     },
     {
@@ -459,13 +459,13 @@
       "variant": "kb_norm",
       "run_dir": "tests/benchmark_runs/kb_norm_20260811_105237",
       "tingkat": "83.8%",
-      "macro": "83.8%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Plain: 55 key, 3 repeat, shadow hit 3. Stem/alias/both: 54 key, 2 repeat (FST pair menyatu), shadow hit 5 (+2), collision 0, wrong 0. Normalisasi key menaikkan hit 3→5 tanpa efek samping. [macro = 83.8%: Pipeline tingkat accuracy (best: stem/alias/both, shadow hit 5)]",
+      "notes": "PASS. Plain: 55 key, 3 repeat, shadow hit 3. Stem/alias/both: 54 key, 2 repeat (FST pair menyatu), shadow hit 5 (+2), collision 0, wrong 0. Normalisasi key menaikkan hit 3→5 tanpa efek samping. [macro = 83.8%: Pipeline tingkat accuracy (best: stem/alias/both, shadow hit 5)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_norm_20260811_105237/summary_kb_norm.json"
     },
     {
@@ -490,13 +490,13 @@
       "variant": "kb_event",
       "run_dir": "tests/benchmark_runs/kb_event_20260811_110636",
       "tingkat": "83.8%",
-      "macro": "83.8%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS (role). Role: collision 0, empty 13, repeat 3(9), shadow hit 3-5, wrong 0. Jenis: empty 52 (70% key mati!), collision 1, wrong 1 → TIDAK layak. Kelompok: repeat 5(14) TAPI collision 1, wrong 2 → GATE FAIL. Jawaban desain: role = event proxy cukup & paling aman. [macro = 83.8%: Pipeline tingkat accuracy (role = event proxy terbaik)]",
+      "notes": "PASS (role). Role: collision 0, empty 13, repeat 3(9), shadow hit 3-5, wrong 0. Jenis: empty 52 (70% key mati!), collision 1, wrong 1 → TIDAK layak. Kelompok: repeat 5(14) TAPI collision 1, wrong 2 → GATE FAIL. Jawaban desain: role = event proxy cukup & paling aman. [macro = 83.8%: Pipeline tingkat accuracy (role = event proxy terbaik)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_event_20260811_110636/summary_kb_event.json"
     },
     {
@@ -506,13 +506,13 @@
       "variant": "kb_alias",
       "run_dir": "tests/benchmark_runs/kb_alias_20260811_110930",
       "tingkat": "83.8%",
-      "macro": "83.8%",
+      "macro": "-",
       "tokens_cert": 0,
       "calls": 29,
       "gt": "v9",
       "date": "Aug 11",
       "is_winner": false,
-      "notes": "PASS. Mining menemukan FST pair (2/5 cert, valid=True). Auto-alias: keys 54, seeds 2, shadow hit 5 (= manual), wrong 0, noise 25% wrong 0. Auto-alias = alias manual di korpus ini (terotomasi tanpa kehilangan keamanan). [macro = 83.8%: Pipeline tingkat accuracy (auto-alias = manual)]",
+      "notes": "PASS. Mining menemukan FST pair (2/5 cert, valid=True). Auto-alias: keys 54, seeds 2, shadow hit 5 (= manual), wrong 0, noise 25% wrong 0. Auto-alias = alias manual di korpus ini (terotomasi tanpa kehilangan keamanan). [macro = 83.8%: Pipeline tingkat accuracy (auto-alias = manual)] [macro = n/a: KB hanya cache tingkat, field lain dari pipeline unchanged]",
       "per_field_src": "tests/benchmark_runs/kb_alias_20260811_110930/summary_kb_alias.json"
     },
     {
@@ -745,6 +745,22 @@
       "is_winner": false,
       "notes": "PASS. 80/20 N=5000: akurasi 96.3→99.3% (KB ≥ tanpa KB), hemat biaya 87% (57 vs 446 calls). KB = cache yang LEBIH akurat dari LLM (serve 97.2% vs fallback 58.6%).",
       "per_field_src": "tests/benchmark_runs/kb_scale_e2e_20260814_153505/summary_kb_scale_e2e.json"
+    },
+    {
+      "id": "hyb_combined_001",
+      "phase": "v10",
+      "label": "HYB-COMBINED gabungan terbaik (router + AKT-005 + ORG-004, 0 LLM)",
+      "variant": "hyb_combined",
+      "run_dir": "tests/benchmark_runs/hyb_combined_20260821_134811",
+      "tingkat": "81.1%",
+      "macro": "73.7%",
+      "tokens_cert": 0,
+      "calls": 0,
+      "gt": "v9",
+      "date": "Aug 21",
+      "is_winner": true,
+      "notes": "GATE PASS (GT v9 + matcher v2). Gabungan: tingkat=router rules (48/74 routed @100%), nama_kegiatan=AKT-005 v5 (62.2%, +55.4pt), organizer=ORG-004 (63.5%), nomor=PROD-002 (76.9%), tanggal=pipeline (81.8%). MACRO 63.0→73.7% (+10.7pp), fuzzy 68.0→80.2%. 0 regress, 0 LLM. New winner vs v9 (60.2%). Router 48/74 routed, 26 need LLM.",
+      "per_field_src": "tests/benchmark_runs/hyb_combined_20260821_134811/summary_hybrid_combined.json"
     }
   ],
   "documents": {

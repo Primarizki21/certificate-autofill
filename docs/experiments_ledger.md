@@ -82,6 +82,10 @@
 4. Commit bersama kode eksperimen & update `runs_summary.md` (workflow B9-B11).
 5. Referensi detail: `docs/handoff_v28.md` + `docs/report/runs_summary.md`.
 
+| **HYB-COMBINED-001** | Gabungan terbaik: router tingkat (48/74 routed) + AKT-005 nama_kegiatan (62.2%) + ORG-004 organizer (63.5%) + PROD-002 nomor (76.9%) — 0 LLM, offline | MACRO exact **63.0→73.7% (+10.7pp)**, fuzzy 68.0→80.2%, nama_kegiatan +55.4pt, 0 regress per-field, router 48/74 @100% | **PASS** — semua gate met, new winner vs v9 (60.2%). 0 LLM call, 0 tokens | Full run 74 cert; hybrid gabungan semua improvements terbaik; tingkat dari router rules saja (81.1%, tidak pakai LLM); 26 cert need LLM untuk tingkat |
+
+---
+
 ## Hubungan dengan dokumen lain
 
 - `handoff_v35.md` = **open frontier** (supersedes v34) (rangkaian AKT selesai; AKT tidak di-port produksi — keputusan user).
