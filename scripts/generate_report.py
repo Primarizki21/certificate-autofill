@@ -682,6 +682,16 @@ def _load_per_field_src(path: str) -> dict | None:
         pf = v["per_field"]
         if "macro_avg" not in s or not isinstance(s["macro_avg"], dict):
             s["macro_avg"] = {"exact_acc": v.get("macro_exact"), "fuzzy_acc": v.get("macro_fuzzy")}
+    elif "hybrid" in s and isinstance(s["hybrid"], dict) and "per_field" in s["hybrid"]:
+        # Format HYB-COMBINED: hybrid.per_field
+        pf = s["hybrid"]["per_field"]
+        if "macro_avg" not in s:
+            s["macro_avg"] = {"exact_acc": s["hybrid"].get("macro_exact"), "fuzzy_acc": s["hybrid"].get("macro_fuzzy")}
+    elif "hybrid_llm" in s and isinstance(s["hybrid_llm"], dict) and "per_field" in s["hybrid_llm"]:
+        # Format HYB-LLM: hybrid_llm.per_field
+        pf = s["hybrid_llm"]["per_field"]
+        if "macro_avg" not in s:
+            s["macro_avg"] = {"exact_acc": s["hybrid_llm"].get("macro_exact"), "fuzzy_acc": s["hybrid_llm"].get("macro_fuzzy")}
     else:
         pf = s
 
