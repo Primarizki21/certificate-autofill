@@ -83,6 +83,7 @@
 5. Referensi detail: `docs/handoff_v28.md` + `docs/report/runs_summary.md`.
 
 | **HYB-COMBINED-001** | Gabungan terbaik: router tingkat (48/74 routed) + AKT-005 nama_kegiatan (62.2%) + ORG-004 organizer (63.5%) + PROD-002 nomor (76.9%) — 0 LLM, offline | MACRO exact **63.0→73.7% (+10.7pp)**, fuzzy 68.0→80.2%, nama_kegiatan +55.4pt, 0 regress per-field, router 48/74 @100% | **PASS** — semua gate met, new winner vs v9 (60.2%). 0 LLM call, 0 tokens | Full run 74 cert; hybrid gabungan semua improvements terbaik; tingkat dari router rules saja (81.1%, tidak pakai LLM); 26 cert need LLM untuk tingkat |
+| **HYB-LLM-001** | HYB-COMBINED + LLM fallback untuk 26 cert unrouted (llama3.1:8b) | MACRO exact **73.7→74.2% (+0.5pp)**, fuzzy 80.2→80.7%, tingkat **81.1→83.8% (+2.7pt)**, 0 regress, LLM 17/26 correct (65.4%), 1.5s/cert, 26 calls ~176 tok/cert | **PASS** — semua gate met, new overall winner. Tingkat naik ke level v9 (83.8%) tanpa regress field lain. 26 LLM calls (hemat 65% vs v9 29 calls) |
 
 ---
 

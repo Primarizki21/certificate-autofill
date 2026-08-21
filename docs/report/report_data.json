@@ -758,9 +758,25 @@
       "calls": 0,
       "gt": "v9",
       "date": "Aug 21",
-      "is_winner": true,
+      "is_winner": false,
       "notes": "GATE PASS (GT v9 + matcher v2). Gabungan: tingkat=router rules (48/74 routed @100%), nama_kegiatan=AKT-005 v5 (62.2%, +55.4pt), organizer=ORG-004 (63.5%), nomor=PROD-002 (76.9%), tanggal=pipeline (81.8%). MACRO 63.0→73.7% (+10.7pp), fuzzy 68.0→80.2%. 0 regress, 0 LLM. New winner vs v9 (60.2%). Router 48/74 routed, 26 need LLM.",
       "per_field_src": "tests/benchmark_runs/hyb_combined_20260821_134811/summary_hybrid_combined.json"
+    },
+    {
+      "id": "hyb_llm_001",
+      "phase": "v10",
+      "label": "HYB-LLM hybrid + LLM tingkat (26 cert unrouted, llama3.1:8b)",
+      "variant": "hyb_llm",
+      "run_dir": "tests/benchmark_runs/hyb_llm_20260821_135619",
+      "tingkat": "83.8%",
+      "macro": "74.2%",
+      "tokens_cert": 176,
+      "calls": 26,
+      "gt": "v9",
+      "date": "Aug 21",
+      "is_winner": true,
+      "notes": "GATE PASS (GT v9 + matcher v2). HYB-COMBINED + LLM fallback untuk 26 cert unrouted. Tingkat 81.1→83.8% (+2.7pt), MACRO 73.7→74.2% (+0.5pp), 0 regress. LLM accuracy: 17/26 (65.4%), 1.5s/cert. 26 LLM calls, ~176 tokens/cert. New overall winner.",
+      "per_field_src": "tests/benchmark_runs/hyb_llm_20260821_135619/summary_hybrid_llm.json"
     }
   ],
   "documents": {

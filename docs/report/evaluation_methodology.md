@@ -416,3 +416,4 @@ Caveats: the 74-certificate dataset is small, skewed to UNAIR templates, and not
 | KB-SCALE-004 confirm 2x vs 3x (wrong +20 @2x) | - | - | 0 | 0 | - | v9 |
 | KB-SCALE-005 akurasi+biaya e2e (hemat 87%, akurasi 99.3%) | - | 99.3% | 0 | 0 | - | v9 |
 | HYB-COMBINED gabungan terbaik (router + AKT-005 + ORG-004, 0 LLM) | 81.1% | 73.7% | 0 | 0 | - | v9 |
+| HYB-LLM hybrid + LLM tingkat (26 cert unrouted, llama3.1:8b) | 83.8% | 74.2% | 176 | 26 | - | v9 |

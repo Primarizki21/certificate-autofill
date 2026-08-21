@@ -931,6 +931,7 @@ The table below lists all functions referenced in this document. Functions are l
 | KB-SCALE-004 confirm 2x vs 3x (wrong +20 @2x) | - | - | 0 | 0 | - | v9 | Aug 14 |
 | KB-SCALE-005 akurasi+biaya e2e (hemat 87%, akurasi 99.3%) | - | 99.3% | 0 | 0 | - | v9 | Aug 14 |
 | HYB-COMBINED gabungan terbaik (router + AKT-005 + ORG-004, 0 LLM) | 81.1% | 73.7% | 0 | 0 | - | v9 | Aug 21 |
+| HYB-LLM hybrid + LLM tingkat (26 cert unrouted, llama3.1:8b) | 83.8% | 74.2% | 176 | 26 | - | v9 | Aug 21 |
 
 | Phase | Method | Tingkat | MACRO |
 |---|---|---|---|
@@ -982,4 +983,5 @@ The table below lists all functions referenced in this document. Functions are l
 | kb | KB-SCALE-003 peta hemat (5 volume × 5 key space × 3 skew) | - | - |
 | kb | KB-SCALE-004 confirm 2x vs 3x (wrong +20 @2x) | - | - |
 | kb | KB-SCALE-005 akurasi+biaya e2e (hemat 87%, akurasi 99.3%) | - | 99.3% |
-| v10 | HYB-COMBINED gabungan terbaik (router + AKT-005 + ORG-004, 0 LLM) ** | 81.1% | 73.7% |
+| v10 | HYB-COMBINED gabungan terbaik (router + AKT-005 + ORG-004, 0 LLM) | 81.1% | 73.7% |
+| v10 | HYB-LLM hybrid + LLM tingkat (26 cert unrouted, llama3.1:8b) ** | 83.8% | 74.2% |
