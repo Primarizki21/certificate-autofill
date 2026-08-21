@@ -76,7 +76,9 @@ def load_raw():
 def load_router():
     try:
         with open(os.path.join(RUN, "router_decisions.json")) as f:
-            return {r["certificate"][:-4]: r for r in json.load(f)}
+            data = json.load(f)
+            # Convert to dict keyed by stem (without .txt extension)
+            return {r["certificate"].replace(".txt", ""): r for r in data}
     except FileNotFoundError:
         return {}
 
@@ -125,6 +127,8 @@ def render_xlsx(gt, extracted, raw):
     header = ["filename", "raw text (dari PDF)"]
     for _, _, label in FIELDS:
         header += [f"{label} — pipeline", f"{label} — GT", f"{label} — match"]
+    # Tambah kolom router
+    header += ["Router — Decision", "Router — Rule", "Router — Signals"]
     ws.append(header)
     for c in range(1, len(header) + 1):
         cell = ws.cell(1, c)
@@ -135,6 +139,7 @@ def render_xlsx(gt, extracted, raw):
     ws.freeze_panes = "C2"
 
     stems = sorted(set(gt) & set(extracted) & set(raw))
+    router_data = load_router()
     for i, stem in enumerate(stems):
         v = per_cert_verdict(stem, extracted, gt)
         row = [stem + ".txt", raw.get(stem, "")]
@@ -142,6 +147,13 @@ def render_xlsx(gt, extracted, raw):
             ev, gv, status = v[label]
             row += [ev, gv, {"exact": "EXACT", "fuzzy": "FUZZY", "wrong": "WRONG",
                              "no_gt": "no GT"}[status]]
+        # Tambah data router
+        r_info = router_data.get(stem, {})
+        row += [
+            r_info.get("decision", "unrouted"),
+            r_info.get("rule", ""),
+            r_info.get("signals_str", ""),
+        ]
         ws.append(row)
         r = i + 2
         ws.cell(r, 1).font = BASE
@@ -167,8 +179,30 @@ def render_xlsx(gt, extracted, raw):
     for j, label in enumerate([f[2] for f in FIELDS]):
         for k, w in enumerate([28, 28, 10]):
             ws.column_dimensions[chr(ord("C") + j * 3 + k)].width = w
+    # Router columns
+    n_fields = len(FIELDS)
+    router_start = chr(ord("C") + n_fields * 3)
+    ws.column_dimensions[router_start].width = 25  # Decision
+    ws.column_dimensions[chr(ord(router_start) + 1)].width = 18  # Rule
+    ws.column_dimensions[chr(ord(router_start) + 2)].width = 40  # Signals
+
+    # Style router columns
+    for i_row in range(2, len(stems) + 2):
+        decision_col = ord("C") + n_fields * 3
+        for offset, col_letter in enumerate([decision_col, decision_col + 1, decision_col + 2]):
+            cell = ws.cell(i_row, col_letter)
+            cell.font = BASE
+            cell.border = BORDER
+            if offset == 0:  # Decision column
+                decision_val = cell.value or ""
+                if decision_val == "unrouted":
+                    cell.fill = GRAY
+                else:
+                    cell.fill = GREEN
+
     ws.append([])
     ws.append(["Legenda:", "EXACT = hijau, FUZZY = kuning, WRONG = merah, no GT = abu-abu"])
+    ws.append(["Router:", "hijau = routed (ada rule), abu-abu = unrouted (need LLM)"])
     wb.save(os.path.join(OUT, "raw_vs_pipeline.xlsx"))
     return stems
 

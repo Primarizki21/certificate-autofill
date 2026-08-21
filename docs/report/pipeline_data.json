@@ -1,26 +1,26 @@
 {
-  "version": "v9",
-  "label": "Pipeline v9 — organizer_v2 + tingkat_router (best current)",
+  "version": "HYB-COMBINED",
+  "label": "HYB-COMBINED — Router + AKT-005 + ORG-004 + PROD-002 (best offline, 0 LLM)",
   "date": "August 2026",
-  "supersedes": "v8",
-  "model": "llama3.1:8b (Ollama, Q4_K_M)",
+  "supersedes": "v9",
+  "model": "N/A (offline, 0 LLM calls)",
   "dataset": "74 sertifikat mahasiswa (Universitas Airlangga)",
   "gt": "Ground_Truth_Sertifikat_v9.csv",
   "matcher": "v2 (abbr subsequence + rasio kata, anti false-positive)",
-  "run_dir": "tests/benchmark_runs/run_llm_v4_20260805_163541",
+  "run_dir": "tests/benchmark_runs/hyb_combined_20260821_134811",
   "experiment": {
-    "tingkat_exact": "83.8%",
-    "macro_exact": "60.2%",
-    "macro_fuzzy": "74.2%",
-    "tokens_cert": 176,
-    "llm_calls": 29,
-    "router_coverage": "45/74 @100% precision"
+    "tingkat_exact": "81.1%",
+    "macro_exact": "73.7%",
+    "macro_fuzzy": "80.2%",
+    "tokens_cert": 0,
+    "llm_calls": 0,
+    "router_coverage": "48/74 @100% precision (router rules only)"
   },
   "results": [
     {
       "field": "nama_kegiatan_sertifikasi",
-      "exact": "25.7%",
-      "fuzzy": "52.7%"
+      "exact": "62.2%",
+      "fuzzy": "81.1%"
     },
     {
       "field": "waktu_mulai_pelaksanaan",
@@ -34,18 +34,18 @@
     },
     {
       "field": "penyelenggara_kegiatan",
-      "exact": "39.2%",
-      "fuzzy": "79.7%"
+      "exact": "63.5%",
+      "fuzzy": "78.4%"
     },
     {
       "field": "nomor_bukti_fisik_nomor_sertifikasi",
-      "exact": "59.6%",
-      "fuzzy": "59.6%"
+      "exact": "76.9%",
+      "fuzzy": "76.9%"
     },
     {
       "field": "tingkat",
-      "exact": "83.8%",
-      "fuzzy": "89.2%"
+      "exact": "81.1%",
+      "fuzzy": "81.1%"
     }
   ],
   "stages": [
@@ -54,42 +54,42 @@
       "name": "Text Extraction",
       "module": "pdf_fast_path / docling_parser / ocr_fallback",
       "fn": "extract_text_with_pymupdf / parse_with_docling / extract_text_with_ocr",
-      "role": "Teks PDF: PyMuPDF (embedded), Docling (fallback bila teks < 80 char), OCR RapidOCR+Tesseract (dipaksa bila field tanggal masih kosong). 2-pass nomor terintegrasi tapi OFF (flag ENABLE_OCR_NUMBER_2PASS)."
+      "role": "Teks PDF: PyMuPDF (embedded), Docling (fallback bila teks < 80 char), OCR RapidOCR+Tesseract (dipaksa bila field tanggal masih kosong)."
     },
     {
       "stage": "2",
       "name": "Field Extraction (regex)",
       "module": "field_extractor.py",
       "fn": "extract_certificate_fields",
-      "role": "Regex untuk tanggal (dgn alias kesalahan OCR bulan: AGUSTU5 -> AGUSTUS), role, nama kegiatan, nomor sertifikat, organizer v1."
+      "role": "Regex untuk tanggal (dgn alias kesalahan OCR bulan: AGUSTU5 -> AGUSTUS), role, nomor sertifikat."
     },
     {
       "stage": "3",
-      "name": "Organizer v2",
-      "module": "organizer_v2.py",
-      "fn": "extract_organizer_v2",
-      "role": "Ekstraktor penyelenggara (v9/ORG-001): preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')."
+      "name": "Organizer v2 + Normalization",
+      "module": "organizer_v2.py + organizer_normalize.py",
+      "fn": "extract_organizer_v2 + normalize_organizer",
+      "role": "Ekstraktor penyelenggara (ORG-001/ORG-004): preprocess OCR-merge, kandidat phrase/line, scoring, normalisasi akronim, canonical format (IS DEPT, APHSA BEM FKM, STUDISL, Facultyof+UB)."
     },
     {
       "stage": "4",
-      "name": "Form Mapping",
-      "module": "form_mapper.py",
-      "fn": "map_fields_to_form",
-      "role": "Mapping ke form KHP: kelompok, jenis, tingkat, jabatan, jenis_penyelenggara + validate_with_needs_review (confidence < 0.80 -> review)."
+      "name": "Activity Detection v5 (AKT-005)",
+      "module": "tests/benchmark_akt5.py",
+      "fn": "extract_activity_v5",
+      "role": "16+ anchor pattern untuk nama kegiatan: Kepengurusan, Dalam acara/kegiatan, pada ajang, entitled/titled, participation at, the X organized by, winner of, collapse all-caps, repair OCR-merge. 62.2% exact (+55.4pt dari baseline 6.8%)."
     },
     {
       "stage": "5",
-      "name": "Tingkat Router",
-      "module": "tingkat_router.py",
-      "fn": "route_tingkat",
-      "role": "13 rule deterministik berbasis sinyal teks (lomba/hima/dept/univ/luar/nasw/sem/fak/bem). 45/74 keputusan @100% precision (ROUTER-002/003)."
+      "name": "Form Mapping",
+      "module": "form_mapper.py",
+      "fn": "map_fields_to_form",
+      "role": "Mapping ke form KHP: kelompok, jenis, tingkat, jabatan, jenis_penyelenggara + validate_with_needs_review."
     },
     {
       "stage": "6",
-      "name": "LLM Tingkat (fallback)",
-      "module": "llm_tingkat.py",
-      "fn": "infer_tingkat",
-      "role": "Prompt f_bias via Ollama utk cert yang tak ter-rute (29/74). Minimisasi teks per kesulitan (140/200/300 char), context block (nama kegiatan, penyelenggara, peran), temperature 0."
+      "name": "Tingkat Router",
+      "module": "tingkat_router.py",
+      "fn": "route_tingkat",
+      "role": "15 rule deterministik berbasis sinyal teks (lomba/hima/dept/univ/luar/nasw/sem/fak/bem/ukm). 48/74 keputusan @100% precision. 26 cert need LLM (tidak dipakai di offline mode)."
     },
     {
       "stage": "7",
@@ -164,14 +164,24 @@
       "rule": "sem+univ",
       "signals": "sem dan univ, tanpa fak/bem/hima/lomba",
       "decision": "Universitas"
+    },
+    {
+      "rule": "ukm_org",
+      "signals": "organizer UKM tanpa lomba/luar/nasw/sem/fak/dept",
+      "decision": "Universitas"
+    },
+    {
+      "rule": "hima_dept",
+      "signals": "hima_org dan dept",
+      "decision": "Departemen/Program Studi"
     }
   ],
   "field_methods": [
     {
       "field": "nama_kegiatan_sertifikasi",
-      "method": "Regex template + keyword",
-      "mechanism": "pola 'seminar X yang diselenggarakan', 'talkshow', PKKMB; fallback keyword AIRNOLOGY/KAKIWIMA/SPECTA/BRIEF",
-      "module": "field_extractor.py (extract_activity_name)"
+      "method": "AKT-005 regex patterns (v5)",
+      "mechanism": "16+ anchor pattern: Kepengurusan, Dalam acara/kegiatan, pada ajang, entitled/titled, participation at, the X organized by, winner of, as a participant at; collapse all-caps (synreaach, ACIC); repair OCR-merge (digit-huruf boundary); stop junk 'untuk kategori'. 62.2% exact.",
+      "module": "tests/benchmark_akt5.py (extract_activity_v5)"
     },
     {
       "field": "waktu_mulai / waktu_selesai",
@@ -187,21 +197,21 @@
     },
     {
       "field": "nomor_bukti_fisik_nomor_sertifikasi",
-      "method": "Regex 3 pola",
-      "mechanism": "NO./NOMOR + digit + tahun (mis. 212/E/BEM-FKM/UNAIR/X/2023)",
-      "module": "field_extractor.py (extract_certificate_number)"
+      "method": "Regex 4 pola + fallback raw text",
+      "mechanism": "NO./NOMOR + digit + tahun; pattern SERT- prefix; pattern titik; fallback raw text normalize. 76.9% exact (+17.3pt dari baseline).",
+      "module": "field_extractor.py (extract_certificate_number) + ORG-002"
     },
     {
       "field": "penyelenggara_kegiatan",
-      "method": "Rule-based organizer_v2",
-      "mechanism": "preprocess perbaikan OCR-merge, kandidat phrase/line, scoring, normalisasi akronim (BEM FTMM -> 'BEM FTMM Universitas Airlangga')",
-      "module": "organizer_v2.py (extract_organizer_v2)"
+      "method": "ORG-004 canonical format",
+      "mechanism": "organizer_v2 + normalize_organizer: R0 strip trailing HIMA, R2 strip prefix Library Class, R3 strip sampai oleh, R4 strip mulai tanggal, R6 enrich kurang_lengkap (join baris beruntun, Biro-prefix, Himasada fakultas, dept OCR-merge), F1 alias map (IS DEPT, APHSABEMFKM, STUDISL, Facultyof+UB). 63.5% exact.",
+      "module": "organizer_v2.py + organizer_normalize.py"
     },
     {
       "field": "tingkat",
-      "method": "Router 13 rule -> LLM fallback",
-      "mechanism": "sinyal teks deterministik 45/74 @100% precision; LLM llama3.1:8b utk 29/74 cert yang tak ter-rute",
-      "module": "tingkat_router.py + llm_tingkat.py"
+      "method": "Router 15 rules (offline)",
+      "mechanism": "sinyal teks deterministik 48/74 @100% precision. 26 cert need LLM (offline mode: gunakan pipeline default).",
+      "module": "tingkat_router.py"
     },
     {
       "field": "kelompok / jenis / jabatan form / jenis_penyelenggara",
@@ -210,10 +220,10 @@
       "module": "form_mapper.py (map_fields_to_form)"
     }
   ],
-  "ner_status": "NER TIDAK dipakai di v9. NER v1 (pre-trained) = 12.8% MACRO (FAIL, closed di ledger); hybrid NER+regex v3 = 47.7% (superseded). Semua field ditentukan oleh regex + rule-based extractor; LLM hanya fallback utk field tingkat.",
+  "ner_status": "NER TIDAK dipakai. Semua field ditentukan oleh regex + rule-based extractor.",
   "llm": {
-    "model": "llama3.1:8b",
-    "prompt": "f_bias (v4_bias) — koreksi bias bahasa Inggris",
+    "model": "N/A (offline mode)",
+    "prompt": "N/A",
     "temperature": 0,
     "num_predict": 30,
     "budget_chars": {
@@ -226,19 +236,22 @@
       "penyelenggara_kegiatan",
       "raw_role"
     ],
-    "host": "http://127.0.0.1:11434"
+    "host": "http://127.0.0.1:11434",
+    "note": "HYB-COMBINED tidak pakai LLM. 26 cert unrouted menggunakan pipeline default (tingkat kosong atau regex fallback)."
   },
   "production": {
     "promoted": [
       "backend/app/services/organizer_v2.py",
+      "backend/app/services/organizer_normalize.py (flag ENABLE_ORGANIZER_NORMALIZATION)",
       "backend/app/services/tingkat_router.py"
     ],
     "enable_llm_tingkat": false,
+    "enable_organizer_normalization": false,
     "enable_ocr_number_2pass": false,
     "enable_ocr_fallback": true,
     "scan_macro_production": "47.3%",
     "scan_organizer_production": "26.5%",
-    "note": "Produksi deterministik tanpa LLM (ENABLE_LLM_TINGKAT=false default). 2-pass nomor terintegrasi tapi OFF (keputusan deploy-time: gain +3pt nomor dengan cost +2-10s/cert). Re-eval pasca-promosi (GT v9 + matcher v2): scan MACRO 45.8 -> 47.3%, organizer 20.4 -> 26.5%."
+    "note": "HYB-COMBINED = gabungan semua improvements terbaik (offline). Organizer normalization + AKT-005 activity detection belum di-port ke produksi (keputusan user). Router 48/74 @100% precision."
   },
   "progression": [
     {
@@ -304,6 +317,22 @@
       "macro": "60.2%",
       "tok": 176,
       "calls": 29
+    },
+    {
+      "phase": "v10",
+      "method": "HYB-COMBINED (offline, 0 LLM)",
+      "tingkat": "81.1%",
+      "macro": "73.7%",
+      "tok": 0,
+      "calls": 0
+    },
+    {
+      "phase": "v10",
+      "method": "HYB-LLM (+ LLM 26 cert)",
+      "tingkat": "83.8%",
+      "macro": "74.2%",
+      "tok": 176,
+      "calls": 26
     }
   ],
   "v10_experiments": {
@@ -339,6 +368,11 @@
       "fp": "1 cert (satu-satunya exact-all)",
       "flagged_certs": "73/74 butuh review (trade-off safety net)",
       "verdict": "PASS"
+    },
+    "akt_combined": {
+      "hyb_combined": "MACRO 63.0 -> 73.7% (+10.7pp), 0 LLM, router 48/74",
+      "hyb_llm": "MACRO 73.7 -> 74.2% (+0.5pp), 26 LLM calls, tingkat 83.8%",
+      "verdict": "PASS — new overall winner"
     }
   }
 }
