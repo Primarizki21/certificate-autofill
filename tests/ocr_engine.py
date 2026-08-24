@@ -227,6 +227,50 @@ def ocr_tess_psm(image_bytes: bytes, psm: int) -> str:
     return text
 
 
+def split_lines_projection(image_bytes: bytes) -> list[bytes]:
+    """Split PNG region jadi strip baris via proyeksi horizontal piksel gelap.
+    Baris = run kontinu row ber-piksel gelap (grayscale < 128); pad 2px supaya
+    aksen/descender tidak terpotong."""
+    import numpy as np
+    image = _read_image(image_bytes).convert("L")
+    arr = np.asarray(image)
+    dark_rows = (arr < 128).sum(axis=1) > 0
+    strips: list[bytes] = []
+    h = len(dark_rows)
+    y = 0
+    while y < h:
+        if not dark_rows[y]:
+            y += 1
+            continue
+        y0 = y
+        while y < h and dark_rows[y]:
+            y += 1
+        y0p, y1p = max(0, y0 - 2), min(h, y + 2)
+        strip = image.crop((0, y0p, image.width, y1p))
+        buf = BytesIO()
+        strip.save(buf, format="PNG")
+        strips.append(buf.getvalue())
+    return strips
+
+
+def ocr_tess_lines_psm7(image_bytes: bytes) -> str:
+    """Region multi-baris: split per baris (proyeksi horizontal) lalu psm7
+    per strip — psm7 tunggal gagal kalau region berisi >=2 baris (NC-002)."""
+    if not _tesseract_available():
+        return ""
+    import pytesseract
+    texts: list[str] = []
+    for strip in split_lines_projection(image_bytes):
+        img = _read_image(strip)
+        try:
+            text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 7").strip()
+        except Exception:
+            text = pytesseract.image_to_string(img, lang="eng", config="--psm 7").strip()
+        if text:
+            texts.append(text)
+    return "\n".join(texts)
+
+
 def ocr_paddle(image_bytes: bytes) -> str:
     engine = _get_paddle()
     # PaddleOCR `ocr()` hanya menerima numpy.ndarray / path file — tulis PNG
