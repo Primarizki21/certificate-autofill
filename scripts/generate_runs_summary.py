@@ -68,6 +68,10 @@ def _kind(name: str) -> str:
         return "baseline_regex"
     if name.startswith("kb_scale"):
         return "kb_scale"
+    if name.startswith("hyb_kb_scale"):
+        return "hyb_kb_scale"
+    if name.startswith("hyb_kb"):
+        return "hyb_kb"
     if name.startswith("layout_texts"):
         return "corpus"
     return "other"

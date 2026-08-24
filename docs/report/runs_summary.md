@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 85 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 90 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -74,6 +74,11 @@
 | `akt3_20260814_135024` | 2026-08-14 | other |  | — | 71.6% | — | — |  |  |
 | `akt4_20260814_141802` | 2026-08-14 | other |  | — | 72.1% | — | — |  |  |
 | `akt5_20260814_142534` | 2026-08-14 | other |  | — | 73.7% | — | — |  |  |
+| `hyb_kb_20260824_094821` | 2026-08-24 | hyb_kb |  | — | — | — | — |  |  |
+| `hyb_kb_20260824_095024` | 2026-08-24 | hyb_kb |  | — | — | — | — |  |  |
+| `hyb_kb_scale_20260824_101641` | 2026-08-24 | hyb_kb_scale |  | — | — | — | — |  |  |
+| `hyb_kb_scale_20260824_102240` | 2026-08-24 | hyb_kb_scale |  | — | — | — | — |  |  |
+| `hyb_kb_scale_20260824_102300` | 2026-08-24 | hyb_kb_scale |  | — | — | — | — |  |  |
 | `kb_alias_20260811_110930` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_event_20260811_110636` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |
 | `kb_norm_20260811_105237` | 2026-08-11 | other |  | — | 83.8% | — | — |  |  |

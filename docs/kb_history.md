@@ -522,3 +522,29 @@ semantik konflik, safety noise.
 berulang). Router/organizer/OCR sudah banyak trial tertutup (ledger); KB adalah
 satu-satunya jalur efisiensi yang belum terbukti rugi, tapi juga belum terbukti
 untung — bukti harus datang dari data riil, bukan 74 cert.
+
+---
+
+## HYB-KB-001 & HYB-KB-002 | 2026-08-24 | efek KB pada pipeline HYB + proyeksi skala 360k
+
+**Konteks.** Pertanyaan user: apakah KB harus masuk produksi dulu sebelum
+dicampur pipeline HYB (winner HYB-LLM-001)? Jawaban: tidak — dicampur di
+lapisan eksperimen, produksi tetap zero-touch. Sekalian disimulasikan
+dengan asumsi ril user: ~360.000 request NON-concurrent.
+
+**Hasil.**
+- HYB-KB-001 (korpus 74): mekanisme ROUTER→KB→LLM ter-wire, no-regress
+  exact, wrong 0, saved 0 — korpus pembatas (3 key berulang ≤3 kemunculan,
+  `servable` butuh ≥4). Konsisten F3/KB-001: gain KB = skala.
+- HYB-KB-002 (360k request, key space 1k–50k × skew 70–90% × TTL ∞/365):
+  hemat LLM calls **72–98%** (gate @(10k, 80/20): **86,4%**), akurasi naik
+  **+3–5 pp** di semua titik grid (gate: 86,2→89,5%), ≈42 jam proses &
+  ~17,9 jt token terhemat di titik gate. TTL 365h murah (−0,1–0,2 pp).
+
+**Pelajaran arsitektur.** Router SELALU menang; KB hanya melayani cert
+unrouted. Melayani request routed dr KB = menimpa jawaban router @100%
+dgn error turunan profil → akurasi −10 pp (terdeteksi saat iterasi).
+Ini memperkuat keputusan desain v1 #2 (`router → KB → LLM`).
+
+**Next action.** Tetap gate data riil (`tests/kb/audit.py`) — angka skala
+berbasis profil korpus, bukan sampling riil. Port produksi setelah itu.
