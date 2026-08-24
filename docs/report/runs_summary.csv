@@ -95,6 +95,7 @@ ocr_experiment/lfm25_full_20260824_111939 [hybrid_10],2026-08-24,ocr_trial,rapid
 ocr_experiment/lfm25_full_20260824_111939 [hybrid_49],2026-08-24,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,50.7%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6%
 ocr_experiment/lfm25_ocr_20260813_151134,2026-08-13,ocr_trial,lfm25_vl_3b,,fixed_v8,,,,—,44.4%,—,—,—,scan=None emb=?; scan org 20.0% nomor 28.6%
 ocr_experiment/probe_doctr,2026-08-06,ocr_trial,doctr,,fixed_v8,,,,—,40.0%,—,—,—,scan=10 emb=0; scan org 10.0% nomor 14.3%
+ocr_experiment/probe_got,,ocr_trial,,,fixed_v8,,,,—,—,—,—,—,
 ocr_experiment/probe_ppu,,ocr_trial,,,fixed_v8,,,,—,—,—,—,—,
 ocr_experiment/trial_a_easyocr,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,38.3%,—,—,—,scan=49 emb=?; scan org 36.7% nomor 15.2%
 ocr_experiment/trial_a_easyocr_gpu,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,42.3%,—,—,9716,scan=49 emb=?; scan org 28.6% nomor 33.3%
