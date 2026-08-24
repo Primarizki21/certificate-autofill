@@ -251,7 +251,7 @@ def cmd_eval(args) -> None:
         "csv": os.path.basename(args.csv),
         "n": len(stems),
         "baseline": eval_dir(args.base, stem_to_row, stems),
-        "doctr": eval_dir(args.doc, stem_to_row, stems),
+        args.doc_label: eval_dir(args.doc, stem_to_row, stems),
         "hybrid": eval_hybrid(args.base, args.doc, stem_to_row, stems),
         "oracle": eval_oracle(args.base, args.doc, stem_to_row, stems),
     }
@@ -260,7 +260,7 @@ def cmd_eval(args) -> None:
         json.dump(out, f, indent=2, default=str)
     print(f"Saved: {args.out}\n")
 
-    for label in ("baseline", "doctr", "hybrid", "oracle"):
+    for label in ("baseline", args.doc_label, "hybrid", "oracle"):
         s = out[label]
         print(f"=== {label.upper()} ===")
         for field in EVAL + ["macro_avg"]:
@@ -285,6 +285,7 @@ def main() -> None:
     e = sub.add_parser("eval", help="eval baseline/doctr/hybrid/oracle vs GT v9")
     e.add_argument("--base", default=BASELINE_DIR, help="teks baseline rapid_tess")
     e.add_argument("--doc", required=True, help="teks DocTR")
+    e.add_argument("--doc-label", default="doctr", help="label engine utk key JSON/print")
     e.add_argument("--stems", default="10", choices=["10", "49", "embedded"], help="subset stem")
     e.add_argument("--csv", default=GT_CSV)
     e.add_argument("--out", required=True, help="path json output")

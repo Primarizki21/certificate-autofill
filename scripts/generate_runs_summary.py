@@ -39,6 +39,10 @@ AUTHORITATIVE = {
     "ocr_experiment/trial_a_paddle26": "OCR trial: paddleocr 2.9 + paddle 2.6 (GATE FAIL)",
     "ocr_experiment/trial_a_easyocr": "OCR trial: EasyOCR CPU max-side 960 (GATE FAIL)",
     "ocr_experiment/trial_a_easyocr_gpu": "OCR trial: EasyOCR GPU full-res (GATE FAIL, not adopted)",
+    "ocr_experiment/lfm25_full_20260824_111939": "OCR-008/HYB-002: LFM2.5-VL full-scan 49 + hybrid per-field (organizer +14.3pt, MACRO 50.75%)",
+    "ocr_experiment/composite_lfm_full_20260824_111939": "OCR-008 komposit all-74: LFM(49 scan) + baseline(25 embedded) — MACRO 50.65% vs baseline 47.3%",
+    "ocr_experiment/corpus_nomor_crop_lines7": "NC-003 trial: region tess_lines_psm7 (nomor 57.6% FAIL, stage timing anchor 3.5s dominan)",
+    "ocr_experiment/corpus_nomor_crop_rt6": "NC-003 trial: region rapid_tess_psm6 + anchor cache hits 32/49 (nomor 54.5% FAIL)",
 }
 
 # f_bias winner utk seksi "f_bias winner — field exact".

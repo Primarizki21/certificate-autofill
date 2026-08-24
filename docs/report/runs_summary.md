@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 90 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 96 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -18,6 +18,10 @@
 | `ocr_experiment/trial_a_paddle26` | OCR trial: paddleocr 2.9 + paddle 2.6 (GATE FAIL) | — | 43.3% | — | — |
 | `ocr_experiment/trial_a_easyocr` | OCR trial: EasyOCR CPU max-side 960 (GATE FAIL) | — | 38.3% | — | — |
 | `ocr_experiment/trial_a_easyocr_gpu` | OCR trial: EasyOCR GPU full-res (GATE FAIL, not adopted) | — | 42.3% | — | — |
+| `ocr_experiment/lfm25_full_20260824_111939` | OCR-008/HYB-002: LFM2.5-VL full-scan 49 + hybrid per-field (organizer +14.3pt, MACRO 50.75%) | — | — | — | — |
+| `ocr_experiment/composite_lfm_full_20260824_111939` | OCR-008 komposit all-74: LFM(49 scan) + baseline(25 embedded) — MACRO 50.65% vs baseline 47.3% | — | — | — | — |
+| `ocr_experiment/corpus_nomor_crop_lines7` | NC-003 trial: region tess_lines_psm7 (nomor 57.6% FAIL, stage timing anchor 3.5s dominan) | — | 47.3% | — | — |
+| `ocr_experiment/corpus_nomor_crop_rt6` | NC-003 trial: region rapid_tess_psm6 + anchor cache hits 32/49 (nomor 54.5% FAIL) | — | 46.8% | — | — |
 
 ## f_bias winner — field exact (run_llm_v4_20260805_163541)
 
@@ -51,6 +55,7 @@
 |---|---|---|---|---|
 | `ocr_experiment/baseline_rapid` | rapid | 47.3% | 3488ms | scan=49 emb=25; scan org 34.7% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | rapid_tess | 47.3% | 8609ms | scan=49 emb=?; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/composite_lfm_full_20260824_111939` |  | — | —ms |  |
 | `ocr_experiment/corpus_doctr` | doctr | 45.8% | —ms | scan=49 emb=?; scan org 34.7% nomor 36.4% |
 | `ocr_experiment/corpus_doctr [hybrid_10]` | rapid_tess+doctr | 42.2% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 10.0% nomor 28.6% |
 | `ocr_experiment/corpus_doctr [hybrid_49]` | rapid_tess+doctr | 49.2% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6% |
@@ -60,6 +65,11 @@
 | `ocr_experiment/corpus_nomor_cheap_tess13` | nomor_crop | 47.3% | 4307ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_cheap_tess6` | nomor_crop | 47.3% | 4267ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop` | nomor_crop | 47.8% | 5231ms | scan=49 emb=?; scan org 26.5% nomor 60.6% |
+| `ocr_experiment/corpus_nomor_crop_lines7` | nomor_crop | 47.3% | 4431ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/corpus_nomor_crop_rt6` | nomor_crop | 46.8% | 2859ms | scan=49 emb=0; scan org 26.5% nomor 54.5% |
+| `ocr_experiment/lfm25_full_20260824_111939` | lfm25_vl_3b | — | —ms | scan=None emb=? |
+| `ocr_experiment/lfm25_full_20260824_111939 [hybrid_10]` | rapid_tess+doctr | 44.4% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 20.0% nomor 28.6% |
+| `ocr_experiment/lfm25_full_20260824_111939 [hybrid_49]` | rapid_tess+doctr | 50.7% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6% |
 | `ocr_experiment/lfm25_ocr_20260813_151134` | lfm25_vl_3b | 44.4% | —ms | scan=None emb=?; scan org 20.0% nomor 28.6% |
 | `ocr_experiment/probe_doctr` | doctr | 40.0% | —ms | scan=10 emb=0; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/trial_a_easyocr` | easy | 38.3% | —ms | scan=49 emb=?; scan org 36.7% nomor 15.2% |
@@ -146,6 +156,7 @@
 | `run_ner_v1_20260730_095336` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `ocr_experiment/baseline_rapid` | 2026-08-04 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=25; scan org 34.7% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | 2026-08-04 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=?; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/composite_lfm_full_20260824_111939` |  | ocr_trial |  | — | — | — | — |  |  |
 | `ocr_experiment/corpus_doctr` | 2026-08-06 | ocr_trial |  | — | 45.8% | — | — |  | scan=49 emb=?; scan org 34.7% nomor 36.4% |
 | `ocr_experiment/corpus_doctr [hybrid_10]` | 2026-08-06 | ocr_trial |  | — | 42.2% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 10.0% nomor 28.6% |
 | `ocr_experiment/corpus_doctr [hybrid_49]` | 2026-08-06 | ocr_trial |  | — | 49.2% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6% |
@@ -155,6 +166,11 @@
 | `ocr_experiment/corpus_nomor_cheap_tess13` | 2026-08-06 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_cheap_tess6` | 2026-08-06 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop` | 2026-08-06 | ocr_trial |  | — | 47.8% | — | — |  | scan=49 emb=?; scan org 26.5% nomor 60.6% |
+| `ocr_experiment/corpus_nomor_crop_lines7` | 2026-08-24 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/corpus_nomor_crop_rt6` | 2026-08-24 | ocr_trial |  | — | 46.8% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 54.5% |
+| `ocr_experiment/lfm25_full_20260824_111939` | 2026-08-24 | ocr_trial |  | — | — | — | — |  | scan=None emb=? |
+| `ocr_experiment/lfm25_full_20260824_111939 [hybrid_10]` | 2026-08-24 | ocr_trial |  | — | 44.4% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 20.0% nomor 28.6% |
+| `ocr_experiment/lfm25_full_20260824_111939 [hybrid_49]` | 2026-08-24 | ocr_trial |  | — | 50.7% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6% |
 | `ocr_experiment/lfm25_ocr_20260813_151134` | 2026-08-13 | ocr_trial |  | — | 44.4% | — | — |  | scan=None emb=?; scan org 20.0% nomor 28.6% |
 | `ocr_experiment/probe_doctr` | 2026-08-06 | ocr_trial |  | — | 40.0% | — | — |  | scan=10 emb=0; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/trial_a_easyocr` | 2026-08-04 | ocr_trial |  | — | 38.3% | — | — |  | scan=49 emb=?; scan org 36.7% nomor 15.2% |

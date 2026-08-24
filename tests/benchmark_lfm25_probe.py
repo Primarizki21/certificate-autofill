@@ -117,12 +117,16 @@ def cmd_probe(args) -> None:
     with open(MANIFEST) as f:
         manifest = json.load(f)
     classification = classify_manifest(manifest)
-    missing = [s for s in PROBE_STEMS if s not in classification]
-    if missing:
-        raise SystemExit(f"stem tak ada di manifest: {missing}")
-    scans = [s for s in PROBE_STEMS if classification[s]["scan"]]
-    if len(scans) != len(PROBE_STEMS):
-        raise SystemExit(f"PROBE_STEMS harus semua scan; bukan: {set(PROBE_STEMS) - set(scans)}")
+    if getattr(args, "all_scans", False):
+        stems = sorted(s for s, c in classification.items() if c["scan"])
+    else:
+        stems = PROBE_STEMS
+        missing = [s for s in stems if s not in classification]
+        if missing:
+            raise SystemExit(f"stem tak ada di manifest: {missing}")
+        scans = [s for s in stems if classification[s]["scan"]]
+        if len(scans) != len(stems):
+            raise SystemExit(f"PROBE_STEMS harus semua scan; bukan: {set(stems) - set(scans)}")
 
     run_root = args.out or _run_dir("lfm25_ocr")
     texts_dir = os.path.join(run_root, "extracted_texts")
@@ -130,7 +134,7 @@ def cmd_probe(args) -> None:
 
     reports = {}
     errors = []
-    for stem in PROBE_STEMS:
+    for stem in stems:
         out_file = os.path.join(texts_dir, f"{stem}.txt")
         if os.path.exists(out_file):
             print(f"{stem}: skip (exists)")
@@ -156,7 +160,7 @@ def cmd_probe(args) -> None:
         "server": args.server,
         "prompt": TRANS_PROMPT,
         "created": datetime.now().isoformat(),
-        "stems": PROBE_STEMS,
+        "stems": stems,
         "zoom": args.zoom,
         "n_predict": args.n_predict,
         "temp": args.temp,
@@ -166,7 +170,7 @@ def cmd_probe(args) -> None:
     }
     with open(os.path.join(run_root, "ocr_meta.json"), "w") as f:
         json.dump(meta, f, indent=2)
-    print(f"\nDone. ok={len(reports)} err={len(errors)} / {len(PROBE_STEMS)}")
+    print(f"\nDone. ok={len(reports)} err={len(errors)} / {len(stems)}")
     print(f"Output: {texts_dir}")
 
 
@@ -186,6 +190,8 @@ def main() -> None:
     b.add_argument("--n-predict", type=int, default=2000)
     b.add_argument("--temp", type=float, default=0.1)
     b.add_argument("--server-pid", type=int, default=0, help="PID llama-server utk RSS meta")
+    b.add_argument("--all-scans", action="store_true",
+                   help="transkripsi SEMUA stem scan di manifest (49), bukan hanya PROBE_STEMS")
     b.set_defaults(func=cmd_probe)
 
     e = sub.add_parser("eval", help="evaluasi korpus vs GT v9 (matcher v2)")
