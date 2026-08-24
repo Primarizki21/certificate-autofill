@@ -43,6 +43,7 @@
 | OCR-008 | Revive LFM2.5 full-scan 49 stem (`--all-scans`, GGUF Q4_0+mmproj Q8_0, b10405); korpus komposit all-74 utk pembanding resmi | 49/49 ok, ~77–95s/cert, RSS ~3.9GB. Scan-49: nomor 51.5% (−6.1pt), dates 85.7% (=), **organizer 40.8% (+14.3pt)**, MACRO 49.75%. Komposit all-74: **MACRO 50.65%** vs 47.3% (+3.35pt) | PASS (measurement — input HYB-002) | Model di `~/.cache/lfm25/`; produksi butuh F7 queue |
 | HYB-002 | Hybrid per-field LFM(organizer+dates) + baseline(nomor/kegiatan/role), merge rule statis sama HYB-001 (`--doc-label lfm25`) | 49 scan: **semua gate PASS** — nomor 57.6 (=), dates 85.7 (=), organizer 26.5→**40.8%**, MACRO 47.26→**50.75%** (+3.95pt atas HYB-001 DocTR). Oracle = hybrid. 10-stem repro persis OCR-007 | **PASS — winner baru cabang OCR** | Produksi menunggu keputusan user (batch-only LFM) |
 | NC-003 | Region murah via line-splitting proyeksi (`tess_lines_psm7`) + kombinasi baru (`rapid_tess_psm6`) + stage timing + anchor cache `{stem: bbox}` | vs control 60.6%: lines7 **57.6%** (FAIL), rt6 **54.5%** (FAIL). Timing: anchor full-page 3.54s dominan, region cuma 0.55–1.64s; cache hits 32/32 identik. Proyeksi control+cache ≈ 2.1s/cert | FAIL/CLOSED — NC-001 tetap OFF | 1 trial eksplisit control rapid_tess + anchor cache kalau mau flip flag |
+| HYB-003 | Hybrid organizer TANPA LFM: doc-engine = teks rapid-only (sudah dihitung baseline), rule merge sama; eval offline artefak existing = 0 OCR baru | Organizer 26.5→**34.7% (+8.2pt)**, fuzzy **77.5%** (terbaik); nomor/dates no-regress (=); MACRO **47.26→49.2% (+1.94pt)** @ 0 biaya. Kalah tipis dr HYB-002 (50.75%), kalahkan HYB-001 DocTR (46.8%) | PASS — winner non-LFM | Produksi: merge teks rapid intermediate di `ocr_fallback.py` (zero extra latency) = keputusan user |
 
 ## Angka pembanding antar-engine (field-level, subset scan)
 
@@ -59,6 +60,7 @@ Sumber: `docs/report/runs_summary.md` §OCR experiment + ledger.
 | LFM2.5-VL-3B (probe 10) | 28.6%* | 20.0%* | 88.9%* | 44.4%* | ~77s | *like-for-like 10 stem; satu-satunya non-baseline yg tak regress nomor |
 | LFM2.5-VL-3B (full 49, OCR-008) | 51.5% | **40.8%** | 85.7% | 49.75% | ~77–95s | Organizer exact terbaik semua engine tunggal; nomor regress −6.1pt |
 | **Hybrid LFM+baseline (HYB-002)** | **57.6%** | **40.8%** | **85.7%** | **50.75%** | batch-only (~77s LFM) | **Winner cabang OCR** — merge rule statis, oracle=hybrid |
+| **Hybrid rapid↔rapid_tess (HYB-003)** | 57.6% | 34.7% | 85.7% | **49.2%** | **~0 tambahan** | Winner non-LFM — organizer dr teks rapid yg memang sudah dihitung pipeline |
 
 ## Peta pola yang terbukti (jangan dilupakan saat revive)
 

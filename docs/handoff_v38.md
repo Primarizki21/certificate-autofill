@@ -16,9 +16,9 @@
 | **OCR-008** (`tests/benchmark_lfm25_probe.py --all-scans`, run `ocr_experiment/lfm25_full_20260824_111939` + komposit `composite_lfm_full_20260824_111939`) | Angka otoritatif LFM2.5-VL di seluruh domain scan? | 49/49 ok, 0 err, ~77–95s/cert, RSS ~3.9GB. Scan-49 like-for-like GT v9+matcher v2: nomor 51.5% (−6.1pt), dates 85.7% (=), **organizer exact 40.8% (+14.3pt)**, MACRO **49.75%**. Komposit all-74 (LFM scan + baseline embedded): MACRO **50.65%** vs pembanding resmi 47.3% (**+3.35pt**), fuzzy 60.97% | **PASS (measurement)** — output = input HYB-002 |
 | **HYB-002** (`tests/benchmark_hybrid_ocr.py eval --doc-label lfm25`, `eval_hybrid_{10,49}.json`) | Pola HYB-001 dgn LFM sebagai doc-engine: lolos gate? | Semua gate PASS: nomor **57.6% (=** — merge pertahankan baseline), dates 85.7% (=), organizer 26.5→**40.8%**, MACRO 47.26→**50.75%** (+3.95pt atas HYB-001 DocTR 46.8%). Oracle = hybrid. 10-stem repro persis probe OCR-007 | **PASS — winner baru cabang OCR** |
 | **NC-003** (`tests/benchmark_nomor_crop.py`: `tess_lines_psm7`, `rapid_tess_psm6`, stage timing, anchor cache) | Region murah bisa pertahankan +3pt NC-001 di ≤2.0s/cert? | vs control 60.6%: lines7 **57.6%** FAIL, rt6 **54.5%** FAIL. Stage timing: anchor full-page = biaya dominan (0.85–3.54s); region cuma 0.55–1.64s. Anchor cache `{stem: bbox}` terbukti (32/32 hits, teks identik) | **FAIL/CLOSED — NC-001 tetap OFF** |
+| **HYB-003** (`benchmark_hybrid_ocr.py --doc-label rapid` atas artefak `baseline_rapid/` existing, run `hybrid_rapid_org`) | Gain organizer tanpa biaya LFM? | Organizer 26.5→**34.7% (+8.2pt)**, fuzzy →**77.5%**; nomor/dates no-regress (=); MACRO **47.26→49.2% (+1.94pt)** @ 0 OCR baru — kalahkan HYB-001 DocTR (46.8%), kalah tipis dr HYB-002 (50.75%) dgn gap persis = selisih organizer LFM vs rapid | **PASS — winner non-LFM** |
 
-Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003) +
-`docs/report/runs_summary.md` + `docs/report/ocr_status.md`.
+Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003) +
 
 ---
 
