@@ -44,6 +44,8 @@ AUTHORITATIVE = {
     "ocr_experiment/corpus_nomor_crop_lines7": "NC-003 trial: region tess_lines_psm7 (nomor 57.6% FAIL, stage timing anchor 3.5s dominan)",
     "ocr_experiment/corpus_nomor_crop_rt6": "NC-003 trial: region rapid_tess_psm6 + anchor cache hits 32/49 (nomor 54.5% FAIL)",
     "ocr_experiment/hybrid_rapid_org": "HYB-003: hybrid organizer rapid-only tanpa LFM (MACRO 49.2%, organizer +8.2pt, 0 biaya)",
+    "ocr_experiment/composite_rapid_hybrid": "HYB-004 komposit HYB-003 all-74: MACRO 50.32% — gap ke LFM 0.33pt @ 0 biaya",
+    "ocr_experiment/probe_ppu": "OCR-009 probe ppu-paddle-ocr (v6-tiny/small FAIL digit, v5-en-server CLOSED RSS ~3GB) + HYB-005 hybrid FAIL",
 }
 
 # f_bias winner utk seksi "f_bias winner — field exact".

@@ -44,6 +44,9 @@
 | HYB-002 | Hybrid per-field LFM(organizer+dates) + baseline(nomor/kegiatan/role), merge rule statis sama HYB-001 (`--doc-label lfm25`) | 49 scan: **semua gate PASS** — nomor 57.6 (=), dates 85.7 (=), organizer 26.5→**40.8%**, MACRO 47.26→**50.75%** (+3.95pt atas HYB-001 DocTR). Oracle = hybrid. 10-stem repro persis OCR-007 | **PASS — winner baru cabang OCR** | Produksi menunggu keputusan user (batch-only LFM) |
 | NC-003 | Region murah via line-splitting proyeksi (`tess_lines_psm7`) + kombinasi baru (`rapid_tess_psm6`) + stage timing + anchor cache `{stem: bbox}` | vs control 60.6%: lines7 **57.6%** (FAIL), rt6 **54.5%** (FAIL). Timing: anchor full-page 3.54s dominan, region cuma 0.55–1.64s; cache hits 32/32 identik. Proyeksi control+cache ≈ 2.1s/cert | FAIL/CLOSED — NC-001 tetap OFF | 1 trial eksplisit control rapid_tess + anchor cache kalau mau flip flag |
 | HYB-003 | Hybrid organizer TANPA LFM: doc-engine = teks rapid-only (sudah dihitung baseline), rule merge sama; eval offline artefak existing = 0 OCR baru | Organizer 26.5→**34.7% (+8.2pt)**, fuzzy **77.5%** (terbaik); nomor/dates no-regress (=); MACRO **47.26→49.2% (+1.94pt)** @ 0 biaya. Kalah tipis dr HYB-002 (50.75%), kalahkan HYB-001 DocTR (46.8%) | PASS — winner non-LFM | Produksi: merge teks rapid intermediate di `ocr_fallback.py` (zero extra latency) = keputusan user |
+| HYB-004 | Angka resmi komposit all-74 utk HYB-003: hybrid rapid di 49 scan + baseline di 25 embedded, evaluasi in-memory harness sama | All-74: MACRO exact **50.32%** (+3.06pt vs baseline), fuzzy 63.87% — **gap ke komposit LFM tinggal 0.33pt @ 0 biaya** | PASS | Angka resmi non-LFM terbaik |
+| OCR-009 | Probe ppu-paddle-ocr (ONNX Bun binary, BEDA dr OCR-001/002): v6-tiny/v6-small/v5-en-server × 10 stem, canvas-native + watchdog RSS. ⚠️ Run pertama tanpa guard = OOM WSL → hardening permanen (page-per-page render, RSS watchdog SIGKILL, RLIMIT_AS tidak cocok utk JS/WASM) | Peak RSS: tiny ~1.7GB, small ~2.4GB, **v5-en-server ~3GB → kill 10/10 CLOSED**. Akurasi: nomor tiny/small **14.3%** vs baseline 28.6% (FAIL digit pola PP-OCR); dates small regress 66.7%; organizer-fuzzy tiny **80%** tertinggi | tiny/small FAIL gate; en-server CLOSED | v6-medium butuh RSS >3GB (hanya dgn headroom); ONNX CUDA EP saat GPU path siap |
+| HYB-005 | Hybrid organizer ppu-v6-tiny + baseline (organizer-fuzzy ppu 80% tertinggi), like-for-like subset-10 vs HYB-003 | MACRO 42.2% < HYB-003 44.4% pada subset sama; organizer exact 10% vs rapid 20%; biaya +~2.7s/cert tak dibenarkan | FAIL/CLOSED — HYB-003 tetap winner non-LFM | Engine non-LFM yg kalahkan organizer-exact rapid tanpa regress digit |
 
 ## Angka pembanding antar-engine (field-level, subset scan)
 
@@ -61,6 +64,9 @@ Sumber: `docs/report/runs_summary.md` §OCR experiment + ledger.
 | LFM2.5-VL-3B (full 49, OCR-008) | 51.5% | **40.8%** | 85.7% | 49.75% | ~77–95s | Organizer exact terbaik semua engine tunggal; nomor regress −6.1pt |
 | **Hybrid LFM+baseline (HYB-002)** | **57.6%** | **40.8%** | **85.7%** | **50.75%** | batch-only (~77s LFM) | **Winner cabang OCR** — merge rule statis, oracle=hybrid |
 | **Hybrid rapid↔rapid_tess (HYB-003)** | 57.6% | 34.7% | 85.7% | **49.2%** | **~0 tambahan** | Winner non-LFM — organizer dr teks rapid yg memang sudah dihitung pipeline |
+| ppu v6-tiny (subset-10, OCR-009) | 14.3% | 10% / fuzzy 80% | 88.9% | 40.0% | ~2.7s, peak 1.7GB | Digit hancur (pola PP-OCR); organizer-fuzzy tertinggi |
+| ppu v6-small (subset-10, OCR-009) | 14.3% | 10% / fuzzy 60% | 66.7% | 31.1% | ~3.7s, peak 2.4GB | FAIL — dates & nomor regress |
+| ppu v5-en-server (subset-10, OCR-009) | — | — | — | — | kill @~3GB RSS | CLOSED — RSS melebihi budget WSL 8GB (watchdog 10/10) |
 
 ## Peta pola yang terbukti (jangan dilupakan saat revive)
 

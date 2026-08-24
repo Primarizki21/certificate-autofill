@@ -17,8 +17,11 @@
 | **HYB-002** (`tests/benchmark_hybrid_ocr.py eval --doc-label lfm25`, `eval_hybrid_{10,49}.json`) | Pola HYB-001 dgn LFM sebagai doc-engine: lolos gate? | Semua gate PASS: nomor **57.6% (=** — merge pertahankan baseline), dates 85.7% (=), organizer 26.5→**40.8%**, MACRO 47.26→**50.75%** (+3.95pt atas HYB-001 DocTR 46.8%). Oracle = hybrid. 10-stem repro persis probe OCR-007 | **PASS — winner baru cabang OCR** |
 | **NC-003** (`tests/benchmark_nomor_crop.py`: `tess_lines_psm7`, `rapid_tess_psm6`, stage timing, anchor cache) | Region murah bisa pertahankan +3pt NC-001 di ≤2.0s/cert? | vs control 60.6%: lines7 **57.6%** FAIL, rt6 **54.5%** FAIL. Stage timing: anchor full-page = biaya dominan (0.85–3.54s); region cuma 0.55–1.64s. Anchor cache `{stem: bbox}` terbukti (32/32 hits, teks identik) | **FAIL/CLOSED — NC-001 tetap OFF** |
 | **HYB-003** (`benchmark_hybrid_ocr.py --doc-label rapid` atas artefak `baseline_rapid/` existing, run `hybrid_rapid_org`) | Gain organizer tanpa biaya LFM? | Organizer 26.5→**34.7% (+8.2pt)**, fuzzy →**77.5%**; nomor/dates no-regress (=); MACRO **47.26→49.2% (+1.94pt)** @ 0 OCR baru — kalahkan HYB-001 DocTR (46.8%), kalah tipis dr HYB-002 (50.75%) dgn gap persis = selisih organizer LFM vs rapid | **PASS — winner non-LFM** |
+| **HYB-004** (`composite_rapid_hybrid/eval_all74.json`, evaluasi in-memory harness) | Angka resmi komposit all-74 HYB-003 tanpa LFM? | MACRO exact **50.32%** (+3.06pt vs baseline 47.26%), fuzzy 63.87%; nomor komposit 61.5%, organizer 32.4%, dates 85.5%. **Gap ke komposit LFM tinggal 0.33pt @ 0 biaya** | **PASS** |
+| **OCR-009** (`tests/benchmark_ppu_probe.py`, run `probe_ppu`) | ppu-paddle-ocr (PP-OCRv6/v5 ONNX) layak? | ⚠️ Run pertama tanpa guard → OOM WSL user; hardening permanen: page-per-page render + watchdog RSS SIGKILL (RLIMIT_AS tak cocok utk JS/WASM). Peak RSS: tiny ~1.7GB, small ~2.4GB, v5-en-server ~3GB → kill 10/10 CLOSED. Akurasi subset-10: nomor tiny/small 14.3% vs baseline 28.6% (FAIL digit); dates small 66.7% regress; organizer-fuzzy tiny 80% tertinggi | **tiny/small FAIL gate; en-server CLOSED (RSS)** |
+| **HYB-005** (`eval_hyb_ppu_10.json` vs `eval_hyb_rapid_subset10.json`) | Hybrid organizer ppu-v6-tiny kalahkan HYB-003? | Subset-10 like-for-like: MACRO **42.2% < 44.4%** HYB-003; organizer exact 10% vs rapid 20%; biaya +~2.7s/cert sia-sia | **FAIL/CLOSED — HYB-003 tetap winner non-LFM** |
 
-Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003) +
+Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003/HYB-004/OCR-009/HYB-005) +
 
 ---
 
@@ -45,18 +48,16 @@ Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003
 ---
 
 ## Frontier terbuka (urutan saran)
-
-1. **Keputusan user HYB-002 produksi**: organizer +14.3pt & MACRO 50.75%
-   menunggu keputusan porting — tapi LFM batch-only (~77s/cert, RSS ~4GB)
-   → realistis hanya dengan F7 OCR queue. Alternatif jalur eksperimen:
-   HYB-KB/LLM di atas HYB-002 (frontier v37 masih berlaku).
-2. **NC-003 re-try sempit**: 1 trial eksplisit control multi-config rapid_tess
-   + anchor cache (proyeksi ≈2.1s/cert, borderline gate ≤2.0s). Kalau lolos
-   sekaligus nomor ≥60.6% → baru bicara flip `ENABLE_OCR_NUMBER_2PASS`.
-3. **Komposit hybrid all-74**: eval_hybrid_49 baru cover scan; komposit
-   hybrid (hybrid scan + baseline embedded) proyeksi ≈51–52% MACRO — satu
-   command eval tambahan kalau dibutuhkan angka resmi.
-4. DocTR probe korpus penuh & engine lain: tetap CLOSED per ledger.
+1. **Keputusan produksi non-LFM**: HYB-003 (49.2% scan / komposit **50.32%**, zero latency) = kandidat utama;
+   HYB-002 LFM deprioritized sesuai preferensi user (batch-only ~77s/cert, gap cuma +0.43pt scan).
+2. **NC-003 re-try sempit**: control multi-config rapid_tess + anchor cache (~2.1s/cert proyeksi vs gate ≤2.0s);
+   PASS + nomor ≥60.6% → baru bicara flip `ENABLE_OCR_NUMBER_2PASS`.
+3. **GPU TERDETEKSI** — `nvidia-smi`: RTX 5050 8GB, driver 595.95, CUDA 13.2 (header workstation hanya
+   sebut iGPU AMD). Konsekuensi: GOT-OCR 2.0 & engine GPU lain kembali layak diprobe; OCR-001..004 yang
+   CLOSED karena CPU/RAM bisa di-re-try dengan jalur GPU.
+4. Sisa kandidat goal user "coba banyak OCR selain LFM": Keras-OCR, GOT-OCR 2.0, TrOCR, manga-ocr
+   (manga-ocr prioritas terakhir — ekspektasi rendah untuk Latin). ppu-paddle-ocr CLOSED per OCR-009/HYB-005.
+5. C1: serang `nama_kegiatan` (exact 6.1% semua varian) — kemungkinan bukan soal OCR tapi extractor/matching.
 
 ## Verifikasi sesi
 
