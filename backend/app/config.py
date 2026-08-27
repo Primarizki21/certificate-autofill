@@ -30,6 +30,9 @@ class Settings:
     # SERT/dot/space). DEFAULT FALSE — eksperimen belum final (handoff v29);
     # aktifkan via ENABLE_ORGANIZER_NORMALIZATION=true setelah re-eval disetujui.
     enable_organizer_normalization: bool = os.getenv("ENABLE_ORGANIZER_NORMALIZATION", "false").lower() == "true"
+    # Combined v2 Staging (dummy port 0 LLM bundle: AKT-005 + ORG-004 + PROD-002 + ROUTER-004):
+    # DEFAULT FALSE (gated) — aktifkan via ENABLE_COMBINED_V2=true untuk aktivasi staging pipeline.
+    enable_combined_v2: bool = os.getenv("ENABLE_COMBINED_V2", "false").lower() == "true"
     max_job_retries: int = int(os.getenv("MAX_JOB_RETRIES", "3"))
     processing_mode: str = os.getenv("PROCESSING_MODE", "background").lower()
     db_worker_poll_seconds: int = int(os.getenv("DB_WORKER_POLL_SECONDS", "2"))
