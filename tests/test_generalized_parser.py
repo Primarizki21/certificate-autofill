@@ -31,7 +31,7 @@ def test_specta_english_interval():
     assert m["waktu_selesai_pelaksanaan"].value == "07/12/2024"
     assert m["nama_kegiatan_sertifikasi"].value == "SPECTA"
     assert m["penyelenggara_kegiatan"].value == "HIMATESDA"
-    assert m["tingkat"].value == "Fakultas"
+    assert m["tingkat"].value == "Departemen/Program Studi"
     assert m["jenis_penyelenggara"].value == "PTN di Indonesia"
     assert m["jenis_kegiatan"].value == "Panitia Dalam Suatu Kegiatan Kemahasiswaan"
 

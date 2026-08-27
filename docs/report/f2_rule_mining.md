@@ -1,6 +1,6 @@
 # F2 — Rule Mining dari 29 Cert LLM-Fallback
 
-> Generasi: 2026-08-10 08:32:41 | GT v9 + matcher v2 | router = llm_router_v4 + kandidat rule | 5-fold seed 42
+> Generasi: 2026-08-27 09:58:44 | GT v9 + matcher v2 | router = llm_router_v4 + kandidat rule | 5-fold seed 42
 
 ## Coverage
 

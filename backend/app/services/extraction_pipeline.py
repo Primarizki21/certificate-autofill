@@ -91,6 +91,12 @@ def run_extraction_pipeline(
                 norm_nomor, 0.95, "regex_certificate_number"
             )
 
+    # Combined v2 Staging (dummy port 0 LLM bundle: AKT-005 + ORG-004 + PROD-002 + ROUTER-004).
+    # DEFAULT OFF (config) — aktifkan via ENABLE_COMBINED_V2=true.
+    if settings.enable_combined_v2:
+        from app.services.combined_extractor import apply_combined_v2
+
+        extracted = apply_combined_v2(extracted, raw_text)
     mapped = map_fields_to_form(extracted, tahun_akademik=tahun_akademik, bukti_fisik=bukti_fisik)
 
     return PipelineResult(

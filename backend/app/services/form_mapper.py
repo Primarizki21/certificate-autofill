@@ -21,8 +21,12 @@ def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str
     mapped["kelompok_kegiatan"] = ExtractedValue(kelompok, 0.86, "rule_mapper")
     mapped["jenis_kegiatan"] = ExtractedValue(jenis, 0.86, "rule_mapper")
 
-    tingkat, tingkat_conf = map_tingkat_v8(full_text, organizer, upper, activity, raw_role)
-    mapped["tingkat"] = ExtractedValue(tingkat, tingkat_conf, "rule_mapper")
+    if "tingkat" in extracted and extracted["tingkat"].value:
+        mapped["tingkat"] = extracted["tingkat"]
+        tingkat = extracted["tingkat"].value
+    else:
+        tingkat, tingkat_conf = map_tingkat_v8(full_text, organizer, upper, activity, raw_role)
+        mapped["tingkat"] = ExtractedValue(tingkat, tingkat_conf, "rule_mapper")
 
     jabatan = map_jabatan(raw_role)
     mapped["prestasi_partisipasi_jabatan"] = ExtractedValue(jabatan, 0.84 if jabatan else 0.0, "rule_mapper")
