@@ -21,6 +21,8 @@
 | **OCR-009** (`tests/benchmark_ppu_probe.py`, run `probe_ppu`) | ppu-paddle-ocr (PP-OCRv6/v5 ONNX) layak? | ⚠️ Run pertama tanpa guard → OOM WSL user; hardening permanen: page-per-page render + watchdog RSS SIGKILL (RLIMIT_AS tak cocok utk JS/WASM). Peak RSS: tiny ~1.7GB, small ~2.4GB, v5-en-server ~3GB → kill 10/10 CLOSED. Akurasi subset-10: nomor tiny/small 14.3% vs baseline 28.6% (FAIL digit); dates small 66.7% regress; organizer-fuzzy tiny 80% tertinggi | **tiny/small FAIL gate; en-server CLOSED (RSS)** |
 | **HYB-005** (`eval_hyb_ppu_10.json` vs `eval_hyb_rapid_subset10.json`) | Hybrid organizer ppu-v6-tiny kalahkan HYB-003? | Subset-10 like-for-like: MACRO **42.2% < 44.4%** HYB-003; organizer exact 10% vs rapid 20%; biaya +~2.7s/cert sia-sia | **FAIL/CLOSED — HYB-003 tetap winner non-LFM** |
 | **OCR-010** (`tests/benchmark_got_probe.py` + `tests/got_worker.py`, run `probe_got`) | GOT-OCR 2.0 layak di RTX 5050? | Setup: bobot HF `stepfun-ai/GOT-OCR2_0` → `~/.cache/got20/hf`; transformers 4.37 via `~/.cache/got20/legacy` (PYTHONPATH di-depan; project 5.14 gagal). 10/10 ok ~16s/cert, peak RSS 2.3GB / VRAM 4.55GB — guard aman. Teks VISUAL terbaik tapi field: nomor 14.3%, dates 77.8% (regress), MACRO single 35.6%; hybrid 42.2% < HYB-003 44.4%. Insight: prosa VLM menghilangkan struktur baris yg dicari regex extractor | **FAIL/CLOSED** |
+| **OCR-011** (`tests/benchmark_trocr_probe.py` + `tests/trocr_worker.py`, run `probe_trocr`) | TrOCR recognition kalahkan baseline? | 10/10 ok ~15s/cert GPU, peak RSS 2.5GB/VRAM 2.7GB. Deteksi bagus (13-32 regions, RapidOCR). TAPI recognition banyak typo ("SERTIHKAT", "RAOTA"), ALL-CAPS → **extractor 0/0 semua field**. Hybrid: 40.0% = baseline (0 gain) | **FAIL/CLOSED — TrOCR-base-printed tdk generalisasi font Indonesia** |
+| **OCR-012** (`tests/benchmark_keras_probe.py` + `tests/keras_worker.py`) | Keras-OCR layak? | **GAGAL SETUP** — keras-ocr 0.9.3 tdk kompatibel Keras 3.x/TF 2.21 (`Dense(weights=...)` dihapus). Project stale 2022 | **CLOSED (incompatible)** |
 
 Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003/HYB-004/OCR-009/HYB-005) +
 
@@ -58,7 +60,7 @@ Detail angka: `docs/experiments_ledger.md` (entri OCR-008/HYB-002/NC-003/HYB-003
    CLOSED karena CPU/RAM bisa di-re-try dengan jalur GPU.
 4. Sisa kandidat goal user "coba banyak OCR selain LFM": Keras-OCR, GOT-OCR 2.0, TrOCR, manga-ocr
    (manga-ocr terakhir, ekspektasi rendah utk Latin). ppu CLOSED per OCR-009/HYB-005;
-   **GOT-OCR 2.0 CLOSED per OCR-010** (re-try: `ocr_type='ocr-2'` / extractor agnostik-struktur).
+   **GOT-OCR 2.0 CLOSED per OCR-010** (re-try: `ocr_type='ocr-2'` / extractor agnostik-struktur). TrOCR/keras-ocr CLOSED (OCR-011/012).
 5. C1: serang `nama_kegiatan` (exact 6.1% semua varian) — kemungkinan bukan soal OCR tapi extractor/matching.
 
 ## Verifikasi sesi

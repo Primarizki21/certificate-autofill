@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 101 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 102 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -25,6 +25,8 @@
 | `ocr_experiment/hybrid_rapid_org` | HYB-003: hybrid organizer rapid-only tanpa LFM (MACRO 49.2%, organizer +8.2pt, 0 biaya) | — | — | — | — |
 | `ocr_experiment/composite_rapid_hybrid` | HYB-004 komposit HYB-003 all-74: MACRO 50.32% — gap ke LFM 0.33pt @ 0 biaya | — | — | — | — |
 | `ocr_experiment/probe_ppu` | OCR-009 probe ppu-paddle-ocr (v6-tiny/small FAIL digit, v5-en-server CLOSED RSS ~3GB) + HYB-005 hybrid FAIL | — | — | — | — |
+| `ocr_experiment/probe_trocr` | OCR-011 probe TrOCR-base-printed + RapidOCR detection (FAIL/CLOSED — recognition typo, extractor 0/0) | — | — | — | — |
+| `ocr_experiment/probe_keras` | OCR-012 probe Keras-OCR (CLOSED — keras-ocr 0.9.3 incompatible Keras 3.x/TF 2.21) | — | — | — | — |
 
 ## f_bias winner — field exact (run_llm_v4_20260805_163541)
 
@@ -80,6 +82,7 @@
 | `ocr_experiment/probe_doctr` | doctr | 40.0% | —ms | scan=10 emb=0; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/probe_got` |  | — | —ms |  |
 | `ocr_experiment/probe_ppu` |  | — | —ms |  |
+| `ocr_experiment/probe_trocr` |  | — | —ms |  |
 | `ocr_experiment/trial_a_easyocr` | easy | 38.3% | —ms | scan=49 emb=?; scan org 36.7% nomor 15.2% |
 | `ocr_experiment/trial_a_easyocr_gpu` | easy | 42.3% | 9716ms | scan=49 emb=?; scan org 28.6% nomor 33.3% |
 | `ocr_experiment/trial_a_paddle26` | paddle | 43.3% | 10692ms | scan=49 emb=?; scan org 32.6% nomor 39.4% |
@@ -186,6 +189,7 @@
 | `ocr_experiment/probe_doctr` | 2026-08-06 | ocr_trial |  | — | 40.0% | — | — |  | scan=10 emb=0; scan org 10.0% nomor 14.3% |
 | `ocr_experiment/probe_got` |  | ocr_trial |  | — | — | — | — |  |  |
 | `ocr_experiment/probe_ppu` |  | ocr_trial |  | — | — | — | — |  |  |
+| `ocr_experiment/probe_trocr` |  | ocr_trial |  | — | — | — | — |  |  |
 | `ocr_experiment/trial_a_easyocr` | 2026-08-04 | ocr_trial |  | — | 38.3% | — | — |  | scan=49 emb=?; scan org 36.7% nomor 15.2% |
 | `ocr_experiment/trial_a_easyocr_gpu` | 2026-08-04 | ocr_trial |  | — | 42.3% | — | — |  | scan=49 emb=?; scan org 28.6% nomor 33.3% |
 | `ocr_experiment/trial_a_paddle26` | 2026-08-04 | ocr_trial |  | — | 43.3% | — | — |  | scan=49 emb=?; scan org 32.6% nomor 39.4% |

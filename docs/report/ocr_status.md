@@ -48,6 +48,8 @@
 | OCR-009 | Probe ppu-paddle-ocr (ONNX Bun binary, BEDA dr OCR-001/002): v6-tiny/v6-small/v5-en-server × 10 stem, canvas-native + watchdog RSS. ⚠️ Run pertama tanpa guard = OOM WSL → hardening permanen (page-per-page render, RSS watchdog SIGKILL, RLIMIT_AS tidak cocok utk JS/WASM) | Peak RSS: tiny ~1.7GB, small ~2.4GB, **v5-en-server ~3GB → kill 10/10 CLOSED**. Akurasi: nomor tiny/small **14.3%** vs baseline 28.6% (FAIL digit pola PP-OCR); dates small regress 66.7%; organizer-fuzzy tiny **80%** tertinggi | tiny/small FAIL gate; en-server CLOSED | v6-medium butuh RSS >3GB (hanya dgn headroom); ONNX CUDA EP saat GPU path siap |
 | HYB-005 | Hybrid organizer ppu-v6-tiny + baseline (organizer-fuzzy ppu 80% tertinggi), like-for-like subset-10 vs HYB-003 | MACRO 42.2% < HYB-003 44.4% pada subset sama; organizer exact 10% vs rapid 20%; biaya +~2.7s/cert tak dibenarkan | FAIL/CLOSED — HYB-003 tetap winner non-LFM | Engine non-LFM yg kalahkan organizer-exact rapid tanpa regress digit |
 | OCR-010 | Probe GOT-OCR 2.0 (VLM ~580M end-to-end) di RTX 5050 via torch project + stack transformers 4.37 terpisah (`~/.cache/got20/legacy` di-PYTHONPATH-kan); worker subprocess load-sekali-per-chunk + watchdog RSS+VRAM | 10/10 ok (~16s/cert, peak RSS 2.3GB / VRAM 4.55GB). Teks VISUAL terbaik (nomor benar, urutan semantik), TAPI field: nomor **14.3%**, dates 77.8% regress, MACRO single **35.6%**; hybrid 42.2% < HYB-003 44.4%. Insight: output prosa menghilangkan struktur baris yg dicari regex | FAIL/CLOSED | `ocr_type='ocr-2'` two-stage; extractor agnostik-struktur (gabung riset C1) |
+| OCR-011 | Probe TrOCR-base-printed (333M) + RapidOCR detection. Butuh transformers 4.37 (legacy PYTHONPATH). | 10/10 ok ~15s/cert GPU, peak RSS 2.5GB/VRAM 2.7GB. Deteksi bagus (13-32 regions). Recognition banyak typo → extractor 0/0 field. Hybrid 40.0% = baseline | FAIL/CLOSED | TrOCR dilatih SROIE (resi Inggris) → tdk font Indonesia; fine-tune? |
+| OCR-012 | Probe Keras-OCR (CRAFT+CRNN, TF-based). Venv terpisah TF 2.21 + keras-ocr 0.9.3 | **GAGAL SETUP** — keras-ocr 0.9.3 tdk kompatibel Keras 3.x: Dense(weights=...) dihapus. Stale project 2022 | CLOSED (incompatible) | Downgrade TF 2.15 mungkin, tapi tdk layak |
 
 ## Angka pembanding antar-engine (field-level, subset scan)
 
@@ -69,6 +71,8 @@ Sumber: `docs/report/runs_summary.md` §OCR experiment + ledger.
 | ppu v6-small (subset-10, OCR-009) | 14.3% | 10% / fuzzy 60% | 66.7% | 31.1% | ~3.7s, peak 2.4GB | FAIL — dates & nomor regress |
 | ppu v5-en-server (subset-10, OCR-009) | — | — | — | — | kill @~3GB RSS | CLOSED — RSS melebihi budget WSL 8GB (watchdog 10/10) |
 | GOT-OCR 2.0 (subset-10, OCR-010) | 14.3% | 10% / fuzzy 50% | 77.8% | 35.6% | ~16s/cert GPU, VRAM 4.5GB | Teks visual terbaik tapi ekstraksi terburuk — prosa vs regex |
+| TrOCR-base-printed (subset-10, OCR-011) | 0% (tidak terdeteksi) | 0% / fuzzy 0% | 0% | 0% | ~15s/cert GPU, VRAM 2.7GB | Recognition typo, ALL-CAPS, extractor gagal parse |
+| Keras-OCR (OCR-012) | — | — | — | — | N/A (gagal setup) | Incompatible TF 2.21 / Keras 3.x |
 
 ## Peta pola yang terbukti (jangan dilupakan saat revive)
 

@@ -46,6 +46,8 @@ AUTHORITATIVE = {
     "ocr_experiment/hybrid_rapid_org": "HYB-003: hybrid organizer rapid-only tanpa LFM (MACRO 49.2%, organizer +8.2pt, 0 biaya)",
     "ocr_experiment/composite_rapid_hybrid": "HYB-004 komposit HYB-003 all-74: MACRO 50.32% — gap ke LFM 0.33pt @ 0 biaya",
     "ocr_experiment/probe_ppu": "OCR-009 probe ppu-paddle-ocr (v6-tiny/small FAIL digit, v5-en-server CLOSED RSS ~3GB) + HYB-005 hybrid FAIL",
+    "ocr_experiment/probe_trocr": "OCR-011 probe TrOCR-base-printed + RapidOCR detection (FAIL/CLOSED — recognition typo, extractor 0/0)",
+    "ocr_experiment/probe_keras": "OCR-012 probe Keras-OCR (CLOSED — keras-ocr 0.9.3 incompatible Keras 3.x/TF 2.21)",
 }
 
 # f_bias winner utk seksi "f_bias winner — field exact".
