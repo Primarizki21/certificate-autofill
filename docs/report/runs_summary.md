@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 102 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 103 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -72,6 +72,7 @@
 | `ocr_experiment/corpus_nomor_cheap_tess6` | nomor_crop | 47.3% | 4267ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop` | nomor_crop | 47.8% | 5231ms | scan=49 emb=?; scan org 26.5% nomor 60.6% |
 | `ocr_experiment/corpus_nomor_crop_lines7` | nomor_crop | 47.3% | 4431ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/corpus_nomor_crop_retry_ctrl_cache` | nomor_crop | 47.3% | 6048ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_rt6` | nomor_crop | 46.8% | 2859ms | scan=49 emb=0; scan org 26.5% nomor 54.5% |
 | `ocr_experiment/hybrid_rapid_org` |  | — | —ms |  |
 | `ocr_experiment/hybrid_rapid_org [hybrid_49]` | rapid_tess+doctr | 49.2% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6% |
@@ -179,6 +180,7 @@
 | `ocr_experiment/corpus_nomor_cheap_tess6` | 2026-08-06 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop` | 2026-08-06 | ocr_trial |  | — | 47.8% | — | — |  | scan=49 emb=?; scan org 26.5% nomor 60.6% |
 | `ocr_experiment/corpus_nomor_crop_lines7` | 2026-08-24 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
+| `ocr_experiment/corpus_nomor_crop_retry_ctrl_cache` | 2026-08-27 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_rt6` | 2026-08-24 | ocr_trial |  | — | 46.8% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 54.5% |
 | `ocr_experiment/hybrid_rapid_org` |  | ocr_trial |  | — | — | — | — |  |  |
 | `ocr_experiment/hybrid_rapid_org [hybrid_49]` |  | ocr_trial |  | — | 49.2% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6% |
