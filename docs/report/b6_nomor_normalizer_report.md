@@ -1,6 +1,6 @@
 # B6 — Nomor Normalizer v6 (length-preserving DPKKA + guard Roman, N=74)
 
-> Generasi: 2026-09-01 19:18:38 | GT v9 + matcher v2.
+> Generasi: 2026-09-01 19:27:21 | GT v9 + matcher v2.
 
 | Varian | exact | fuzzy |
 |---|---|---|
