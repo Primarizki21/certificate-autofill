@@ -28,6 +28,7 @@
 | `ocr_experiment/probe_trocr` | OCR-011 probe TrOCR-base-printed + RapidOCR detection (FAIL/CLOSED — recognition typo, extractor 0/0) | — | — | — | — |
 | `ocr_experiment/probe_keras` | OCR-012 probe Keras-OCR (CLOSED — keras-ocr 0.9.3 incompatible Keras 3.x/TF 2.21) | — | — | — | — |
 | `ocr_experiment/tesseract_primary_v4` | OCR-TESS-V4-001: Tesseract-Primary + Composite v4.x (Scan-49 78.61%, All-74 77.10%, nomor 87.88%) | — | — | — | — |
+| `ocr_experiment/tesseract_pure_all74_v4` | OCR-TESS-PURE-001: Pure 100% Tesseract OCR All-74 + Composite v4.x (Framework 77.10%, Emb-25 74.31% zero-loss) | — | — | — | — |
 
 ## f_bias winner — field exact (run_llm_v4_20260805_163541)
 
