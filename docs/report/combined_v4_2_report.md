@@ -1,6 +1,6 @@
 # EXP-V4-003: v4.x Benchmark — v4.0 (Baseline) vs v4.1 vs v4.2 (Candidate)
 
-- **Date**: 2026-09-01 11:05:17
+- **Date**: 2026-09-01 13:18:45
 - **Ground Truth**: `Ground_Truth_Sertifikat_v9.csv`
 - **Dataset Size**: 74 certificates (440 evaluation cells)
 - **v4.0 MACRO Exact**: **75.68%**
