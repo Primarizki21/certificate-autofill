@@ -74,10 +74,11 @@ def _repair_roman_gated(num: str, dpkka_ctx: bool = False) -> tuple[str, bool]:
         roman_raw = m.group(2)
         slash2 = m.group(3)
         year = m.group(4)
-        # Segmen PURE-DIGIT (hanya 1/l/| — digit OCR-confusable): ini format
-        # angka bulan (mis. "1" = Januari), BUKAN bulan Romawi — jangan diubah,
-        # tandai verifikasi (fix B6 #3: Roman overcorrection).
-        if re.fullmatch(r"[1l|L]+", roman_raw):
+        # Segmen PURE-DIGIT "1" (format angka bulan, mis. "1" = Januari):
+        # BUKAN bulan Romawi — jangan diubah, tandai verifikasi (fix B6 #3).
+        # "l"/"|" TIDAK termasuk: keduanya OCR dari "I" (bukan digit) dan
+        # harus lewat pemetaan Roman (_roman_map_char) agar di-repair benar.
+        if re.fullmatch(r"[1]+", roman_raw):
             if dpkka_ctx:
                 repaired = True
                 # Hanya "1"/"l"/"|" TUNGGAL ambigu (OCR dari I) yang dikonversi;
