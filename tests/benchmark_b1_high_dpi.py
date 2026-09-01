@@ -1,22 +1,29 @@
-"""B1 — Fast Semantic Anchor High-DPI: benchmark 3+1 varian nomor-crop pada 49 scan cert.
+"""B1 — Fast Semantic Anchor High-DPI: benchmark nomor-crop pada 49 scan cert.
 
-Varian:
-  A. Baseline (tanpa crop) — nomor dari teks full-page rapid_tess (korpus cached).
-  B. Control NC-001 — anchor full-page RapidOCR @ render 3.0x + region re-render
-     6.0x + region OCR rapid_tess multi-config. Pembanding resmi (60.6% nomor).
-  C. B1 fast anchor — `resolve_number_bbox_fast` (text-search PyMuPDF dulu,
-     fallback RapidOCR @ 1.5x) + region re-render 6.0x + region OCR SAMA dgn B.
-  D. B1-module — `high_dpi_crop.crop_and_ocr_number_region` (path produksi,
-     search_for + psm 6). Diukur utk melengkapi klaim plan (scan: 0 text layer).
+Varian (korpus scan-49 yang sama, eval GT v9 + matcher v2):
+  A. Baseline (tanpa crop)      — teks full-page rapid_tess (korpus cached,
+                                   `baseline_rapid_tess/`). Nomor 57.6% (NC-004).
+  B. Control NC-001             — teks hasil crop anchor full-page RapidOCR @3x
+                                   + region re-render 6x + region rapid_tess
+                                   multi-config (`corpus_nomor_crop/` cached).
+                                   Nomor 60.6% (NC-001, angka pembanding resmi).
+  C. B1 fast anchor (fresh)     — `resolve_number_bbox_fast` (text-search
+                                   PyMuPDF dulu; fallback RapidOCR @1.5x) +
+                                   region re-render 6x + region OCR:
+                                   - C1 multi-config rapid_tess (kualitas = control)
+                                   - C2 tess psm6 tunggal (murah, kurva tradeoff)
+  D. B1-module                  — `high_dpi_crop.crop_and_ocr_number_region`
+                                   (path produksi: search_for + psm 6).
 
-Gate B1 (dari plan, koreksi aritmetika FL-1: 60.6% = 20/33, BUKAN 19/33):
+Anchor B1 diukur fresh (stage timing); control & baseline dievaluasi dari
+artefak cached (runtime 0). Latency control dirujuk dari artefak NC-003/004
+(anchor 3.54s uncached; total 6.05s/cert, NC-004).
+
+Gate B1 (plan, koreksi aritmetika FL-1: 60.6% = 20/33, bukan 19/33):
   - nomor scan-49 exact >= 60.6% (20/33 sel GT nomor terisi).
-  - rata-rata waktu anchor B1 < 0.50s/cert (anchor control NC-003: 3.54s).
-  - pertambahan latency total (B1 vs A) <= 1.80s/cert.
-  - zero regression tanggal & penyelenggara (crop hanya mengubah nomor).
-
-Anchor control di-cache dari `corpus_nomor_crop_retry_ctrl_cache/anchors.json`
-(NC-004) — cache hit = skip full-page RapidOCR (anchor sudah terukur NC-003/004).
+  - rata-rata waktu anchor B1 < 0.50s/cert.
+  - pertambahan latency total pipeline <= 1.80s/cert.
+  - zero regression tanggal & penyelenggara.
 
 Usage:
     uv run python -m tests.benchmark_b1_high_dpi            # full 49 scan
@@ -29,7 +36,6 @@ import argparse
 import gc
 import json
 import os
-import re
 import sys
 import time
 from datetime import datetime
@@ -40,26 +46,18 @@ os.environ.setdefault("APP_ENV", "development")
 
 import fitz
 
-from app.services.field_extractor import extract_certificate_number
+from app.services.form_mapper import map_fields_to_form
+from tests.benchmark_hybrid_ocr import extract_all
+from tests.evaluation_framework import EVAL_FIELDS, evaluate_row
 from tests import ocr_engine as oe
-from tests.benchmark_nomor_crop import (
-    CRENDER_ZOOM,
-    RUNS_DIR,
-    ZOOM,
-    _crop_number_from_pdf,
-    _line_bbox,
-    find_number_line,
-    merge_full,
-)
+from tests.benchmark_nomor_crop import CRENDER_ZOOM, RUNS_DIR, merge_full
 from tests.matchers import match_field
 from tests.ocr_high_dpi_anchor import resolve_number_bbox_fast
 
 REPO = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 MANIFEST = os.path.join(REPO, "tests", "layout_manifest.json")
 BASELINE_DIR = os.path.join(RUNS_DIR, "baseline_rapid_tess", "extracted_texts")
-CONTROL_ANCHOR_CACHE = os.path.join(
-    RUNS_DIR, "corpus_nomor_crop_retry_ctrl_cache", "anchors.json"
-)
+CONTROL_DIR = os.path.join(RUNS_DIR, "corpus_nomor_crop", "extracted_texts")
 GT_CSV = os.environ.get("GT_CSV_PATH", os.path.join(REPO, "Ground_Truth_Sertifikat_v9.csv"))
 NOMOR_FIELD = "nomor_bukti_fisik_nomor_sertifikasi"
 
@@ -67,8 +65,14 @@ GATE_NOMOR_MIN = 60.6       # % (NC-001 control, = 20/33)
 GATE_ANCHOR_MAX = 0.50      # s/cert (anchor B1; control NC-003 = 3.54s)
 GATE_LATENCY_MAX = 1.80     # s/cert total pipeline delta vs baseline
 
-# Gate check hanya pada varian B1 (C); A/B = pembanding.
-GATE_VARIANT = "b1_fast"
+# Referensi timing control dari artefak NC-003/004 (dikutip, bukan diukur ulang).
+CONTROL_REF = {
+    "anchor_uncached_s": 3.54,   # NC-003 stage timing
+    "total_avg_s": 6.05,         # NC-004 avg (cache-assisted)
+}
+# Referensi latency pipeline baseline (rapid_tess full-page, scan-49):
+# dari ocr_meta.json baseline_rapid_tess (avg_seconds 8.609).
+BASELINE_REF_TOTAL_S = 8.609
 
 
 def _load_manifest() -> dict[str, str]:
@@ -82,23 +86,13 @@ def _load_gt() -> dict[str, dict]:
     return {os.path.splitext(r["nama_file"])[0]: r for r in load_csv(GT_CSV)}
 
 
-def _load_baseline_text(stem: str) -> str:
-    with open(os.path.join(BASELINE_DIR, f"{stem}.txt")) as f:
+def _load_text(stem: str, d: str) -> str:
+    with open(os.path.join(d, f"{stem}.txt")) as f:
         return "\n".join(l for l in f.read().splitlines() if not l.startswith("#")).strip()
 
 
-def _render_region_from_pdf(path: str, rect: fitz.Rect) -> bytes:
-    """Re-render region pada zoom 6.0x dari PDF asli (piksel nyata)."""
-    doc = fitz.open(path)
-    pix = doc[0].get_pixmap(matrix=fitz.Matrix(CRENDER_ZOOM, CRENDER_ZOOM), clip=rect, alpha=False)
-    region = pix.tobytes("png")
-    del pix
-    doc.close()
-    return region
-
-
 def _pad_rect(rect: fitz.Rect, page_w: float, page_h: float) -> fitz.Rect:
-    """Padding sama dgn harness: angka bisa di kanan label / baris berikut."""
+    """Padding sama dgn harness NC: angka bisa di kanan label / baris berikut."""
     w = rect.width
     h = rect.height
     pad = max(5.0, 0.05 * w)
@@ -110,72 +104,69 @@ def _pad_rect(rect: fitz.Rect, page_w: float, page_h: float) -> fitz.Rect:
     )
 
 
-def _b1_crop_from_pdf(path: str, rapid, anchor_bbox=None) -> tuple[str, dict]:
-    """B1: fast anchor + re-render 6x + region OCR (control)."""
-    stages = {"anchor_s": 0.0, "region_render_s": 0.0, "region_s": 0.0}
+def _b1_crop_from_pdf(path: str, rapid) -> tuple[str | None, dict]:
+    """B1: fast anchor + re-render region 6x. Return (region_png|None, stages)."""
+    stages = {"anchor_s": 0.0, "region_render_s": 0.0}
     t0 = time.perf_counter()
-    if anchor_bbox is None:
-        with open(path, "rb") as f:
-            pdf_bytes = f.read()
-        rect = resolve_number_bbox_fast(pdf_bytes, rapid=rapid)
-    else:
-        rect = fitz.Rect(*anchor_bbox)
+    with open(path, "rb") as f:
+        pdf_bytes = f.read()
+    rect = resolve_number_bbox_fast(pdf_bytes, rapid=rapid)
     stages["anchor_s"] = time.perf_counter() - t0
     if rect is None:
-        return "", {"bbox": None, "stages": stages}
-
+        return None, stages
     doc = fitz.open(path)
     rect = _pad_rect(rect, doc[0].rect.width, doc[0].rect.height)
     t0 = time.perf_counter()
-    region = _render_region_from_pdf(path, rect)
+    pix = doc[0].get_pixmap(matrix=fitz.Matrix(CRENDER_ZOOM, CRENDER_ZOOM), clip=rect, alpha=False)
+    region = pix.tobytes("png")
+    del pix
+    doc.close()
     stages["region_render_s"] = time.perf_counter() - t0
-    t0 = time.perf_counter()
-    text = oe.ocr_engine("rapid_tess", region)
-    stages["region_s"] = time.perf_counter() - t0
-    return text, {"bbox": [rect.x0, rect.y0, rect.x1, rect.y1], "stages": stages}
+    return region, stages
 
 
-def _eval_nomor(texts: dict[str, str], gt: dict[str, dict]) -> dict:
-    total = 0
-    exact = 0
+def _eval_corpus(texts: dict[str, str], gt: dict[str, dict]) -> dict:
+    """Evaluasi resmi harness OCR (extract_all -> map -> evaluate_row, GT v9 + matcher v2)."""
+    results = []
     details: dict[str, dict] = {}
     for stem, text in sorted(texts.items()):
-        gv = (gt.get(stem, {}).get(NOMOR_FIELD, "") or "").strip()
-        if not gv or gv == "-":
+        row = gt.get(stem)
+        if row is None:
             continue
-        pv = extract_certificate_number(text) or ""
-        res = match_field(gv, pv, NOMOR_FIELD)
-        total += 1
-        if res["exact"]:
-            exact += 1
-        details[stem] = {"gt": gv, "pred": pv, "exact": res["exact"]}
+        mapped = map_fields_to_form(extract_all(text), tahun_akademik="2024/2025", bukti_fisik="Sertifikat")
+        fr = evaluate_row(mapped, row)
+        results.append(fr)
+        details[stem] = {f: {"exact": r["exact"], "pred": r["actual"]} for f, r in fr.items()}
+    agg = _safe_agg(results)
+    nom = agg.get(NOMOR_FIELD, {"total": 0, "exact": 0})
     return {
-        "total": total,
-        "exact": exact,
-        "pct": (exact / total * 100) if total else 0.0,
+        "nomor_total": nom["total"],
+        "nomor_exact": nom["exact"],
+        "nomor_pct": (nom["exact"] / nom["total"] * 100) if nom["total"] else 0.0,
+        "agg": agg,
         "details": details,
     }
 
 
-def _eval_regression(fields: list[str], texts_a: dict[str, str], texts_b: dict[str, str], gt: dict[str, dict]) -> dict:
-    """Per-field exact pada teks B (B1) vs A (baseline) — harus identik (0 regresi)."""
-    out = {}
-    from app.services.field_extractor import extract_certificate_fields
-    from app.services.form_mapper import map_fields_to_form
+def _safe_agg(results: list) -> dict:
+    from tests.benchmark_hybrid_ocr import _safe_agg as _sa
 
+    return _sa(results)
+
+
+def _eval_regression(fields: list[str], texts_a: dict[str, str], texts_b: dict[str, str], gt: dict[str, dict]) -> dict:
+    """Per-field: hasil evaluate_row pada teks B (B1) harus identik dgn A (baseline)."""
+    out = {}
     for f in fields:
-        same = 0
-        tot = 0
+        same = tot = 0
         for stem in sorted(texts_a.keys()):
             gv = (gt.get(stem, {}).get(f, "") or "").strip()
             if not gv or gv == "-":
                 continue
-            ea = extract_certificate_fields(texts_a[stem])
-            eb = extract_certificate_fields(texts_b[stem])
-            pa = map_fields_to_form(ea, texts_a[stem], bukti_fisik="Sertifikat")
-            pb = map_fields_to_form(eb, texts_b[stem], bukti_fisik="Sertifikat")
-            va = (pa.get(f).value if pa.get(f) else None) or ""
-            vb = (pb.get(f).value if pb.get(f) else None) or ""
+            ma = map_fields_to_form(extract_all(texts_a[stem]), tahun_akademik="2024/2025", bukti_fisik="Sertifikat")
+            mb = map_fields_to_form(extract_all(texts_b[stem]), tahun_akademik="2024/2025", bukti_fisik="Sertifikat")
+            va = (ma.get(f).value if ma.get(f) else None) or ""
+            vb = (mb.get(f).value if mb.get(f) else None) or ""
             tot += 1
             if va == vb:
                 same += 1
@@ -204,72 +195,58 @@ def main() -> None:
     rapid = oe._get_rapid()
     assert rapid is not None, "RapidOCR tidak tersedia"
 
-    anchor_cache: dict[str, list] = {}
-    if os.path.exists(CONTROL_ANCHOR_CACHE):
-        with open(CONTROL_ANCHOR_CACHE) as f:
-            anchor_cache = json.load(f)
-
-    texts: dict[str, dict[str, str]] = {"baseline": {}, "control": {}, "b1_fast": {}, "b1_module": {}}
-    meta: dict[str, dict] = {k: {} for k in texts}
-    anchors_b1: dict[str, list] = {}
-    lats = {k: [] for k in ("baseline", "control", "b1_fast", "b1_module")}
-    stage_sums = {
-        k: {"anchor_s": 0.0, "region_render_s": 0.0, "region_s": 0.0, "n": 0}
-        for k in ("control", "b1_fast", "b1_module")
-    }
+    texts: dict[str, dict[str, str]] = {"baseline": {}, "control": {}, "b1_multi": {}, "b1_psm6": {}, "b1_module": {}}
+    lats: dict[str, list[float]] = {k: [] for k in ("b1_multi", "b1_psm6", "b1_module")}
+    stage_sums = {"anchor_s": 0.0, "region_render_s": 0.0, "region_multi_s": 0.0, "region_psm6_s": 0.0, "n": 0, "n_anchor_found": 0}
     errors: list[dict] = []
+    anchor_bboxes: dict[str, list] = {}
 
     for i, stem in enumerate(stems, 1):
         print(f"[{i}/{len(stems)}] {stem}", flush=True)
-        baseline = _load_baseline_text(stem)
+        baseline = _load_text(stem, BASELINE_DIR)
+        control = _load_text(stem, CONTROL_DIR)
         texts["baseline"][stem] = baseline
-        path = os.path.join(REPO, manifest[stem])
-        row = {"baseline": baseline}
+        texts["control"][stem] = control
 
-        # B. Control NC-001 (anchor full-page RapidOCR @3x; cache hit skip anchor)
+        # C. B1 fresh
         t0 = time.perf_counter()
         try:
-            ctrl_text, info = _crop_number_from_pdf(
-                path, rapid, anchor_bbox=anchor_cache.get(stem)
-            )
-            ctrl_full = merge_full(baseline, ctrl_text)
+            region, stages = _b1_crop_from_pdf(os.path.join(REPO, manifest[stem]), rapid)
+            if region is not None:
+                t_r0 = time.perf_counter()
+                crop_multi = oe.ocr_engine("rapid_tess", region)
+                t_r1 = time.perf_counter()
+                crop_psm6 = oe.ocr_tess_psm(region, 6)
+                t_r2 = time.perf_counter()
+                stages["region_multi_s"] = t_r1 - t_r0
+                stages["region_psm6_s"] = t_r2 - t_r1
+                stage_sums["n"] += 1
+                stage_sums["n_anchor_found"] += 1
+                for k, v in stages.items():
+                    stage_sums[k] = stage_sums.get(k, 0.0) + v
+                b1_multi_full = merge_full(baseline, crop_multi)
+                b1_psm6_full = merge_full(baseline, crop_psm6)
+            else:
+                stage_sums["n"] += 1
+                stage_sums["anchor_s"] += stages["anchor_s"]
+                b1_multi_full = baseline
+                b1_psm6_full = baseline
+            lats["b1_multi"].append(time.perf_counter() - t0)
+            lats["b1_psm6"].append(lats["b1_multi"][-1])
         except Exception as e:  # noqa: BLE001
-            errors.append({"stem": stem, "variant": "control", "error": f"{type(e).__name__}: {e}"})
-            ctrl_full = baseline
-            info = {"bbox": None, "stages": {}}
-        lats["control"].append(time.perf_counter() - t0)
-        row["control"] = ctrl_full
-        if info.get("stages"):
-            s = info["stages"]
-            stage_sums["control"]["n"] += 1
-            for k in ("anchor_s", "region_render_s", "region_s"):
-                stage_sums["control"][k] += s.get(k, 0.0)
-        if info.get("bbox"):
-            anchors_b1[stem] = info["bbox"]
-
-        # C. B1 fast anchor (yg diukur)
-        t0 = time.perf_counter()
-        try:
-            b1_text, b1_info = _b1_crop_from_pdf(path, rapid)
-            b1_full = merge_full(baseline, b1_text)
-        except Exception as e:  # noqa: BLE001
-            errors.append({"stem": stem, "variant": "b1_fast", "error": f"{type(e).__name__}: {e}"})
-            b1_full = baseline
-            b1_info = {"bbox": None, "stages": {}}
-        lats["b1_fast"].append(time.perf_counter() - t0)
-        row["b1_fast"] = b1_full
-        if b1_info.get("stages"):
-            s = b1_info["stages"]
-            stage_sums["b1_fast"]["n"] += 1
-            for k in ("anchor_s", "region_render_s", "region_s"):
-                stage_sums["b1_fast"][k] += s.get(k, 0.0)
+            errors.append({"stem": stem, "variant": "b1", "error": f"{type(e).__name__}: {e}"})
+            b1_multi_full = b1_psm6_full = baseline
+            lats["b1_multi"].append(time.perf_counter() - t0)
+            lats["b1_psm6"].append(lats["b1_multi"][-1])
+        texts["b1_multi"][stem] = b1_multi_full
+        texts["b1_psm6"][stem] = b1_psm6_full
 
         # D. B1-module (path produksi high_dpi_crop — search_for + psm 6)
         t0 = time.perf_counter()
         try:
             from app.services.high_dpi_crop import crop_and_ocr_number_region
 
-            with open(path, "rb") as f:
+            with open(os.path.join(REPO, manifest[stem]), "rb") as f:
                 pdf_bytes = f.read()
             mod_num = crop_and_ocr_number_region(pdf_bytes)
             mod_full = (
@@ -281,69 +258,71 @@ def main() -> None:
             errors.append({"stem": stem, "variant": "b1_module", "error": f"{type(e).__name__}: {e}"})
             mod_full = baseline
         lats["b1_module"].append(time.perf_counter() - t0)
-        row["b1_module"] = mod_full
+        texts["b1_module"][stem] = mod_full
 
-        for k, v in row.items():
-            texts[k][stem] = v
         with open(os.path.join(texts_dir, f"{stem}.txt"), "w") as f:
-            f.write(f"# B1 benchmark\n# Seconds: {lats['b1_fast'][-1]:.3f}\n\n{row['b1_fast']}")
-
-        del row
+            f.write(f"# B1 benchmark\n# Seconds: {lats['b1_multi'][-1]:.3f}\n\n{b1_multi_full}")
+        del baseline, control
         gc.collect()
 
-    # ---- Evaluasi nomor ----
-    evals = {k: _eval_nomor(v, gt) for k, v in texts.items()}
+    evals = {k: _eval_corpus(v, gt) for k, v in texts.items()}
     regr = _eval_regression(
         ["waktu_mulai_pelaksanaan", "waktu_selesai_pelaksanaan", "penyelenggara_kegiatan"],
-        texts["baseline"],
-        texts["b1_fast"],
-        gt,
+        texts["baseline"], texts["b1_multi"], gt,
     )
 
     def _avg(l: list) -> float:
         return sum(l) / len(l) if l else 0.0
 
-    def _stage_avg(key: str, stage: str) -> float:
-        s = stage_sums[key]
-        return s[stage] / s["n"] if s["n"] else 0.0
-
+    n = stage_sums["n"] or 1
+    b1_anchor_avg = stage_sums["anchor_s"] / n
     summary = {
         "created": datetime.now().isoformat(),
-        "stems": stems,
         "n": len(stems),
-        "nomor": {k: {kk: vv for kk, vv in v.items() if kk != "details"} for k, v in evals.items()},
-        "latency_avg_total": {k: _avg(lats[k]) for k in lats},
-        "stages_avg": {
-            k: {st: _stage_avg(k, st) for st in ("anchor_s", "region_render_s", "region_s")}
-            for k in ("control", "b1_fast")
+        "nomor": {k: {"total": v["nomor_total"], "exact": v["nomor_exact"], "pct": v["nomor_pct"]} for k, v in evals.items()},
+        "nomor_details": evals["b1_multi"]["details"],
+        "per_field_agg": {k: v["agg"] for k, v in evals.items()},
+        "latency_avg": {k: _avg(lats[k]) for k in lats},
+        "b1_stage_avg": {
+            "anchor_s": b1_anchor_avg,
+            "region_render_s": stage_sums["region_render_s"] / n,
+            "region_multi_s": stage_sums.get("region_multi_s", 0.0) / n,
+            "region_psm6_s": stage_sums.get("region_psm6_s", 0.0) / n,
         },
+        "anchor_found_count": stage_sums["n_anchor_found"],
+        "b1_added_latency_multi": (
+            stage_sums["anchor_s"] + stage_sums["region_render_s"] + stage_sums.get("region_multi_s", 0.0)
+        ) / n,
+        "b1_added_latency_psm6": (
+            stage_sums["anchor_s"] + stage_sums["region_render_s"] + stage_sums.get("region_psm6_s", 0.0)
+        ) / n,
+        "control_ref": CONTROL_REF,
         "regression_dates_org": regr,
         "errors": errors,
-        "anchors_b1": anchors_b1,
-        "gates": {
-            "nomor_b1_pct": evals["b1_fast"]["pct"],
-            "nomor_gate_min": GATE_NOMOR_MIN,
-            "nomor_pass": evals["b1_fast"]["pct"] >= GATE_NOMOR_MIN,
-            "anchor_b1_s": _stage_avg("b1_fast", "anchor_s"),
-            "anchor_gate_max": GATE_ANCHOR_MAX,
-            "anchor_pass": _stage_avg("b1_fast", "anchor_s") < GATE_ANCHOR_MAX,
-            "anchor_control_s": _stage_avg("control", "anchor_s"),
-            "latency_delta_b1_vs_baseline": _avg(lats["b1_fast"]) - _avg(lats["baseline"]),
-            "latency_gate_max": GATE_LATENCY_MAX,
-            "latency_pass": (_avg(lats["b1_fast"]) - _avg(lats["baseline"])) <= GATE_LATENCY_MAX,
-            "zero_regression_pass": all(v["identical"] == v["total"] for v in regr.values()),
-        },
     }
+    gates = {
+        "nomor_b1_pct": evals["b1_multi"]["nomor_pct"],
+        "nomor_gate_min": GATE_NOMOR_MIN,
+        "nomor_pass": evals["b1_multi"]["nomor_pct"] >= GATE_NOMOR_MIN,
+        "anchor_b1_s": b1_anchor_avg,
+        "anchor_gate_max": GATE_ANCHOR_MAX,
+        "anchor_pass": b1_anchor_avg < GATE_ANCHOR_MAX,
+        "latency_delta_vs_baseline": summary["b1_added_latency_multi"],
+        "latency_gate_max": GATE_LATENCY_MAX,
+        "latency_pass": summary["b1_added_latency_multi"] <= GATE_LATENCY_MAX,
+        "latency_psm6_delta": summary["b1_added_latency_psm6"],
+        "latency_psm6_pass": summary["b1_added_latency_psm6"] <= GATE_LATENCY_MAX,
+        "zero_regression_pass": all(v["identical"] == v["total"] for v in regr.values()),
+    }
+    summary["gates"] = gates
 
     with open(os.path.join(run_root, "eval.json"), "w") as f:
         json.dump(summary, f, indent=2, ensure_ascii=False)
-    with open(os.path.join(run_root, "anchors.json"), "w") as f:
-        json.dump(anchors_b1, f, indent=2)
     with open(os.path.join(run_root, "meta.json"), "w") as f:
         json.dump(
             {
                 "engine": "b1_high_dpi",
-                "region_engine": "rapid_tess",
+                "region_engines": ["rapid_tess", "tess_psm6"],
                 "created": datetime.now().isoformat(),
                 "stems_selected": len(stems),
                 "errors": errors,
@@ -352,19 +331,23 @@ def main() -> None:
             indent=2,
         )
 
-    print("\n" + "=" * 90)
+    print("\n" + "=" * 92)
     print("B1 — nomor scan-49 (GT v9 + matcher v2)")
-    print("=" * 90)
-    for k in ("baseline", "control", "b1_fast", "b1_module"):
+    print("=" * 92)
+    for k in ("baseline", "control", "b1_multi", "b1_psm6", "b1_module"):
         e = evals[k]
-        print(f"{k:<10} nomor exact {e['exact']:>2}/{e['total']:>2} = {e['pct']:>5.1f}%   total-lat {_avg(lats[k]):>5.2f}s/cert")
-    print(f"\nstage avg: control anchor {summary['gates']['anchor_control_s']:.2f}s | b1_fast anchor {summary['gates']['anchor_b1_s']:.3f}s")
-    print(f"latency delta B1 vs baseline: {summary['gates']['latency_delta_b1_vs_baseline']:.2f}s/cert (gate <= {GATE_LATENCY_MAX}s)")
+        lat = _avg(lats[k]) if k in lats else 0.0
+        print(f"{k:<10} nomor exact {e['nomor_exact']:>2}/{e['nomor_total']:>2} = {e['nomor_pct']:>5.1f}%   lat {lat:>5.2f}s/cert")
+    print(f"\nb1 stage avg: anchor {b1_anchor_avg:.2f}s | region_render {stage_sums['region_render_s']/n:.2f}s "
+          f"| region_multi {stage_sums.get('region_multi_s',0.0)/n:.2f}s | region_psm6 {stage_sums.get('region_psm6_s',0.0)/n:.2f}s")
+    print(f"control ref (NC-003/004): anchor {CONTROL_REF['anchor_uncached_s']}s uncached | total {CONTROL_REF['total_avg_s']}s/cert")
+    print(f"anchor found: {stage_sums['n_anchor_found']}/{len(stems)}")
     print(f"regression dates/org identical: {regr}")
-    g = summary["gates"]
+    g = gates
     print(f"\nGATES: nomor {g['nomor_pass']} ({g['nomor_b1_pct']:.1f}% vs {g['nomor_gate_min']}%) | "
-          f"anchor {g['anchor_pass']} ({g['anchor_b1_s']:.3f}s vs <{g['anchor_gate_max']}s) | "
-          f"latency {g['latency_pass']} | zero-regression {g['zero_regression_pass']}")
+          f"anchor {g['anchor_pass']} ({g['anchor_b1_s']:.2f}s vs <{g['anchor_gate_max']}s) | "
+          f"latency {g['latency_pass']} ({g['latency_delta_vs_baseline']:.2f}s vs <= {g['latency_gate_max']}s) | "
+          f"zero-regression {g['zero_regression_pass']}")
     print(f"\nrun dir: {run_root}")
 
 

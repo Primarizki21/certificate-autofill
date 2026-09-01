@@ -5,7 +5,7 @@ pada render ZOOM=3.0 (9x piksel) yang dipakai HANYA untuk mencari koordinat
 baris nomor ("anchor"). Anchor penuh itu bukan kerja ekstraksi — hanya mencari
 kotak.
 
-B1 — anchor dua tingkat yang jauh lebih murah:
+B1 — anchor dua tingkat yang lebih murah:
   1. **Fast text-search (PyMuPDF)**: `page.search_for()` keyword nomor
      (`NOMOR`/`Nomor`/`NO.`/`No.`/`NUMBER`/`SERTIFIKAT`); validasi bahwa blok
      teks tersebut berdekatan dengan pola angka atau slash dinas
@@ -24,11 +24,8 @@ Isolasi: modul eksperimen di `tests/` — produksi `backend/app/` tidak disentuh
 from __future__ import annotations
 
 import re
-from io import BytesIO
 
 import fitz  # PyMuPDF
-
-from PIL import Image
 
 SEARCH_KEYWORDS: list[str] = ["NOMOR", "Nomor", "NO.", "No.", "NUMBER", "SERTIFIKAT"]
 
@@ -38,6 +35,7 @@ _NUM_ADJACENT = re.compile(r"\d{1,5}\s*/")
 _STRICT_NUMBER = re.compile(r"[0-9]{2,6}\s*/\s*[A-Z0-9][A-Z0-9.\-/ ]*?/?\s*[0-9]{4}", re.IGNORECASE)
 # Keyword baris nomor (dipakai saat fallback RapidOCR — mirror benchmark_nomor_crop).
 _KEYWORD = re.compile(r"\bNOMOR\b|\bNO\.\b|\bNUMBER\b", re.IGNORECASE)
+
 # Render cepat untuk anchor fallback: 1.5x (anchor lama = 3.0x).
 ZOOM_FAST = 1.5
 
@@ -57,12 +55,8 @@ def _search_text_anchor(page: fitz.Page) -> fitz.Rect | None:
             text = b[4]
             if kw_u not in text.upper():
                 continue
-            # Validasi: blok berisi keyword ini berdekatan dgn angka/slash dinas,
-            # atau blok berikutnya memuatnya (nomor bisa di baris berikut).
             if _block_has_number(text):
                 return fitz.Rect(b[0], b[1], b[2], b[3])
-        # Fallback dalam tingkat 1: gunakan rect search_for + validasi blok di
-        # bawah/persekitaran rect keyword.
         rects = page.search_for(kw)
         for rect in rects:
             padded = fitz.Rect(
@@ -77,9 +71,6 @@ def _search_text_anchor(page: fitz.Page) -> fitz.Rect | None:
     return None
 
 
-def _line_bbox(item: list) -> tuple[float, float, float, float]:
-    """bbox baris dari item RapidOCR (mirror benchmark_nomor_crop._line_bbox)."""
-    box = item[0]
 def _item_text(item: list) -> str:
     """Teks item OCR. RapidOCR saat ini = word-level `[box, text, conf]`;
     versi lama = line-level `[box, [(text, conf), ...]]`. Dukung keduanya."""
@@ -120,9 +111,19 @@ def _line_union_bbox(items: list) -> tuple[float, float, float, float]:
             xs.append(float(p[0]))
             ys.append(float(p[1]))
     return min(xs), min(ys), max(xs), max(ys)
-        text = " ".join(str(w[1]) for w in item[1]) if item and len(item) > 1 else ""
+
+
+def _find_number_line_rapid(items: list) -> list | None:
+    """Cari baris nomor pada hasil RapidOCR (word-level ATAU line-level):
+    keyword label dulu, lalu pola nomor strict — join kata dalam baris sama.
+    Return daftar item OCR (grup baris) atau None."""
+    lines = _group_word_items_into_lines(items)
+    for mitems, text in lines:
+        if _KEYWORD.search(text):
+            return mitems
+    for mitems, text in lines:
         if _STRICT_NUMBER.search(text):
-            return item
+            return mitems
     return None
 
 
@@ -134,15 +135,13 @@ def _rapid_fallback_anchor(page: fitz.Page, rapid) -> fitz.Rect | None:
         pix = page.get_pixmap(matrix=fitz.Matrix(ZOOM_FAST, ZOOM_FAST), alpha=False)
         png = pix.tobytes("png")
         del pix
-        img = Image.open(BytesIO(png)).convert("RGB")
         result, _ = rapid(png)
-        del img
         if not result:
             return None
-        item = _find_number_line_rapid(result)
-        if item is None:
+        found = _find_number_line_rapid(result)
+        if found is None:
             return None
-        x0, y0, x1, y1 = _line_bbox(item)
+        x0, y0, x1, y1 = _line_union_bbox(found)
         # Koordinat gambar (zoom 1.5x) -> koordinat halaman PDF.
         return fitz.Rect(x0 / ZOOM_FAST, y0 / ZOOM_FAST, x1 / ZOOM_FAST, y1 / ZOOM_FAST)
     except Exception:
