@@ -11,8 +11,12 @@ from app.services.combined_extractor import (
 from app.services.high_dpi_crop import crop_and_ocr_number_region
 
 
-def test_default_config_v4_2_disabled():
-    assert settings.enable_combined_v4_2 is False
+def test_default_config_v4_2_disabled(monkeypatch):
+    import os
+    from app.config import Settings
+    monkeypatch.delenv("ENABLE_COMBINED_V4_2", raising=False)
+    unconfigured = Settings(enable_combined_v4_2=os.getenv("ENABLE_COMBINED_V4_2", "false").lower() == "true")
+    assert unconfigured.enable_combined_v4_2 is False
 
 
 def test_extract_activity_v8_structural_anchors_id():

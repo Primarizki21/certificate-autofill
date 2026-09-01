@@ -97,6 +97,7 @@ def run_extraction_pipeline(
         from app.services.combined_extractor import apply_combined_v4_2
 
         extracted = apply_combined_v4_2(extracted, raw_text)
+        parser_engine = f"{parser_engine}+combined_v4_2"
     elif settings.enable_combined_v4_1:
         from app.services.combined_extractor import apply_combined_v4_1
 
