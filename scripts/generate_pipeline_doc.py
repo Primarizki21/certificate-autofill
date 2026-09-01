@@ -39,7 +39,8 @@ def build_blocks(d: dict) -> list[dict]:
     exp = d["experiment"]
     llm = d["llm"]
     pr = d["production"]
-    tok_per_pct = round(exp["tokens_cert"] / float(exp["macro_exact"].rstrip("%")), 1) if float(exp["macro_exact"].rstrip("%")) > 0 else 0.0
+    macro_num = float(exp["macro_exact"].split("%")[0].strip()) if exp.get("macro_exact") else 0.0
+    tok_per_pct = round(exp["tokens_cert"] / macro_num, 1) if macro_num > 0 else 0.0
     budget = " / ".join(str(v) for v in llm["budget_chars"].values())
 
     b = []
