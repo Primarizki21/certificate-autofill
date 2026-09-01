@@ -171,7 +171,8 @@ function pollResult(documentId) {
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
         setLoading(false);
-        setStatus(data.needs_review ? 'Parsing selesai. Form sudah terisi, tetapi beberapa field perlu dicek ulang.' : 'Parsing selesai. Form sudah terisi otomatis.');
+        const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
+        setStatus(data.needs_review ? `Parsing selesai${engineTag}. Form sudah terisi, tetapi beberapa field perlu dicek ulang.` : `Parsing selesai${engineTag}. Form sudah terisi otomatis.`);
       } else {
         setStatus(`Status parsing: ${data.status}. Menunggu...`);
       }

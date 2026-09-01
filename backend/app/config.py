@@ -4,8 +4,8 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    load_dotenv()
-    load_dotenv(Path(__file__).resolve().parents[2] / ".env")
+    load_dotenv(override=True)
+    load_dotenv(Path(__file__).resolve().parents[2] / ".env", override=True)
 except Exception:
     pass
 
