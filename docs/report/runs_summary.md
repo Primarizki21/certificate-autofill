@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 103 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 106 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -58,6 +58,9 @@
 
 | Run | Engine | MACRO scan | latency | notes |
 |---|---|---|---|---|
+| `ocr_experiment/b1_high_dpi_20260901_132227` |  | — | —ms | scan org — nomor — |
+| `ocr_experiment/b1_high_dpi_20260901_184530` |  | — | —ms | scan org — nomor — |
+| `ocr_experiment/b1_high_dpi_20260901_185507` |  | — | —ms | scan org — nomor — |
 | `ocr_experiment/baseline_rapid` | rapid | 47.3% | 3488ms | scan=49 emb=25; scan org 34.7% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | rapid_tess | 47.3% | 8609ms | scan=49 emb=?; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/composite_lfm_full_20260824_111939` |  | — | —ms |  |
@@ -166,6 +169,9 @@
 | `run_ner_v1_20260730_083808` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_084046` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
 | `run_ner_v1_20260730_095336` | 2026-07-30 | ner_v1 |  | — | 12.8% | — | — |  |  |
+| `ocr_experiment/b1_high_dpi_20260901_132227` |  | ocr_trial |  | — | — | — | — |  | scan org — nomor — |
+| `ocr_experiment/b1_high_dpi_20260901_184530` |  | ocr_trial |  | — | — | — | — |  | scan org — nomor — |
+| `ocr_experiment/b1_high_dpi_20260901_185507` |  | ocr_trial |  | — | — | — | — |  | scan org — nomor — |
 | `ocr_experiment/baseline_rapid` | 2026-08-04 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=25; scan org 34.7% nomor 54.5% |
 | `ocr_experiment/baseline_rapid_tess` | 2026-08-04 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=?; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/composite_lfm_full_20260824_111939` |  | ocr_trial |  | — | — | — | — |  |  |
