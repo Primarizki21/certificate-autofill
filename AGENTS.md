@@ -96,6 +96,12 @@ backend/
       field_extractor.py      # Regex extraction: dates, role, activity, organizer, cert number
       form_mapper.py          # Rule-based mapping ke form options + needs_review logic
       job_processor.py        # DB read → pipeline → DB write
+      combined_extractor.py   # Combined v4.x staging bundle (apply_combined_v4_2)
+      high_dpi_crop.py        # High-DPI region crop module (6.0× zoom)
+      activity_extractor.py   # Activity extraction (AKT-005)
+      organizer_normalize.py  # Organizer normalization v3 (ORG-003/004/006)
+      tingkat_router.py       # Tingkat router rules (ROUTER-005/006, 63/74 routed @100%)
+      llm_tingkat.py          # LLM fallback untuk tingkat (26 cert unrouted)
     static/                   # Frontend copy (juga served sebagai static files)
 frontend/
   index.html                  # Form input KHP
@@ -106,11 +112,12 @@ tests/
   benchmark_ner.py            # NER benchmark
   benchmark_hybrid.py         # Hybrid + post-processing benchmark
   benchmark_llm.py            # Hybrid + LLM benchmark
+  benchmark_combined_v4_2.py  # Combined v4.2 benchmark (v4.0 vs v4.1 vs v4.2 comparison)
   evaluation_framework.py     # Exact/fuzzy/WER/CER evaluation
   ner_extractor.py            # NER model loading + inference
   ner_to_fields.py            # NER entities → form field mapping
   post_processors.py          # Entity scoring, signer detection, person filter
-  matchers.py                 # Abbreviation matching, string utilities
+  matchers.py                 # Matcher v2: frozen evaluator (abbreviation, fuzzy, WER/CER)
   generate_bio_labels.py      # BIO label generation
   fine_tune_ner.py            # NER fine-tuning (reference)
   verify_ground_truth.py      # Ground truth verification
@@ -120,6 +127,7 @@ tests/
   test_field_extractor.py     # Unit test: field extractor
   test_generalized_parser.py  # Unit test: generalized parser
   test_evaluation_framework.py # Unit test: evaluation framework
+  test_combined_v4_2.py       # Unit test: Combined v4.2 (94 tests)
   conftest.py                 # Pytest fixtures
   bio_labels/                 # Test fixtures (75 JSON)
 monitoring/
@@ -156,6 +164,23 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 ### Month OCR Aliases
 `field_extractor.py` punya daftar alias untuk kesalahan OCR umum: `AGUSTU5` → `AGUSTUS`, `SEPTEM8ER` → `SEPTEMBER`, dll.
 
+### Combined v4.x Pipeline
+Pipeline staging yang menggabungkan seluruh improvement offline (0 LLM):
+- Flag gating: `settings.enable_combined_v4_2` (default: `False`, zero blast radius)
+- `combined_extractor.py`: orchestrator v4.x → `apply_combined_v4_2()`
+- 3 OOD pillars: semantic grammar anchors, universal Roman numeral repairs, calibrated confidence
+- `high_dpi_crop.py`: re-render region nomor dari PDF pada zoom 6.0× (300+ DPI)
+- Tingkat: 63/74 routed via rules (router), 11 residual → LLM fallback
+- MACRO exact 76.82% (all-cells) / 87.42% (framework), 0 LLM calls, 100% offline
+
+### Matcher v2 (Frozen Evaluation)
+`tests/matchers.py` = **frozen baseline evaluator** (jangan diubah tanpa persetujuan eksplisit).
+- Field-specific matching: dates (normalize_date), nomor (strip punctuation), organizer (abbreviation detection)
+- `is_initialism_of`: deteksi akronim (`UNAIR` ↔ `Universitas Airlangga`) dengan known expansions
+- `is_portmanteau_of`: deteksi portmanteau terdaftar (BEM, HIMA, FTMM, dll)
+- Threshold organizer: fuzzy ≥0.75 (dinaikkan dari 0.5 karena false positive BEM FEB vs BEM FKM)
+- WER/CER untuk metrik edit distance
+
 ---
 
 ## Session Context & Experiment Workflow
@@ -166,12 +191,17 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
    `int` setelah "v", jangan sort lexicographic) — plan + open frontier.
 3. Baca `docs/report/runs_summary.md` — angka terukur semua run.
 4. Baca `docs/experiments_ledger.md` — closed/failed approaches (JANGAN dilewatkan).
-5. Kunci baseline dari runs_summary; baseline evaluasi = `Ground_Truth_Sertifikat_v9.csv`
-   (GT v9 = handoff v12, 5 organizer fixes) + matcher v2 (`tests/matchers.py`).
-   `Ground_Truth_Sertifikat_v8.csv` tetap frozen sebagai acuan historis; raw
-   `Ground_Truth_Sertifikat.csv` = history, JANGAN diubah. Run benchmark baru
-   WAJIB `GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`.
+5. Kunci baseline dari runs_summary:
+   - **Baseline evaluasi** (frozen): `Ground_Truth_Sertifikat_v9.csv` + matcher v2 (`tests/matchers.py`)
+   - **Current best pipeline**: Combined v4.2 (`combined_extractor.py`, flag `ENABLE_COMBINED_V4_2`)
+   - `Ground_Truth_Sertifikat_v8.csv` tetap frozen sebagai acuan historis; raw
+     `Ground_Truth_Sertifikat.csv` = history, JANGAN diubah. Run benchmark baru
+     WAJIB `GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`.
 6. Kode: `codegraph_explore` on-demand (bukan baca semua file).
+7. **Handoff maintenance** — setiap akhir eksperimen atau milestone:
+   - Cek apakah perlu buat handoff baru (opsi B: per 5-10 ledger entries).
+   - Handoff baru WAJIB: ringkasan eksekutif, tabel komparasi, file yang diubah,
+     4 lapis pembuktian, open frontier, supersession note.
 
 ### Loop eksperimen (per eksperimen)
 - **B0 DEDUP:** cek `experiments_ledger.md` — hipotesis pernah dicoba? Skip jika
@@ -196,6 +226,53 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 > Gagal trial = pengetahuan (bukan dead end). Ledger mempersempit ruang pencarian
 > sehingga sesi berikutnya tidak mengulang pendekatan yang sudah ditutup.
+
+---
+
+## Handoff Maintenance
+
+Handoff (`docs/handoff_v*.md`) = narasi kohesif eksperimen. Ledger = catatan atomik; handoff = konteks lengkap.
+
+### Kapan buat handoff baru
+- Setelah 5-10 ledger entries tercatat (opsi B: per batch eksperimen).
+- Setelah milestone besar (misal: Combined v4.0 → v4.1 → v4.2).
+- Ketika open frontier berubah signifikan.
+- **Agent WAJIB buat handoff baru bahkan tanpa user minta** bila gap konteks sudah terlalu jauh.
+
+### Isi handoff WAJIB
+1. Ringkasan eksekutif hasil eksperimen
+2. Tabel komparasi vs versi sebelumnya
+3. File yang diubah/dibuat
+4. 4 lapis pembuktian empiris (jika ada perubahan pipeline)
+5. Open frontier (next steps)
+6. Supersession note: "Supersedes `docs/handoff_vXX.md`"
+
+---
+
+## Production Promotion
+
+Pipeline staging (flag `ENABLE_COMBINED_V4_2` dll) boleh di-promote ke production **HANYA setelah user SETUJU**.
+
+### Flow
+1. **QA/QC pipeline** — jalankan semua test (pytest, benchmark, OOD stress), audit diff, verifikasi blast radius.
+2. **User review hasil QA** — presentasikan hasil ke user.
+3. **User SETUJU** — eksplisit, bukan asumsi.
+4. **Production promotion** — toggle flag `=True` atau replace default di production code.
+5. **Smoke test** — verifikasi pipeline berjalan di production.
+6. **Commit** — Conventional Commits format.
+
+**DILARANG promote tanpa persetujuan eksplisit user.**
+
+---
+
+## Emergency Rollback
+
+Kalau pipeline production regress atau bug masuk ke live:
+- **Solusi utama:** `git revert` ke commit sebelumnya (aman karena semua sudah di-commit).
+- **Rollback trial:** kode eksperimen boleh tetap, tercatat di ledger, jangan dipakai produksi.
+- **Rollback full:** restore dari pre-commit state via git history.
+
+> Semua perubahan WAJIB di-commit agar versioning tersimpan dan rollback bisa dilakukan kapan saja.
 
 ---
 
@@ -239,10 +316,11 @@ Setiap perubahan pipeline, penambahan rule router, ekstraktor regex, atau normal
 pytest tests/ -v
 
 # Benchmark per pipeline komponen
-uv run python -m tests.benchmark_pipeline      # Regex baseline
-uv run python -m tests.benchmark_ner            # NER benchmark
-uv run python -m tests.benchmark_hybrid         # Hybrid + post-processing
-uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
+uv run python -m tests.benchmark_pipeline          # Regex baseline
+uv run python -m tests.benchmark_ner               # NER benchmark
+uv run python -m tests.benchmark_hybrid            # Hybrid + post-processing
+uv run python -m tests.benchmark_llm               # Hybrid + LLM (Ollama)
+uv run python -m tests.benchmark_combined_v4_2     # Combined v4.2 (v4.0 vs v4.1 vs v4.2)
 ```
 
 ### Hasil Benchmark (74 sertifikat)
@@ -251,21 +329,17 @@ uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
 |--------|:--------:|:---------:|:----------:|--------|
 | Regex baseline | 42.2% | — | 0 | v2 |
 | Hybrid + post-processing | 48.1% | 66.1% | 0 | v3 |
-| Hybrid + LLM (A2 v2 full-text) | 58.3% | 74.5% | 74 | v4 |
-| v7 P4 e_hybrid + router | 54.2% | — | 39 | tingkat 77.0% |
-| v8 f_bias + router | 55.2% | — | 35 | tingkat 82.4%, 214 eff tok/cert |
-| **v9 organizer_v2 + router (current)** | **58.9%** | 76.8% | **29** | **tingkat 83.8%**, 176 eff tok/cert |
-| v9 re-baseline GT v9 + matcher v2 | **60.2%** | 74.2% | 29 | metrologi handoff v12 (matcher jujur) |
-| Exp5 multi-field (tingkat+organizer, 1 call) | 60.7% | 74.7% | 29 | organizer +2.7pt tapi token 195 > gate 176 → **FAIL** (handoff v13) |
+| v9 organizer_v2 + router | 60.2% | 74.2% | 29 | tingkat 83.8%, 176 eff tok/cert |
+| Combined v2 | 74.2% | 80.7% | 0 | 0 LLM, offline |
+| Combined v3 | 85.7% | 88.3% | 0 | 0 LLM, offline |
+| **Combined v4.2 (current)** | **76.82%** (all-cells) / **87.42%** (framework) | **78.64%** / **90.00%** | **0** | 3 OOD pillars, High-DPI crop |
 
-> **Angka otoritatif:** handoff terbaru + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
+> **Angka otoritatif:** handoff terbaru (`docs/handoff_v44.md`) + `docs/report/runs_summary.md` + `docs/experiments_ledger.md`. Tabel di atas ringkasan; detail per-variant di `docs/report/`.
 >
-> **OCR:** eksperimen OCR sebelumnya CLOSED (nomor gagal, ledger OCR-001..004).
-> Analisis 3 tool baru (handoff v13): CnOCR redundant (PP-OCR, sama RapidOCR),
-> MMOCR stale (2023), **DocTR = kandidat probe berikutnya** (keluarga model
-> baru, active, Latin out-of-box).
+> **OCR:** eksperimen OCR sebelumnya CLOSED (nomor gagal, ledger OCR-001..012). Semua engine non-LFM gagal pada field nomor. LFM2.5-VL-3B = satu-satunya yang tidak regress nomor (28.6% = baseline), tapi latency 77s/cert tidak viable untuk produksi.
 
 ### Ollama Setup
+LLM sekarang hanya sebagai **fallback untuk tingkat** (26 cert unrouted, ~1.5s/cert):
 ```bash
 curl -fsSL https://ollama.com/install.sh | sh
 ollama pull llama3.1:8b
@@ -302,8 +376,14 @@ Yang sudah berubah:
 - V8: HIMA AIRLANGGA ONLY — HIMA mapping butuh konteks Airlangga eksplisit
 - Phase v3 (Hybrid+PP): NER + regex + post-processing — 48.1% exact
 - Phase v4 (LLM): Hybrid + Ollama llama3.2 — 58.3% exact, ~2.5s/cert
+- Combined v2: offline bundle (0 LLM) — 74.2% exact
+- Combined v3: 5 branches (ROUTER-006 + DATE-001 + ORG-006 + ACT-006 + NUM-003) — 85.7% exact
+- Combined v4.2: 3 OOD pillars + High-DPI crop — 76.82% all-cells / 87.42% framework
 
 Yang mungkin berubah ke depannya:
+- Promosi Combined v4.2 ke production (perlu user approval)
+- Resume eksperimen OCR (DocTR sebagai kandidat)
+- Resume KB (knowledge base) untuk hemat LLM calls di skala besar
 - Skema database (migration tool mungkin ditambahkan)
 - Cakupan testing
 - Processing mode tambahan
@@ -322,11 +402,12 @@ Yang mungkin berubah ke depannya:
 - `has_student_association_signature_context()` mendeteksi dari pola *signer dekat dengan nama organisasi*, bukan dari lokasi fisik tanda tangan
 - Ollama perlu CUDA library path untuk RTX 5050 — lihat `scripts/start_ollama.sh`
 - `pyproject.toml` punya dependencies untuk NER/fine-tuning (torch, transformers, seqeval, peft, datasets) yang tidak dipakai di pipeline utama
+- Combined v4.2 flag default `False` — harus diaktifkan manual via `ENABLE_COMBINED_V4_2=true` di `.env`
 
 ---
 
 ## Dokumen Referensi
-- **Status eksperimen terbaru:** handoff TERBARU (`docs/handoff_v*.md`, versi angka tertinggi) + `docs/experiments_ledger.md` (closed approaches)
+- **Status eksperimen terbaru:** handoff TERBARU (`docs/handoff_v44.md` — Combined v4.2) + `docs/experiments_ledger.md` (closed approaches)
 - **Laporan eksperimen:** [docs/report/README.md](docs/report/README.md) — benchmark_methods, evaluation_methodology, phase_v4_methodology, phase_v4_results_summary (`.docx` + mirror `.md`)
 - **Laporan resmi (docx/xlsx):** `docs/report/report_data.json` = source of truth (`experiments[]` + `per_field_src` per eksperimen + blocks dokumen) → `scripts/generate_report.py` → docx/md + `results_comparison.xlsx` (7 sheet, termasuk "Per-Field by Experiment" — per-field per eksperimen, OCR "n/a"). xlsx TIDAK di-commit (`*.xlsx` di-ignore) — regenerate lokal.
 - **Improvement tracking:** [docs/improvements.md](docs/improvements.md) — checklist perbaikan teridentifikasi

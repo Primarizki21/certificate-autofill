@@ -64,26 +64,30 @@ Gunakan variabel `PROCESSING_MODE` di atas. Default: `background`.
 pytest tests/ -v
 
 # Benchmark per pipeline komponen
-uv run python -m tests.benchmark_pipeline      # Regex baseline
-uv run python -m tests.benchmark_ner            # NER benchmark
-uv run python -m tests.benchmark_hybrid         # Hybrid + post-processing
-uv run python -m tests.benchmark_llm            # Hybrid + LLM (Ollama)
+uv run python -m tests.benchmark_pipeline          # Regex baseline
+uv run python -m tests.benchmark_ner               # NER benchmark
+uv run python -m tests.benchmark_hybrid            # Hybrid + post-processing
+uv run python -m tests.benchmark_llm               # Hybrid + LLM (Ollama)
+uv run python -m tests.benchmark_combined_v4_2     # Combined v4.2 (v4.0 vs v4.1 vs v4.2)
 ```
 
 ### Hasil Benchmark Saat Ini (74 sertifikat)
 
-| Method | MACRO exact | MACRO fuzzy | Latency/cert |
-|--------|:--------:|:---------:|:----------:|
-| Regex baseline | 42.2% | — | ~0.1s |
-| NER v1 only | 18.4% | — | ~0.07s |
-| Hybrid + post-processing | 48.1% | 66.1% | ~0.6s |
-| **Hybrid + LLM (A2 v2 full-text)** | **58.3%** | **74.5%** | **~2.5s** |
+| Method | MACRO exact | MACRO fuzzy | LLM calls | Latency/cert |
+|--------|:--------:|:---------:|:----------:|:----------:|
+| Regex baseline | 48.1% | 66.1% | 0 | ~0.6s |
+| v9 organizer_v2 + router | 60.2% | 74.2% | 29 | ~1.5s |
+| Combined v2 | 74.2% | 80.7% | 0 | ~0.1s |
+| Combined v3 | 85.7% | 88.3% | 0 | ~0.1s |
+| **Combined v4.2 (current)** | **76.82%** (all-cells) / **87.42%** (framework) | **78.64%** / **90.00%** | **0** | **~0.1s** |
+
+> Combined v4.2 = pipeline offline tanpa LLM. Flag default OFF (`ENABLE_COMBINED_V4_2=false`). Lihat [AGENTS.md](AGENTS.md) untuk detail arsitektur.
 
 ---
 
 ## LLM Inference (Ollama)
 
-Gunakan LLM lokal untuk field yang tidak bisa diekstrak NER/regex (tingkat, kelompok_kegiatan, jenis_kegiatan):
+LLM sekarang hanya sebagai **fallback untuk tingkat** (26 cert unrouted, ~1.5s/cert, ~176 tok/cert):
 
 ```bash
 # 1. Install & jalankan Ollama
@@ -94,7 +98,7 @@ ollama pull llama3.1:8b
 uv run python -m tests.benchmark_llm
 ```
 
-Detail implementasi di [docs/handoff_v5.md](docs/handoff_v5.md).
+Detail implementasi di [docs/handoff_v44.md](docs/handoff_v44.md).
 
 ---
 
@@ -115,7 +119,7 @@ GET  /healthz                    # Health check
 | Dokumen | Isi |
 |---------|-----|
 | [AGENTS.md](AGENTS.md) | Arsitektur pipeline, konvensi coding, panduan kontribusi |
-| [docs/handoff_v5.md](docs/handoff_v5.md) | Status eksperimen terbaru (Phase v4 — LLM) |
+| [docs/handoff_v44.md](docs/handoff_v44.md) | Status eksperimen terbaru (Combined v4.2 — 3 OOD pillars) |
 | [docs/improvements.md](docs/improvements.md) | Roadmap perbaikan teridentifikasi |
 | [docs/paper_findings.md](docs/paper_findings.md) | Literature review (363 papers, 9 groups) |
 | [docs/paper_keywords.md](docs/paper_keywords.md) | Keyword pencarian paper per topik |
