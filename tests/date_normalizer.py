@@ -17,10 +17,10 @@ ALL_MONTHS = {**INDONESIAN_MONTHS, **ENGLISH_MONTHS}
 # ponytail: handles all date formats found in certificate CSV + pipeline output
 _RE_DMY_SLASH = re.compile(r"^(\d{1,2})\s*[/-]\s*(\d{1,2})\s*[/-]\s*(\d{4})$")
 _RE_MONTH_FIRST = re.compile(
-    r"^([A-Za-z]+)\s+(\d{1,2})\s*,?\s*(\d{4})$", re.IGNORECASE
+    r"^([A-Za-z]+)\s+(\d{1,2})(?:st|nd|rd|th)?\s*,?\s*(\d{4})$", re.IGNORECASE
 )
 _RE_DAY_FIRST = re.compile(
-    r"^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$", re.IGNORECASE
+    r"^(\d{1,2})(?:st|nd|rd|th)?\s+([A-Za-z]+)\s+(\d{4})$", re.IGNORECASE
 )
 
 

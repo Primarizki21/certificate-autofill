@@ -187,7 +187,11 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 - **B8 Audit diff** (blast radius, tidak ada perubahan produksi).
 - **B9 LEDGER:** tambah entri PASS/FAIL (hipotesis, hasil, verdict, re-try condition).
 - **B10 PASS →** `report_data.json` + `generate_report.py` + `generate_runs_summary.py` + update handoff. FAIL → regenerate runs_summary (biar terlihat).
-- **B11 Commit** kode + docs bersama. **User yang push** (SSH passphrase).
+- **B11 COMMIT MANDATORI (OTOMATIS TANPA DIMINTA):**
+  - Agent **WAJIB langsung melakukan git commit** atas kode + docs terkait segera setelah verifikasi selesai (tests pass & gate check lolos).
+  - **DILARANG MENUNGGU USER MENYURUH COMMIT.** Commit adalah penutup wajib di setiap akhir eksperimen atau perubahan.
+  - Gunakan pesan commit terstruktur & deskriptif (Conventional Commits: `feat:`, `test:`, `docs:`, dll).
+  - Hanya `git push` yang diserahkan kepada user (karena kebutuhan SSH passphrase).
 - Rollback: trial FAIL = kode eksperimen boleh tetap, tercatat di ledger, jangan dipakai produksi.
 
 > Gagal trial = pengetahuan (bukan dead end). Ledger mempersempit ruang pencarian
@@ -197,26 +201,39 @@ OCR tidak hanya dipanggil saat teks kosong. Pipeline mengekstrak field *sementar
 
 ## Testing & Benchmark
 
-### Protokol evaluasi WAJIB (semua eksperimen baru — handoff v20)
+### Protokol Evaluasi & 4 Lapis Pembuktian Empiris WAJIB (Generalisasi & Robustness)
 
-1. **Rule router baru → k-fold dulu** (`tests/stat_validation.py`): precision
-   per-rule di fold uji; klaim hanya valid dengan CI; fire <5 (LOW-N) = jangan
-   diklaim robust.
-2. **Setiap perubahan ekstraktor/router → `pytest tests/` (31 test)** +
-   no-regress vs baseline GT v9 + matcher v2
-   (`GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`).
-3. **JANGAN bandingkan snapshot `router_decisions.json` lama vs code baru**
-   tanpa recompute organizer — snapshot memakai organizer pre-85f5cc8
-   (6/74 beda, memicu 2 false rule). Selalu recompute dengan
-   `tests/organizer_extractor_v2` current.
-4. **Benchmark run**: `uv run python -m tests.X`; run dir
-   `tests/benchmark_runs/{kind}_{ts}`; update ledger + report .md per eksperimen.
-5. **Matcher v2 + GT v9 = baseline evaluasi, jangan diubah** tanpa re-baseline
-   eksplisit. Normalisasi pipeline-side dulu; evaluator hanya jika disetujui user.
-6. **`offline_fields()`/`offline_variant()`** (di `tests/ood_probe.py`,
-   `tests/benchmark_org_norm.py`) = pipeline offline tanpa LLM/OCR untuk semua
-   evaluasi cepat — reuse, jangan duplikasi.
+Setiap perubahan pipeline, penambahan rule router, ekstraktor regex, atau normalizer **WAJIB mematuhi 4 lapis pembuktian empiris** berikut untuk menjamin generalisasi di luar 74 sertifikat dataset:
 
+1. **Lapis 1: Validasi Statistik ($k$-Fold Cross-Validation & Bootstrap CI)**:
+   - Uji stratified 5-fold CV (`tests/stat_validation.py`, `tests/router_mining_v5.py`).
+   - Rule router baru WAJIB mencapai **Min-Fold Precision 100.0%** (0 false positive di holdout fold uji yang tidak melihat data latih).
+   - Rule dengan frekuensi firing $< 5$ (LOW-N) harus dilaporkan secara eksplisit dan tidak boleh diklaim robust tanpa guard ordering yang ketat.
+   - Metrik makro wajib diverifikasi dengan Bootstrap Confidence Interval 1000x resampling.
+
+2. **Lapis 2: Uji Ketahanan Out-of-Distribution (OOD Stress Testing)**:
+   - **Template & Entity Mutation**: Uji mutasi entitas institusi/kegiatan (`tests/ood_probe.py`: UNAIR $\to$ UNS, FTMM $\to$ FST, nama event diganti generik). Penurunan akurasi pada field bebas-institusi (tanggal, kegiatan, peranan) dibatasi $\le 2.0\text{pt}$.
+   - **OCR Noise Injection**: Uji perturbasi kebingungan karakter nyata (`5↔S`, `8↔B`, `0↔O`, `1↔I`, spasi runtuh) pada tingkat $10\%$, $25\%$, $50\%$ untuk menguji daya tahan normalizer.
+
+3. **Lapis 3: Ekstraksi Berbasis Structural Semantic Anchors (Anti-Hardcoding)**:
+   - Regex WAJIB memanfaatkan relasi sintaksis dan pola tata bahasa sertifikat formal (misal: `sebagai [Role] pada [Kegiatan] yang diselenggarakan oleh [Penyelenggara]`, `in the event entitled "..."`, `held on [Date]`), BUKAN mencocokkan judul event spesifik secara hardcoded.
+   - Format tanggal dan nomor harus mengikuti format baku penanggalan (ID/EN) dan penomoran surat resmi (`[Kode]/[Unit]/[Bulan Romawi]/[Tahun]`).
+
+4. **Lapis 4: Arsitektur Safety Net Produksi & Calibrated Confidence (`needs_review`)**:
+   - Zero silent error: Semua nilai wajib dibungkus `ExtractedValue(value, confidence, source)`.
+   - Sertifikat dengan confidence $< 0.85$, unrouted/ambiguous, atau missing field otomatis memicu `needs_review = True` (target recall review $\ge 95\%$) agar diverifikasi oleh pengguna di antarmuka form.
+
+5. **STANDAR WAJIB PELAPORAN DOKUMEN (.docx / .md / .xlsx)**:
+   - **Setiap laporan `.docx` yang diminta user** (seperti `docs/pipeline_best.docx` atau laporan di `docs/report/`) **WAJIB menyertakan bab khusus "Empirical Robustness & Generalization Proof"** yang mencantumkan:
+     - Tabel 5-Fold Cross Validation (per-fold precision & routed certs).
+     - Tabel OOD Stress Test (mutasi institusi & kurva noise OCR).
+     - Rincian Anchor Semantik Struktural (anti-hardcoding).
+     - Matriks Kalibrasi Review & Safety Net (Recall review, Precision review, Confusion Matrix).
+   - **Dilarang keras** hanya menyajikan tabel progression linier tanpa bukti ketahanan empiris yang dapat diverifikasi.
+
+6. **Aturan Regression & Baseline Evaluasi**:
+   - Setiap perubahan ekstraktor/router $\to$ `pytest tests/` (seluruh test passing) + zero-regression vs baseline GT v9 + matcher v2 (`GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`).
+   - Matcher v2 + GT v9 = baseline evaluasi frozen, jangan diubah tanpa persetujuan eksplisit.
 ```bash
 # Semua unit test
 pytest tests/ -v
