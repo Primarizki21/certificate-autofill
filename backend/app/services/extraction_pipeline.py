@@ -91,9 +91,25 @@ def run_extraction_pipeline(
                 norm_nomor, 0.95, "regex_certificate_number"
             )
 
-    # Combined v2 Staging (dummy port 0 LLM bundle: AKT-005 + ORG-004 + PROD-002 + ROUTER-004).
-    # DEFAULT OFF (config) — aktifkan via ENABLE_COMBINED_V2=true.
-    if settings.enable_combined_v2:
+    # Combined v4.2 Staging (EXP-V4-003: 3 Pillars & High-DPI Robustness, 0 LLM).
+    # DEFAULT OFF (config) — aktifkan via ENABLE_COMBINED_V4_2=true.
+    if settings.enable_combined_v4_2:
+        from app.services.combined_extractor import apply_combined_v4_2
+
+        extracted = apply_combined_v4_2(extracted, raw_text)
+    elif settings.enable_combined_v4_1:
+        from app.services.combined_extractor import apply_combined_v4_1
+
+        extracted = apply_combined_v4_1(extracted, raw_text)
+    elif settings.enable_combined_v4:
+        from app.services.combined_extractor import apply_combined_v4
+
+        extracted = apply_combined_v4(extracted, raw_text)
+    elif settings.enable_combined_v3:
+        from app.services.combined_extractor import apply_combined_v3
+
+        extracted = apply_combined_v3(extracted, raw_text)
+    elif settings.enable_combined_v2:
         from app.services.combined_extractor import apply_combined_v2
 
         extracted = apply_combined_v2(extracted, raw_text)

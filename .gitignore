@@ -18,6 +18,8 @@ papers/
 # Ground truth certificate files (binary, managed externally)
 Sertifikat_Ground_Truth/
 
+# Test certificate dataset
+certs_test/
 # Secrets — one real file per developer
 .env
 
