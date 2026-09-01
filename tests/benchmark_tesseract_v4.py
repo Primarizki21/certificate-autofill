@@ -69,7 +69,9 @@ def _load_manifest() -> dict[str, str]:
 
 def cmd_build(args: argparse.Namespace) -> None:
     """Generate raw OCR texts using Tesseract-primary pipeline."""
-    os.makedirs(TARGET_TEXTS_DIR, exist_ok=True)
+    target_run_dir = args.out or TARGET_RUN_DIR
+    target_texts_dir = os.path.join(target_run_dir, "extracted_texts")
+    os.makedirs(target_texts_dir, exist_ok=True)
     manifest = _load_manifest()
     classification = classify_manifest(manifest)
 
@@ -86,7 +88,7 @@ def cmd_build(args: argparse.Namespace) -> None:
 
     print(f"=== TESSERACT-PRIMARY CORPUS GENERATION ===")
     print(f"Total stems: {len(stems)} (subset: {args.subset}, zoom: {args.zoom})")
-    print(f"Target directory: {TARGET_TEXTS_DIR}")
+    print(f"Target directory: {target_texts_dir}")
     print(f"Force OCR on digital PDFs: {args.force_ocr_all}")
 
     latency_records: list[dict[str, Any]] = []
@@ -95,7 +97,7 @@ def cmd_build(args: argparse.Namespace) -> None:
     n_ok = 0
 
     for stem in tqdm(stems, desc="Tesseract OCR"):
-        out_file = os.path.join(TARGET_TEXTS_DIR, f"{stem}.txt")
+        out_file = os.path.join(target_texts_dir, f"{stem}.txt")
         if args.skip_existing and os.path.exists(out_file):
             continue
 
@@ -175,7 +177,7 @@ def cmd_build(args: argparse.Namespace) -> None:
         "per_cert_latency": latency_records,
     }
 
-    meta_path = os.path.join(TARGET_RUN_DIR, "ocr_meta.json")
+    meta_path = os.path.join(target_run_dir, "ocr_meta.json")
     with open(meta_path, "w", encoding="utf-8") as f:
         json.dump(meta, f, indent=2)
 
@@ -242,7 +244,8 @@ def aggregate_all_cells(results: list[dict[str, Any]], fields: list[str]) -> dic
 
 def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
     """Run Composite v4.x extraction on Tesseract corpus and evaluate against GT v9."""
-    texts_dir = args.texts or TARGET_TEXTS_DIR
+    target_run_dir = args.out or TARGET_RUN_DIR
+    texts_dir = args.texts or os.path.join(target_run_dir, "extracted_texts")
     csv_path = args.csv or DEFAULT_GT_PATH
 
     print(f"=== EVALUATING TESSERACT CORPUS WITH COMPOSITE V4.X ===")
@@ -334,7 +337,7 @@ def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
         "detailed_results": raw_eval_results,
     }
 
-    eval_json_path = os.path.join(TARGET_RUN_DIR, "eval.json")
+    eval_json_path = os.path.join(target_run_dir, "eval.json")
     with open(eval_json_path, "w", encoding="utf-8") as f:
         json.dump(eval_output, f, indent=2, default=str)
 
@@ -361,8 +364,9 @@ def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
     return eval_output
 
 
-def generate_markdown_report(eval_output: dict[str, Any]) -> str:
+def generate_markdown_report(eval_output: dict[str, Any], report_path: str | None = None, is_pure: bool = False) -> str:
     """Generate comprehensive comparative report markdown."""
+    out_report_path = report_path or REPORT_MD_PATH
     fw_all = eval_output["framework_5field"]["all"]["macro_avg"]
     fw_scan = eval_output["framework_5field"]["scan"]["macro_avg"]
     fw_emb = eval_output["framework_5field"]["embedded"]["macro_avg"]
@@ -372,10 +376,13 @@ def generate_markdown_report(eval_output: dict[str, Any]) -> str:
 
     scan_5f = eval_output["framework_5field"]["scan"]
     scan_6f = eval_output["all_cells_6field"]["scan"]
+    emb_5f = eval_output["framework_5field"]["embedded"]
+    emb_6f = eval_output["all_cells_6field"]["embedded"]
     all_5f = eval_output["framework_5field"]["all"]
+    all_6f = eval_output["all_cells_6field"]["all"]
 
-    report_content = f"""# Laporan Evaluasi: Tesseract-Primary OCR + Composite v4.x Suite
-
+    doc_title = "Pure 100% Tesseract OCR (All-74)" if is_pure else "Tesseract-Primary OCR (Scan-49 + Digital-25)"
+    report_content = f"""# Laporan Evaluasi: {doc_title} + Composite v4.x Suite
 > **Tanggal Run:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
 > **Dataset:** 74 Sertifikat (49 Scan, 25 Digital Embedded)  
 > **Ground Truth:** `Ground_Truth_Sertifikat_v9.csv` | **Evaluator:** Matcher v2 (`tests/matchers.py`)  
@@ -472,10 +479,10 @@ Dari 33 sertifikat scan yang memiliki nomor di Ground Truth, hanya 4 yang tidak 
    - Untuk deployment CPU-only ringan, Tesseract-Primary + Composite v4.x merupakan konfigurasi optimal (cepat, stabil, zero GPU dependency).
    - Normalizer Romawi pada `normalize_nomor_v6` dapat diperluas untuk menangani akhiran noise OCR seperti `x1t` -> `XI`.
 """
-    os.makedirs(os.path.dirname(REPORT_MD_PATH), exist_ok=True)
-    with open(REPORT_MD_PATH, "w", encoding="utf-8") as f:
+    os.makedirs(os.path.dirname(out_report_path), exist_ok=True)
+    with open(out_report_path, "w", encoding="utf-8") as f:
         f.write(report_content)
-    print(f"Comparative report generated at: {REPORT_MD_PATH}")
+    print(f"Comparative report generated at: {out_report_path}")
     return report_content
 
 
@@ -484,6 +491,7 @@ def main() -> None:
     sub = p.add_subparsers(dest="cmd", required=True)
 
     b = sub.add_parser("build", help="Generate Tesseract OCR corpus across certificates")
+    b.add_argument("--out", default=None, help="Root directory for output run")
     b.add_argument("--subset", default="all", choices=["all", "scan", "embedded"], help="Target subset")
     b.add_argument("--zoom", type=float, default=3.0, help="Rendering zoom for PDFs")
     b.add_argument("--limit", type=int, default=None, help="Limit number of stems")
@@ -494,15 +502,22 @@ def main() -> None:
     b.set_defaults(func=cmd_build)
 
     e = sub.add_parser("eval", help="Evaluate Tesseract corpus with Composite v4.x")
-    e.add_argument("--texts", default=TARGET_TEXTS_DIR, help="Path to extracted texts directory")
+    e.add_argument("--out", default=None, help="Root directory for run artifacts")
+    e.add_argument("--texts", default=None, help="Path to extracted texts directory")
     e.add_argument("--csv", default=DEFAULT_GT_PATH, help="Path to Ground Truth CSV")
-    e.set_defaults(func=lambda args: generate_markdown_report(cmd_eval(args)))
+    e.add_argument("--report", default=None, help="Path to write markdown report")
+    e.add_argument("--is-pure", action="store_true", help="Flag if this is pure OCR run")
+    e.set_defaults(func=lambda args: generate_markdown_report(cmd_eval(args), report_path=args.report, is_pure=args.is_pure))
 
     r = sub.add_parser("report", help="Regenerate markdown report from existing eval.json")
+    r.add_argument("--out", default=None, help="Root directory for run artifacts")
+    r.add_argument("--report", default=None, help="Path to write markdown report")
+    r.add_argument("--is-pure", action="store_true", help="Flag if this is pure OCR run")
     r.set_defaults(func=lambda args: generate_markdown_report(
-        json.load(open(os.path.join(TARGET_RUN_DIR, "eval.json"), "r", encoding="utf-8"))
+        json.load(open(os.path.join(args.out or TARGET_RUN_DIR, "eval.json"), "r", encoding="utf-8")),
+        report_path=args.report,
+        is_pure=args.is_pure,
     ))
-
     args = p.parse_args()
     args.func(args)
 
