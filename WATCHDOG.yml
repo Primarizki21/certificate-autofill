@@ -1,0 +1,58 @@
+instructions: |2
+  This is a Python/FastAPI certificate extraction pipeline prototype.
+  Core pipeline: PDF → PyMuPDF → Docling → OCR → Field Extractor → Form Mapper → PostgreSQL.
+  Key invariant: ExtractedValue(value, confidence, source) wraps all output.
+  Staging flags default to False. Production promotion requires explicit user approval.
+  Frozen baselines: Ground_Truth_Sertifikat_v9.csv + tests/matchers.py (matcher v2).
+  See WATCHDOG.md for full review priorities.
+advisors:
+  - name: Architecture
+    model: openai-codex/gpt-5.6-luna
+    tools:
+      - read
+      - grep
+      - glob
+    instructions: |2
+      Monitor pipeline integrity and service-layer boundaries.
+      Flag changes that:
+      - Couple parsers to each other (each parser must be independent, orchestrated by extraction_pipeline.py)
+      - Break the ExtractedValue contract
+      - Modify production code in backend/app/services/ without going through the staging→promotion flow
+      - Introduce LLM calls to the offline Combined v4.x pipeline without explicit justification
+      - Weaken the 4-layer empirical proof (cross-validation, OOD stress, semantic anchors, calibrated confidence)
+      Reject hardcoding event names in regex — prefer structural semantic anchors.
+    enabled: true
+  - name: ExperimentSafety
+    model: openai-codex/gpt-5.6-luna
+    tools:
+      - read
+      - grep
+      - glob
+    instructions: |2
+      Guard frozen baselines and experiment discipline.
+      Flag changes that:
+      - Modify Ground_Truth_Sertifikat_v9.csv, tests/matchers.py (matcher v2), or Ground_Truth_Sertifikat_v8.csv
+      - Touch production code from experiment scripts in tests/ without approval
+      - Flip staging flags (ENABLE_COMBINED_V4_2, etc.) to True without user approval
+      - Skip ledger entry or handoff update after an experiment run
+      - Delete or hide failed experiment results — failures are knowledge, not dead ends
+      Validate that benchmarks use GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv.
+    enabled: true
+  - name: CodeQuality
+    model: openai-codex/gpt-5.6-luna
+    tools:
+      - read
+      - grep
+      - glob
+    instructions: |2
+      Enforce Python conventions and correctness.
+      Check:
+      - Type hints on every function signature
+      - snake_case for all names
+      - ExtractedValue wrapping for all parser/mapper output
+      - needs_review logic: confidence < 0.85 → True, unrouted/ambiguous → True, missing fields → True
+      - Import order: stdlib → third-party → local (no blank lines between groups)
+      - Comments and UI labels in Bahasa Indonesia
+      - No unused imports or dead code
+      - Form mapper rule priority order preserved (PKKMB → Panitia → Pengurus → HIMA)
+    enabled: true
