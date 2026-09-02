@@ -67,6 +67,25 @@ def run_extraction_pipeline(
             raw_text = combined_text
             parser_engine = "ocr_fallback" if len(raw_text.strip()) < settings.min_text_length else f"{parser_engine}+ocr_date_check"
             extracted = extract_certificate_fields(raw_text)
+    # Option A: Direct Tesseract-to-Gemini Extraction (EXP-LLM-002)
+    # Diaktifkan via ENABLE_TESSERACT_GEMINI=true (default true per user request).
+    # Jika Gemini sukses, hasil langsung dipakai; jika gagal/timeout/key missing,
+    # otomatis graceful fallback ke pipeline offline existing tanpa error 500.
+    if settings.enable_tesseract_gemini:
+        from app.services.gemini_extractor import extract_fields_with_gemini
+        gemini_extracted, meta = extract_fields_with_gemini(raw_text)
+        if gemini_extracted is not None:
+            extracted = gemini_extracted
+            parser_engine = f"{parser_engine}+{meta.get('model', 'gemini')}"
+            raw_json = meta
+            mapped = map_fields_to_form(extracted, tahun_akademik=tahun_akademik, bukti_fisik=bukti_fisik)
+            return PipelineResult(
+                parser_engine=parser_engine,
+                raw_text=raw_text,
+                raw_markdown=raw_markdown,
+                raw_json=raw_json,
+                mapped_fields=mapped,
+            )
 
     # v8: ekstraktor organizer phrase-anchored (v7 P1) — memperbaiki field
     # penyelenggara dan memberi sinyal lebih baik ke router tingkat.
