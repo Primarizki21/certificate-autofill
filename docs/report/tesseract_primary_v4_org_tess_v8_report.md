@@ -1,5 +1,5 @@
 # Laporan Evaluasi: Tesseract-Primary OCR (Scan-49 + Digital-25) + Composite v4.x Suite
-> **Tanggal Run:** 2026-09-02 08:09:25  
+> **Tanggal Run:** 2026-09-02 08:20:14  
 > **Dataset:** 74 Sertifikat (49 Scan, 25 Digital Embedded)  
 > **Ground Truth:** `Ground_Truth_Sertifikat_v9.csv` | **Evaluator:** Matcher v2 (`tests/matchers.py`)  
 > **Arsitektur Pipeline:** Tesseract-Primary (Multi-PSM) + Composite v4.x Candidate (`apply_composite_v4_candidate`)  

@@ -1,9 +1,10 @@
 # Laporan Evaluasi: Pure 100% Tesseract OCR (All-74) + Composite v4.x Suite
-> **Tanggal Run:** 2026-09-02 08:03:28  
+> **Tanggal Run:** 2026-09-02 08:20:10  
 > **Dataset:** 74 Sertifikat (49 Scan, 25 Digital Embedded)  
 > **Ground Truth:** `Ground_Truth_Sertifikat_v9.csv` | **Evaluator:** Matcher v2 (`tests/matchers.py`)  
 > **Arsitektur Pipeline:** Tesseract-Primary (Multi-PSM) + Composite v4.x Candidate (`apply_composite_v4_candidate`)  
-> **Organizer variant:** `v8` (Tesseract Organizer v8)
+> **Organizer variant:** `v8` (Tesseract Organizer v8)  
+> **Organizer routing:** `v8`
 
 ---
 
