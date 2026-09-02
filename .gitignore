@@ -22,6 +22,7 @@ Sertifikat_Ground_Truth/
 certs_test/
 # Secrets — one real file per developer
 .env
+.env.google
 
 # Arxiv search state (auto-generated, resume checkpoint)
 scripts/.paper_search_state.json
