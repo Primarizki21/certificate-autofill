@@ -1,6 +1,8 @@
+import logging
 from dataclasses import dataclass
 from typing import Any
 
+logger = logging.getLogger(__name__)
 from app.config import settings
 from app.services.docling_parser import parse_with_docling
 from app.services.field_extractor import extract_certificate_fields
