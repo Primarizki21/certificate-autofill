@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 103 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 106 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -77,6 +77,9 @@
 | `ocr_experiment/corpus_nomor_crop_lines7` | nomor_crop | 47.3% | 4431ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_retry_ctrl_cache` | nomor_crop | 47.3% | 6048ms | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_rt6` | nomor_crop | 46.8% | 2859ms | scan=49 emb=0; scan org 26.5% nomor 54.5% |
+| `ocr_experiment/gemini_2_5_flash_20260902_100719` | gemini-2.5-flash | 59.9% | 4618ms | scan=49 emb=25; scan org 53.1% nomor 51.0% |
+| `ocr_experiment/gemini_2_5_flash_lite_20260902_101301` | gemini-2.5-flash-lite | 59.2% | 1317ms | scan=49 emb=25; scan org 61.2% nomor 53.1% |
+| `ocr_experiment/gemini_3_1_flash_lite_20260902_101439` | gemini-3.1-flash-lite | 65.0% | 1358ms | scan=49 emb=25; scan org 57.1% nomor 55.1% |
 | `ocr_experiment/lfm25_full_20260824_111939` | lfm25_vl_3b | — | —ms | scan=49 emb=25 |
 | `ocr_experiment/lfm25_full_20260824_111939 [hybrid_10]` | rapid_tess+doctr | 44.4% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 20.0% nomor 28.6% |
 | `ocr_experiment/lfm25_full_20260824_111939 [hybrid_49]` | rapid_tess+doctr | 50.7% | —ms | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6% |
@@ -185,6 +188,9 @@
 | `ocr_experiment/corpus_nomor_crop_lines7` | 2026-08-24 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_retry_ctrl_cache` | 2026-08-27 | ocr_trial |  | — | 47.3% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 57.6% |
 | `ocr_experiment/corpus_nomor_crop_rt6` | 2026-08-24 | ocr_trial |  | — | 46.8% | — | — |  | scan=49 emb=0; scan org 26.5% nomor 54.5% |
+| `ocr_experiment/gemini_2_5_flash_20260902_100719` | 2026-09-02 | ocr_trial | direct_llm | — | 59.9% | — | — |  | scan=49 emb=25; scan org 53.1% nomor 51.0% |
+| `ocr_experiment/gemini_2_5_flash_lite_20260902_101301` | 2026-09-02 | ocr_trial | direct_llm | — | 59.2% | — | — |  | scan=49 emb=25; scan org 61.2% nomor 53.1% |
+| `ocr_experiment/gemini_3_1_flash_lite_20260902_101439` | 2026-09-02 | ocr_trial | direct_llm | — | 65.0% | — | — |  | scan=49 emb=25; scan org 57.1% nomor 55.1% |
 | `ocr_experiment/lfm25_full_20260824_111939` | 2026-08-24 | ocr_trial |  | — | — | — | — |  | scan=49 emb=25 |
 | `ocr_experiment/lfm25_full_20260824_111939 [hybrid_10]` | 2026-08-24 | ocr_trial |  | — | 44.4% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 20.0% nomor 28.6% |
 | `ocr_experiment/lfm25_full_20260824_111939 [hybrid_49]` | 2026-08-24 | ocr_trial |  | — | 50.7% | — | — |  | HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6% |

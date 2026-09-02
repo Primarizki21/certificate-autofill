@@ -1,0 +1,4 @@
+model,n_certs,macro_exact_6field,macro_fuzzy_6field,framework_exact_5field,framework_fuzzy_5field,scan_macro_exact,emb_macro_exact,nama_kegiatan_exact,nomor_exact,organizer_exact,tanggal_mulai_exact,tanggal_selesai_exact,tingkat_exact,total_tokens,total_cost_usd,total_cost_idr,avg_tokens_per_cert,avg_cost_idr_per_cert,avg_latency_s
+gemini-2.5-flash,74,58.56%,71.40%,57.84%,72.70%,59.86%,56.00%,45.95%,54.05%,54.05%,67.57%,67.57%,62.16%,144005,$0.1623,"Rp2,881.90",1946.0,Rp38.94,4.62s
+gemini-2.5-flash-lite,74,58.78%,66.44%,61.89%,70.81%,59.18%,58.00%,58.11%,56.76%,60.81%,66.22%,67.57%,43.24%,101359,$0.0136,Rp241.17,1369.7,Rp3.26,1.32s
+gemini-3.1-flash-lite,74,63.74%,72.75%,63.24%,73.78%,64.97%,61.33%,62.16%,59.46%,59.46%,67.57%,67.57%,66.22%,101298,$0.0396,Rp703.27,1368.9,Rp9.50,1.36s
