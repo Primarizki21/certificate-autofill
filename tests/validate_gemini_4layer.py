@@ -270,7 +270,7 @@ def run_ood_stress_testing(
 
     mut_free_pct = round(mut_free_exact / mut_free_total * 100, 2) if mut_free_total else 0.0
     mut_drop = round(base_free_pct - mut_free_pct, 2)
-    mut_pass = mut_drop <= 2.5
+    mut_pass = mut_drop <= 2.0
 
     # 2. Injeksi Noise OCR (10%, 25%, 50%)
     noise_results: dict[str, Any] = {}
@@ -446,7 +446,7 @@ def main() -> None:
     client = GeminiClient(default_model=model_name, request_delay=1.2)
     subset_size = len(certs) if args.full else 15
     ood_res = run_ood_stress_testing(certs, args.texts_dir, client, model_name, subset_size=subset_size)
-    print(f"   Mutation Free-Inst Drop : {ood_res['mutation_drop_pct']}pt (Gate <= 2.5pt: {'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'})")
+    print(f"   Mutation Free-Inst Drop : {ood_res['mutation_drop_pct']}pt (Gate <= 2.0pt: {'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'})")
     print(f"   Noise Degradation       : 10%={ood_res['noise_degradation_curve'].get('10%', {}).get('exact_pct')}%, 25%={ood_res['noise_degradation_curve'].get('25%', {}).get('exact_pct')}%, 50%={ood_res['noise_degradation_curve'].get('50%', {}).get('exact_pct')}%")
 
     # Lapis 3: Audit Anchor Struktural
@@ -505,7 +505,7 @@ def main() -> None:
         f"- **Ukuran Sampel Terstratifikasi**: {ood_res['sample_size']} sertifikat",
         f"- **Akurasi Baseline Field Bebas-Institusi**: {ood_res['baseline_free_institution_pct']:.2f}%",
         f"- **Akurasi Pasca-Mutasi Entitas (UNAIR->UNS, FTMM->FST)**: {ood_res['mutation_free_institution_pct']:.2f}%",
-        f"- **Penurunan Akurasi (Delta)**: **{ood_res['mutation_drop_pct']:.2f}pt** (Ambang batas toleransi <= 2.5pt: **{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}**)",
+        f"- **Penurunan Akurasi (Delta)**: **{ood_res['mutation_drop_pct']:.2f}pt** (Ambang batas toleransi <= 2.0pt: **{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}**)",
         "",
         "### Kurva Ketahanan terhadap Noise Karakter OCR Nyata",
         "",
