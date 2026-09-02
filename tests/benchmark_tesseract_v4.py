@@ -245,9 +245,10 @@ def aggregate_all_cells(results: list[dict[str, Any]], fields: list[str]) -> dic
 def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
     """Run Composite v4.x extraction on Tesseract corpus and evaluate against GT v9."""
     target_run_dir = args.out or TARGET_RUN_DIR
+    os.makedirs(target_run_dir, exist_ok=True)
     texts_dir = args.texts or os.path.join(target_run_dir, "extracted_texts")
     csv_path = args.csv or DEFAULT_GT_PATH
-
+    organizer_variant = "v8" if args.use_v8_organizer else "v2"
     print(f"=== EVALUATING TESSERACT CORPUS WITH COMPOSITE V4.X ===")
     print(f"Corpus directory: {texts_dir}")
     print(f"Ground Truth CSV: {csv_path}")
@@ -277,24 +278,33 @@ def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
             lines = f.read().splitlines()
         raw_text = "\n".join(l for l in lines if not l.startswith("#")).strip()
         matched += 1
+        is_scan = classification.get(stem, {}).get("scan", True)
+        effective_variant = (
+            organizer_variant
+            if organizer_variant != "v8" or args.is_pure or is_scan
+            else "v2"
+        )
 
         # 1. Base extraction
         extracted = extract_certificate_fields(raw_text)
         extracted["full_text"] = ExtractedValue(raw_text, 1.0, "ocr_text")
 
         # 2. Composite v4.x pipeline (B8)
-        extracted = apply_composite_v4_candidate(extracted, raw_text)
-
+        extracted = apply_composite_v4_candidate(
+            extracted,
+            raw_text,
+            organizer_variant=effective_variant,
+        )
         # 3. Form mapping
         mapped = map_fields_to_form(extracted, tahun_akademik="2024/2025", bukti_fisik="Sertifikat")
 
         # 4. Evaluation
         eval_item = evaluate_extracted_fields(mapped, row)
-        is_scan = classification.get(stem, {}).get("scan", True)
         eval_item["_meta"] = {
             "stem": stem,
             "filename": fname,
             "scan": is_scan,
+            "organizer_variant": effective_variant,
         }
         raw_eval_results.append(eval_item)
 
@@ -323,6 +333,7 @@ def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
         "timestamp": datetime.now().isoformat(),
         "texts_dir": texts_dir,
         "csv": csv_path,
+        "organizer_variant": organizer_variant,
         "n_matched": matched,
         "framework_5field": {
             "all": fw_summary_all,
@@ -367,6 +378,7 @@ def cmd_eval(args: argparse.Namespace) -> dict[str, Any]:
 def generate_markdown_report(eval_output: dict[str, Any], report_path: str | None = None, is_pure: bool = False) -> str:
     """Generate comprehensive comparative report markdown."""
     out_report_path = report_path or REPORT_MD_PATH
+    organizer_variant = eval_output.get("organizer_variant", "v2")
     fw_all = eval_output["framework_5field"]["all"]["macro_avg"]
     fw_scan = eval_output["framework_5field"]["scan"]["macro_avg"]
     fw_emb = eval_output["framework_5field"]["embedded"]["macro_avg"]
@@ -382,11 +394,19 @@ def generate_markdown_report(eval_output: dict[str, Any], report_path: str | Non
     all_6f = eval_output["all_cells_6field"]["all"]
 
     doc_title = "Pure 100% Tesseract OCR (All-74)" if is_pure else "Tesseract-Primary OCR (Scan-49 + Digital-25)"
+    organizer_label = "Tesseract Organizer v8" if organizer_variant == "v8" else "Normalizer v7 baseline"
+    organizer_routing = (
+        "v8 on scan and v2 on digital embedded"
+        if organizer_variant == "v8" and not is_pure
+        else organizer_variant
+    )
     report_content = f"""# Laporan Evaluasi: {doc_title} + Composite v4.x Suite
 > **Tanggal Run:** {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}  
 > **Dataset:** 74 Sertifikat (49 Scan, 25 Digital Embedded)  
 > **Ground Truth:** `Ground_Truth_Sertifikat_v9.csv` | **Evaluator:** Matcher v2 (`tests/matchers.py`)  
-> **Arsitektur Pipeline:** Tesseract-Primary (Multi-PSM) + Composite v4.x Candidate (`apply_composite_v4_candidate`)
+> **Arsitektur Pipeline:** Tesseract-Primary (Multi-PSM) + Composite v4.x Candidate (`apply_composite_v4_candidate`)  
+> **Organizer variant:** `{organizer_variant}` ({organizer_label})  
+> **Organizer routing:** `{organizer_routing}`
 
 ---
 
@@ -395,14 +415,15 @@ def generate_markdown_report(eval_output: dict[str, Any], report_path: str | Non
 Eksperimen ini mengevaluasi performa Tesseract sebagai engine OCR utama (*primary standalone OCR*) yang dipasangkan dengan suite post-processing modern **Composite v4.x (B8)**:
 - **Activity:** Structural semantic grammar anchors & anti-bleed bounds (`extract_activity_v9`)
 - **Nomor:** Length-preserving DPKKA cleaner & gated Roman numeral month repairs (`normalize_nomor_v6`)
-- **Penyelenggara:** Normalizer v7 cleaner (`normalize_organizer_v7`)
+- **Penyelenggara:** {organizer_label}
 - **Tanggal:** Date extractor v2 multi-day span parser (`extract_dates_v2`)
 - **Tingkat:** Hardened contextual router disambiguation (`route_with_disambiguation_v7`)
 
-Hasil membuktikan peningkatan masif ketika Tesseract multi-PSM dipadukan dengan post-processing v4.x:
-- **Framework 5-Field (Scan-49):** MACRO exact **{fw_scan['exact_acc']*100:.2f}%** (fuzzy **{fw_scan['fuzzy_acc']*100:.2f}%**), melesat **+31.35pt** dibandingkan baseline `baseline_rapid_tess` (47.26%).
-- **Nomor Sertifikat (Scan-49):** Mencapai **{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact_acc']*100:.2f}%** (29/33), naik **+30.30pt** (+10 sertifikat pulih vs baseline 57.58%).
-- **Nama Kegiatan (Scan-49):** Mencapai **{scan_5f['nama_kegiatan_sertifikasi']['exact_acc']*100:.2f}%** (36/49), naik **+67.35pt** (+33 sertifikat pulih vs baseline 6.12%).
+Hasil run:
+- **Framework 5-Field (Scan-49):** MACRO exact **{fw_scan['exact_acc']*100:.2f}%** (fuzzy **{fw_scan['fuzzy_acc']*100:.2f}%**).
+- **Nomor Sertifikat (Scan-49):** **{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact']}/{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['total']}** exact.
+- **Nama Kegiatan (Scan-49):** **{scan_5f['nama_kegiatan_sertifikasi']['exact']}/{scan_5f['nama_kegiatan_sertifikasi']['total']}** exact.
+- **Penyelenggara (Scan-49):** **{scan_5f['penyelenggara_kegiatan']['exact']}/{scan_5f['penyelenggara_kegiatan']['total']}** exact.
 - **All-Cells 6-Field (Scan-49):** MACRO exact **{ac_scan['exact_acc']*100:.2f}%** (fuzzy **{ac_scan['fuzzy_acc']*100:.2f}%**).
 - **All-Cells 6-Field (All-74):** MACRO exact **{ac_all['exact_acc']*100:.2f}%** (fuzzy **{ac_all['fuzzy_acc']*100:.2f}%**).
 - **Framework 5-Field (All-74):** MACRO exact **{fw_all['exact_acc']*100:.2f}%** (fuzzy **{fw_all['fuzzy_acc']*100:.2f}%**).
@@ -411,16 +432,16 @@ Hasil membuktikan peningkatan masif ketika Tesseract multi-PSM dipadukan dengan 
 
 ## 2. Tabel Komparasi 4 Arah (Scan-49 Subset)
 
-| Metrik (Scan-49) | Baseline Rapid+Tess (v9) | Rapid-Only + v4.x (HYB-003) | **Tesseract-Primary + v4.x** (New) | Delta vs Baseline |
+| Metrik (Scan-49) | Baseline Rapid+Tess (v9) | Rapid-Only + v4.x (HYB-003) | **Tesseract-Primary + {organizer_label}** | Delta vs Baseline |
 |---|:---:|:---:|:---:|:---:|
-| **MACRO Exact (5-Field)** | 47.26% (95/201) | 50.75% | **{fw_scan['exact_acc']*100:.2f}%** (158/201) | **+31.35pt** |
-| **MACRO Fuzzy (5-Field)** | 57.21% | 63.87% | **{fw_scan['fuzzy_acc']*100:.2f}%** (174/201) | **+29.36pt** |
-| Nama Kegiatan exact | 6.12% (3/49) | 6.12% | **{scan_5f['nama_kegiatan_sertifikasi']['exact_acc']*100:.2f}%** (36/49) | **+67.35pt** |
-| Nomor Sertifikat exact | 57.58% (19/33) | 57.58% | **{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact_acc']*100:.2f}%** (29/33) | **+30.30pt** |
-| Penyelenggara exact | 26.53% (13/49) | 34.69% | **{scan_5f['penyelenggara_kegiatan']['exact_acc']*100:.2f}%** (25/49) | **+24.49pt** |
-| Tanggal Mulai exact | 85.71% (30/35) | 85.71% | **{scan_5f['waktu_mulai_pelaksanaan']['exact_acc']*100:.2f}%** (34/35) | **+11.43pt** |
-| Tanggal Selesai exact | 85.71% (30/35) | 85.71% | **{scan_5f['waktu_selesai_pelaksanaan']['exact_acc']*100:.2f}%** (34/35) | **+11.43pt** |
-| Tingkat exact (6-Field) | — | — | **{scan_6f['tingkat']['exact_acc']*100:.2f}%** (41/49) | Baseline baru |
+| **MACRO Exact (5-Field)** | 47.26% (95/201) | 50.75% | **{fw_scan['exact_acc']*100:.2f}%** ({fw_scan['exact']}/{fw_scan['total']}) | **{(fw_scan['exact_acc']-95/201)*100:+.2f}pt** |
+| **MACRO Fuzzy (5-Field)** | 57.21% | 63.87% | **{fw_scan['fuzzy_acc']*100:.2f}%** ({fw_scan['fuzzy']}/{fw_scan['total']}) | **{(fw_scan['fuzzy_acc']-57.21/100)*100:+.2f}pt** |
+| Nama Kegiatan exact | 6.12% (3/49) | 6.12% | **{scan_5f['nama_kegiatan_sertifikasi']['exact_acc']*100:.2f}%** ({scan_5f['nama_kegiatan_sertifikasi']['exact']}/{scan_5f['nama_kegiatan_sertifikasi']['total']}) | **{(scan_5f['nama_kegiatan_sertifikasi']['exact_acc']-3/49)*100:+.2f}pt** |
+| Nomor Sertifikat exact | 57.58% (19/33) | 57.58% | **{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact_acc']*100:.2f}%** ({scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact']}/{scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['total']}) | **{(scan_5f['nomor_bukti_fisik_nomor_sertifikasi']['exact_acc']-19/33)*100:+.2f}pt** |
+| Penyelenggara exact | 26.53% (13/49) | 34.69% | **{scan_5f['penyelenggara_kegiatan']['exact_acc']*100:.2f}%** ({scan_5f['penyelenggara_kegiatan']['exact']}/{scan_5f['penyelenggara_kegiatan']['total']}) | **{(scan_5f['penyelenggara_kegiatan']['exact_acc']-13/49)*100:+.2f}pt** |
+| Tanggal Mulai exact | 85.71% (30/35) | 85.71% | **{scan_5f['waktu_mulai_pelaksanaan']['exact_acc']*100:.2f}%** ({scan_5f['waktu_mulai_pelaksanaan']['exact']}/{scan_5f['waktu_mulai_pelaksanaan']['total']}) | **{(scan_5f['waktu_mulai_pelaksanaan']['exact_acc']-30/35)*100:+.2f}pt** |
+| Tanggal Selesai exact | 85.71% (30/35) | 85.71% | **{scan_5f['waktu_selesai_pelaksanaan']['exact_acc']*100:.2f}%** ({scan_5f['waktu_selesai_pelaksanaan']['exact']}/{scan_5f['waktu_selesai_pelaksanaan']['total']}) | **{(scan_5f['waktu_selesai_pelaksanaan']['exact_acc']-30/35)*100:+.2f}pt** |
+| Tingkat exact (6-Field) | — | — | **{scan_6f['tingkat']['exact_acc']*100:.2f}%** ({scan_6f['tingkat']['exact']}/{scan_6f['tingkat']['total']}) | Baseline baru |
 
 ---
 
@@ -507,6 +528,7 @@ def main() -> None:
     e.add_argument("--csv", default=DEFAULT_GT_PATH, help="Path to Ground Truth CSV")
     e.add_argument("--report", default=None, help="Path to write markdown report")
     e.add_argument("--is-pure", action="store_true", help="Flag if this is pure OCR run")
+    e.add_argument("--use-v8-organizer", action="store_true", help="Use isolated Tesseract organizer v8")
     e.set_defaults(func=lambda args: generate_markdown_report(cmd_eval(args), report_path=args.report, is_pure=args.is_pure))
 
     r = sub.add_parser("report", help="Regenerate markdown report from existing eval.json")

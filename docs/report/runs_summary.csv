@@ -73,9 +73,32 @@ run_ner_v1_20260728_161014,2026-07-28,ner_v1,,,,,,,—,12.8%,—,—,—,
 run_ner_v1_20260730_083808,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,
 run_ner_v1_20260730_084046,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,
 run_ner_v1_20260730_095336,2026-07-30,ner_v1,,,,,,,—,12.8%,—,—,—,
+ocr_experiment/b1_high_dpi_20260901_132227,,ocr_trial,,,fixed_v8,,,,—,—,—,—,—,scan org — nomor —
+ocr_experiment/b1_high_dpi_20260901_184530,,ocr_trial,,,fixed_v8,,,,—,—,—,—,—,scan org — nomor —
+ocr_experiment/b1_high_dpi_20260901_185507,,ocr_trial,,,fixed_v8,,,,—,—,—,—,—,scan org — nomor —
+ocr_experiment/baseline_rapid,2026-08-04,ocr_trial,rapid,,fixed_v8,,,,—,47.3%,—,—,3488,scan=49 emb=25; scan org 34.7% nomor 54.5%
+ocr_experiment/baseline_rapid_tess,2026-08-04,ocr_trial,rapid_tess,,fixed_v8,,,,—,47.3%,—,—,8609,scan=49 emb=25; scan org 26.5% nomor 57.6%
+ocr_experiment/corpus_doctr,2026-08-06,ocr_trial,doctr,,fixed_v8,,,,—,45.8%,—,—,—,scan=49 emb=25; scan org 34.7% nomor 36.4%
 ocr_experiment/corpus_doctr [hybrid_10],2026-08-06,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,42.2%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 10.0% nomor 28.6%
 ocr_experiment/corpus_doctr [hybrid_49],2026-08-06,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,49.2%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6%
 ocr_experiment/corpus_doctr [hybrid_embedded],2026-08-06,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,52.3%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 28.0% nomor 68.4%
-ocr_experiment/hybrid_rapid_org [hybrid_49],,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,49.2%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 34.7% nomor 57.6%
+ocr_experiment/corpus_nomor_cheap_rapid,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,46.8%,—,—,6320,scan=49 emb=0; scan org 26.5% nomor 54.5%
+ocr_experiment/corpus_nomor_cheap_rt13,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,46.8%,—,—,6187,scan=49 emb=0; scan org 26.5% nomor 54.5%
+ocr_experiment/corpus_nomor_cheap_tess13,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,47.3%,—,—,4307,scan=49 emb=0; scan org 26.5% nomor 57.6%
+ocr_experiment/corpus_nomor_cheap_tess6,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,47.3%,—,—,4267,scan=49 emb=0; scan org 26.5% nomor 57.6%
+ocr_experiment/corpus_nomor_crop,2026-08-06,ocr_trial,nomor_crop,,fixed_v8,,,,—,47.8%,—,—,5231,scan=49 emb=25; scan org 26.5% nomor 60.6%
+ocr_experiment/corpus_nomor_crop_lines7,2026-08-24,ocr_trial,nomor_crop,,fixed_v8,,,,—,47.3%,—,—,4431,scan=49 emb=0; scan org 26.5% nomor 57.6%
+ocr_experiment/corpus_nomor_crop_retry_ctrl_cache,2026-08-27,ocr_trial,nomor_crop,,fixed_v8,,,,—,47.3%,—,—,6048,scan=49 emb=0; scan org 26.5% nomor 57.6%
+ocr_experiment/corpus_nomor_crop_rt6,2026-08-24,ocr_trial,nomor_crop,,fixed_v8,,,,—,46.8%,—,—,2859,scan=49 emb=0; scan org 26.5% nomor 54.5%
+ocr_experiment/lfm25_full_20260824_111939,2026-08-24,ocr_trial,lfm25_vl_3b,,fixed_v8,,,,—,—,—,—,—,scan=49 emb=25
 ocr_experiment/lfm25_full_20260824_111939 [hybrid_10],2026-08-24,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,44.4%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 20.0% nomor 28.6%
 ocr_experiment/lfm25_full_20260824_111939 [hybrid_49],2026-08-24,ocr_trial,rapid_tess+doctr,,fixed_v8,,,,—,50.7%,—,—,—,HYB-001 hybrid (DocTR dates+organizer / baseline nomor); org 40.8% nomor 57.6%
+ocr_experiment/lfm25_ocr_20260813_151134,2026-08-13,ocr_trial,lfm25_vl_3b,,fixed_v8,,,,—,44.4%,—,—,—,scan=49 emb=25; scan org 20.0% nomor 28.6%
+ocr_experiment/probe_doctr,2026-08-06,ocr_trial,doctr,,fixed_v8,,,,—,40.0%,—,—,—,scan=10 emb=0; scan org 10.0% nomor 14.3%
+ocr_experiment/tesseract_primary_v4,2026-09-01,ocr_trial,tesseract_primary,,fixed_v8,,,,—,78.6%,—,—,3123,scan=49 emb=25; scan org 51.0% nomor 87.9%
+ocr_experiment/tesseract_primary_v4_org_tess_v8,,ocr_trial,,,fixed_v8,,,v8,—,80.6%,—,—,—,scan org 59.2% nomor 87.9%
+ocr_experiment/tesseract_pure_all74_org_tess_v8,,ocr_trial,,,fixed_v8,,,v8,—,80.6%,—,—,—,scan org 59.2% nomor 87.9%
+ocr_experiment/tesseract_pure_all74_v4,2026-09-01,ocr_trial,tesseract_primary,,fixed_v8,,,,—,78.6%,—,—,5765,scan=49 emb=25; scan org 51.0% nomor 87.9%
+ocr_experiment/trial_a_easyocr,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,38.3%,—,—,—,scan=49 emb=25; scan org 36.7% nomor 15.2%
+ocr_experiment/trial_a_easyocr_gpu,2026-08-04,ocr_trial,easy,,fixed_v8,,,,—,42.3%,—,—,9716,scan=49 emb=25; scan org 28.6% nomor 33.3%
+ocr_experiment/trial_a_paddle26,2026-08-04,ocr_trial,paddle,,fixed_v8,,,,—,43.3%,—,—,10692,scan=49 emb=25; scan org 32.6% nomor 39.4%
