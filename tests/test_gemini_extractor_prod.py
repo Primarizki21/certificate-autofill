@@ -33,11 +33,14 @@ from app.services.extraction_pipeline import run_extraction_pipeline
 
 class TestGeminiExtractorProduction:
     def test_missing_api_key_returns_graceful_error(self):
-        """Ketika API key tidak ada, harus mengembalikan (None, meta) tanpa crash."""
-        with patch("app.services.gemini_extractor.settings", replace(settings, google_api_key=None)):
+        orig_key = settings.google_api_key
+        try:
+            object.__setattr__(settings, "google_api_key", None)
             extracted, meta = extract_fields_with_gemini("Contoh teks", api_key=None)
             assert extracted is None
             assert "error" in meta
+        finally:
+            object.__setattr__(settings, "google_api_key", orig_key)
 
     def test_standardize_date_variations(self):
         """Uji parsing tanggal di modul produksi."""
@@ -76,10 +79,14 @@ class TestGeminiExtractorProduction:
         with open(pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-        with patch("app.services.extraction_pipeline.settings", replace(settings, enable_tesseract_gemini=False)):
+        orig_val = settings.enable_tesseract_gemini
+        try:
+            object.__setattr__(settings, "enable_tesseract_gemini", False)
             res = run_extraction_pipeline(pdf_bytes, sample_files[0], "2024/2025", "Sertifikat")
             assert "gemini" not in res.parser_engine
             assert "nama_kegiatan_sertifikasi" in res.mapped_fields
+        finally:
+            object.__setattr__(settings, "enable_tesseract_gemini", orig_val)
 
     def test_pipeline_option_a_graceful_fallback_on_error(self):
         """Ketika Gemini error (misal jaringan down), pipeline fallback otomatis ke offline."""
@@ -91,12 +98,10 @@ class TestGeminiExtractorProduction:
 
         # Simulasikan Gemini error
         with patch("app.services.gemini_extractor.extract_fields_with_gemini", return_value=(None, {"error": "Connection refused"})):
-            with patch("app.services.extraction_pipeline.settings", replace(settings, enable_tesseract_gemini=True)):
-                res = run_extraction_pipeline(pdf_bytes, sample_files[0], "2024/2025", "Sertifikat")
-                # Berhasil menghasilkan form dari fallback offline tanpa error 500
-                assert res is not None
-                assert "nama_kegiatan_sertifikasi" in res.mapped_fields
-                assert "gemini" not in res.parser_engine
+            res = run_extraction_pipeline(pdf_bytes, sample_files[0], "2024/2025", "Sertifikat")
+            assert res is not None
+            assert "nama_kegiatan_sertifikasi" in res.mapped_fields
+            assert "gemini" not in res.parser_engine
 
     def test_pipeline_option_a_live_smoke(self):
         """Smoke test live: ekstraksi nyata via run_extraction_pipeline dengan Gemini aktif."""
@@ -109,13 +114,11 @@ class TestGeminiExtractorProduction:
         with open(sample_pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-        with patch("app.services.extraction_pipeline.settings", replace(settings, enable_tesseract_gemini=True)):
-            res = run_extraction_pipeline(pdf_bytes, "1952296_219642_skp.pdf", "2024/2025", "Sertifikat")
-            assert res is not None
-            assert "gemini" in res.parser_engine.lower()
-            assert res.mapped_fields["nama_kegiatan_sertifikasi"].value is not None
-            assert res.mapped_fields["penyelenggara_kegiatan"].value is not None
-            assert res.mapped_fields["tingkat"].value is not None
-            assert res.mapped_fields["prestasi_partisipasi_jabatan"].value is not None
-            # Pastikan form_mapper tidak silent error
-            assert res.mapped_fields["kelompok_kegiatan"].value is not None
+        res = run_extraction_pipeline(pdf_bytes, "1952296_219642_skp.pdf", "2024/2025", "Sertifikat")
+        assert res is not None
+        assert "gemini" in res.parser_engine.lower()
+        assert res.mapped_fields["nama_kegiatan_sertifikasi"].value is not None
+        assert res.mapped_fields["penyelenggara_kegiatan"].value is not None
+        assert res.mapped_fields["tingkat"].value is not None
+        assert res.mapped_fields["prestasi_partisipasi_jabatan"].value is not None
+        assert res.mapped_fields["kelompok_kegiatan"].value is not None
