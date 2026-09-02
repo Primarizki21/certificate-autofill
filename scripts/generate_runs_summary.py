@@ -237,6 +237,8 @@ def scan_ocr_trials() -> list[dict]:
             continue
         meta = _load(os.path.join(d, "ocr_meta.json"))
         ev = _load(os.path.join(d, "eval.json"))
+        if not meta and not ev:
+            continue
         rec = {
             "run_dir": f"ocr_experiment/{name}",
             "date": "",
@@ -261,6 +263,7 @@ def scan_ocr_trials() -> list[dict]:
                 rec["latency_ms"] = str(round(lat.get("avg_seconds", 0) * 1000))
             rec["notes"] = f"scan={meta.get('scan_count', 49)} emb={meta.get('embedded_count', 25)}"
         if ev:
+            rec["variant"] = ev.get("organizer_variant", "")
             scan = ev.get("scan") or (ev.get("framework_5field") or {}).get("scan") or {}
             rec["macro"] = _pct((scan.get("macro_avg") or {}).get("exact_acc"))
             org = (scan.get("penyelenggara_kegiatan") or {}).get("exact_acc")
@@ -268,6 +271,7 @@ def scan_ocr_trials() -> list[dict]:
             rec["notes"] = (rec["notes"] + "; " if rec["notes"] else "") + (
                 f"scan org {_pct(org)} nomor {_pct(nom)}"
             )
+        recs.append(rec)
         # Variant eval (mis. HYB-001 hybrid per-field) di korpus yang sama:
         # eval_hybrid_*.json -> emit row terpisah agar hasil variant tampil.
         try:

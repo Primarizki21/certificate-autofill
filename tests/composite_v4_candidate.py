@@ -27,6 +27,7 @@ from app.services.combined_extractor import extract_dates_v2, normalize_organize
 from app.services.field_extractor import ExtractedValue, extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form
 from app.services.organizer_v2 import extract_organizer_v2
+from tests.organizer_tess_v8 import extract_organizer_v8_result
 from tests.activity_extractor_v9 import extract_activity_v9
 from tests.nomor_normalizer_v6 import normalize_nomor_v6
 from tests.router_disambig_v7 import route_with_disambiguation_v7
@@ -35,8 +36,11 @@ from tests.router_disambig_v7 import route_with_disambiguation_v7
 def apply_composite_v4_candidate(
     extracted: dict[str, ExtractedValue],
     raw_text: str,
+    organizer_variant: str = "v2",
 ) -> dict[str, ExtractedValue]:
-    """Komposit B8: v4.2 + B4 + B5 + B6 (0 LLM, deterministik)."""
+    """Komposit B8 dengan varian organizer staging yang eksplisit."""
+    if organizer_variant not in {"v2", "v8"}:
+        raise ValueError(f"Unknown organizer variant: {organizer_variant}")
     result = dict(extracted)
 
     # B5: activity v9 (anti-bleed) — menggantikan activity_v8.
@@ -44,13 +48,31 @@ def apply_composite_v4_candidate(
     if act:
         result["nama_kegiatan_sertifikasi"] = ExtractedValue(act, 0.95, "activity_v9")
 
-    # Organizer v7 (ORG-007 — sama dgn v4.2).
-    v2_org = extract_organizer_v2(raw_text)
-    norm_org = normalize_organizer_v7(v2_org, raw_text)
-    if norm_org:
-        result["penyelenggara_kegiatan"] = ExtractedValue(norm_org, 0.90, "organizer_v7")
-    elif v2_org:
-        result["penyelenggara_kegiatan"] = ExtractedValue(v2_org, 0.84, "organizer_v2")
+    content_lines = [line for line in raw_text.splitlines() if line.strip()]
+    if organizer_variant == "v8" and len(content_lines) >= 6:
+        v8_org = extract_organizer_v8_result(raw_text)
+        if v8_org.value:
+            result["penyelenggara_kegiatan"] = ExtractedValue(
+                v8_org.value,
+                v8_org.confidence,
+                v8_org.source,
+            )
+        else:
+            # Jangan menghapus baseline bila v8 tidak menemukan kandidat.
+            v2_org = extract_organizer_v2(raw_text)
+            norm_org = normalize_organizer_v7(v2_org, raw_text)
+            if norm_org:
+                result["penyelenggara_kegiatan"] = ExtractedValue(norm_org, 0.90, "organizer_v7")
+            elif v2_org:
+                result["penyelenggara_kegiatan"] = ExtractedValue(v2_org, 0.84, "organizer_v2")
+    else:
+        # Organizer v7 (ORG-007 — baseline resmi) untuk v2 atau teks pendek.
+        v2_org = extract_organizer_v2(raw_text)
+        norm_org = normalize_organizer_v7(v2_org, raw_text)
+        if norm_org:
+            result["penyelenggara_kegiatan"] = ExtractedValue(norm_org, 0.90, "organizer_v7")
+        elif v2_org:
+            result["penyelenggara_kegiatan"] = ExtractedValue(v2_org, 0.84, "organizer_v2")
 
     # B6: nomor v6 (preservasi panjang digit + guard Roman) — confidence 0.78
     # bila ada perbaikan OCR (memicu needs_review di <0.80).
@@ -84,9 +106,9 @@ def apply_composite_v4_candidate(
     return result
 
 
-def run_composite(raw_text: str) -> dict[str, str]:
+def run_composite(raw_text: str, organizer_variant: str = "v2") -> dict[str, str]:
     extracted = extract_certificate_fields(raw_text)
-    extracted = apply_composite_v4_candidate(extracted, raw_text)
+    extracted = apply_composite_v4_candidate(extracted, raw_text, organizer_variant)
     mapped = map_fields_to_form(extracted, raw_text, bukti_fisik="Sertifikat")
     return {k: v.value or "" for k, v in mapped.items()}
 
