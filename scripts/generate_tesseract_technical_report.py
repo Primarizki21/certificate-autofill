@@ -10,8 +10,7 @@ Menghasilkan dua artefak:
    - Bab khusus Empirical Robustness & Generalization Proof (STANDAR AGENTS.md)
 2. docs/report/raw_vs_pipeline_tesseract.xlsx:
    - Evaluasi lengkap 74 sertifikat
-   - Raw OCR snippet, per-field extraction (6 field), ground truth, verdict match
-
+   - Raw OCR Tesseract lengkap (seluruh teks gambar), per-field extraction (6 field), ground truth, verdict match
 Usage:
   uv run python scripts/generate_tesseract_technical_report.py
 """
@@ -154,6 +153,28 @@ def _build_docx_table(doc, headers: list[str], rows: list[list[str]], col_widths
     return tbl
 
 
+def _add_raw_text_box(doc, text: str, width_in_inches: float = 6.5) -> None:
+    tbl = doc.add_table(rows=1, cols=1)
+    try:
+        tbl.style = "Table Grid"
+    except Exception:
+        pass
+    _table_borders(tbl, "D0D7DE")
+    cell = tbl.cell(0, 0)
+    cell.width = Inches(width_in_inches)
+    _shade(cell, "F6F8FA")
+    _set_cell_margins(cell, top=100, bottom=100, left=140, right=140)
+    p = cell.paragraphs[0]
+    p.paragraph_format.space_before = Pt(2)
+    p.paragraph_format.space_after = Pt(2)
+    p.paragraph_format.line_spacing = 1.05
+    r = p.add_run(text)
+    r.font.name = "Consolas"
+    r.font.size = Pt(8.0)
+    r.font.color.rgb = RGBColor(0x24, 0x29, 0x2F)
+    doc.add_paragraph().paragraph_format.space_after = Pt(6)
+
+
 # ---------------------------------------------------------------------------
 # Generator XLSX Lengkap (74 Sertifikat Raw vs Pipeline)
 # ---------------------------------------------------------------------------
@@ -167,7 +188,7 @@ def generate_raw_vs_pipeline_xlsx():
     ws.title = "Raw vs Pipeline (All 74)"
 
     headers = [
-        "No", "Stem File", "Tipe Dokumen", "Cuplikan Raw OCR Tesseract",
+        "No", "Stem File", "Tipe Dokumen", "Teks Raw OCR Tesseract (Lengkap)",
         "Kegiatan (Pipeline)", "Kegiatan (Ground Truth)", "Match Kegiatan",
         "Nomor (Pipeline)", "Nomor (Ground Truth)", "Match Nomor",
         "Penyelenggara (Pipeline)", "Penyelenggara (Ground Truth)", "Match Penyelenggara",
@@ -204,10 +225,13 @@ def generate_raw_vs_pipeline_xlsx():
         is_scan = item["_meta"]["scan"]
         doc_type = "Scan (49)" if is_scan else "Digital (25)"
 
-        # Read raw snippet
+        # Read full raw OCR text
         raw_path = os.path.join(texts_pure_dir, f"{stem}.txt")
-        raw_lines = [l for l in open(raw_path, "r", encoding="utf-8").read().splitlines() if not l.startswith("#") and l.strip()]
-        raw_snippet = " // ".join(raw_lines[:6])[:350]
+        if os.path.exists(raw_path):
+            raw_lines = [l for l in open(raw_path, "r", encoding="utf-8").read().splitlines() if not l.startswith("#")]
+            raw_full_text = "\n".join(raw_lines).strip()
+        else:
+            raw_full_text = ""
 
         def get_match_status(field_name: str) -> str:
             f = item[field_name]
@@ -234,7 +258,7 @@ def generate_raw_vs_pipeline_xlsx():
             idx,
             stem,
             doc_type,
-            raw_snippet,
+            raw_full_text,
             item["nama_kegiatan_sertifikasi"]["pred"],
             item["nama_kegiatan_sertifikasi"]["gt"],
             m_keg,
@@ -266,27 +290,35 @@ def generate_raw_vs_pipeline_xlsx():
             cell.font = Font(name="Calibri", size=9)
             if is_even:
                 cell.fill = alt_fill
+            cell.alignment = Alignment(vertical="top")
+
+            # Column 4 is raw OCR full text: enable text wrapping
+            if c == 4:
+                cell.alignment = Alignment(vertical="top", wrap_text=True)
+
+            # Center align numbers, types, status
+            if c in (1, 3, 23, 24):
+                cell.alignment = Alignment(horizontal="center", vertical="top")
 
             # Color status columns
             val_str = str(cell.value)
             if val_str == "EXACT":
                 cell.fill = exact_fill
                 cell.font = Font(name="Calibri", size=9, bold=True, color="155724")
-                cell.alignment = Alignment(horizontal="center")
+                cell.alignment = Alignment(horizontal="center", vertical="top")
             elif val_str == "FUZZY":
                 cell.fill = fuzzy_fill
                 cell.font = Font(name="Calibri", size=9, bold=True, color="856404")
-                cell.alignment = Alignment(horizontal="center")
+                cell.alignment = Alignment(horizontal="center", vertical="top")
             elif val_str == "MISMATCH":
                 cell.fill = miss_fill
                 cell.font = Font(name="Calibri", size=9, bold=True, color="721C24")
-                cell.alignment = Alignment(horizontal="center")
+                cell.alignment = Alignment(horizontal="center", vertical="top")
             elif val_str == "NA":
                 cell.fill = empty_fill
-                cell.alignment = Alignment(horizontal="center")
-
+                cell.alignment = Alignment(horizontal="center", vertical="top")
     col_widths = {
-        "A": 5, "B": 28, "C": 12, "D": 45,
+        "A": 5, "B": 28, "C": 12, "D": 55,
         "E": 28, "F": 28, "G": 12,
         "H": 25, "I": 25, "J": 12,
         "K": 28, "L": 28, "M": 14,
@@ -521,7 +553,7 @@ def generate_technical_report_docx():
             "stem": "sertif_colab_vene_panitia.pdf",
             "kategori": "Digital PDF (diuji via Pure 100% OCR)",
             "tipe_kasus": "Kasus Sempurna (Semua 6 Field Cocok Persis)",
-            "raw": "Of & & Msi: paka NO. 3944/B/UN3.FT MM/KM.04/2024 // Sertifikat ini diberikan kepada: Venedict Grinaldy Prasetyo Atas partisipasinya sebagai PANITIA Dalam kegiatan Collaborative Open House for Learning and Academic Building (Colab) 2024 yang diselenggarakan oleh Badan Eksekutif Mahasiswa Fakultas Teknologi Maju dan Multidisiplin Universitas Airlangga pada tanggal 29 September 2024...",
+            "raw": "",
             "fields": [
                 ("Nama Kegiatan", "Collaborative Open House for Learning and Academic Building (Colab) 2024", "Collaborative Open House for Learning and Academic Building (Colab) 2024", "EXACT MATCH"),
                 ("Nomor Sertifikat", "3944/B/UN3.FTMM/KM.04/2024", "3944/B/UN3.FTMM/KM.04/2024", "EXACT MATCH (Spasi 'FT MM' otomatis diperbaiki)"),
@@ -537,7 +569,7 @@ def generate_technical_report_docx():
             "stem": "primarizki_panitia_binary_2024.pdf",
             "kategori": "Scan Kertas (Kepanitiaan Mahasiswa)",
             "tipe_kasus": "Kasus Angka Romawi & Penomoran Resmi Fakultas",
-            "raw": "SERI TE KASN // Nomor : 4134/B/UN3.FTMM/KM.04/2024 // BINARY 4.0 be DIBERIKAN KEPADA: PRIMARIZKI AHMAD HARIYONO atas partisipasinya sebagai PANITIA dalam rangkaian acara BINARY 4.0 (Building Freshman Solidarity and Character Development) yang diselenggarakan oleh Program Studi S1 Teknologi Sains Data Universitas Airlangga...",
+            "raw": "",
             "fields": [
                 ("Nama Kegiatan", "BINARY 4.0 (Building Freshman Solidarity and Character Development)", "BINARY 4.0 (Building Freshman Solidarity and Character Development)", "EXACT MATCH"),
                 ("Nomor Sertifikat", "4134/B/UN3.FTMM/KM.04/2024", "4134/B/UN3.FTMM/KM.04/2024", "EXACT MATCH (Bulan Romawi & kode unit presisi)"),
@@ -553,7 +585,7 @@ def generate_technical_report_docx():
             "stem": "1952296_219642_skp.pdf",
             "kategori": "Scan Kertas (Piagam BEM FKM)",
             "tipe_kasus": "Kasus Perbaikan Spasi Nomor & Tanggal Ber-titik",
-            "raw": "SERTIFI // 180/E/BEM- FKM/UNAIR/IX/2023 // DIBERIKAN KEPADA: Raafa / gna Rasyada Sebagai PESERTA Public Health Career Track 2 oleh Divisi Kaprof APHSA BEM FKM Universitas Airlangga pada Tanggal.24 September 2023...",
+            "raw": "",
             "fields": [
                 ("Nama Kegiatan", "—", "Public Health Career Track 2", "MISMATCH (Kegiatan tidak tertangkap jangkar)"),
                 ("Nomor Sertifikat", "180/E/BEM-FKM/UNAIR/IX/2023", "180/E/BEM-FKM/UNAIR/IX/2023", "EXACT MATCH (Spasi liar 'BEM- FKM' dirapatkan)"),
@@ -569,7 +601,7 @@ def generate_technical_report_docx():
             "stem": "hakim_lomba.pdf",
             "kategori": "Scan Kertas (Piagam Lomba Akuntansi)",
             "tipe_kasus": "Kasus Deteksi Typo Huruf OCR & Safety Net",
-            "raw": "016/A.1/GRADIANT2.0/HMA/XI/2025 // Sertifikat Penghargaan diberikan kepada: Hakim sebagai JUARA 2 pada kompetisi GRADIANT 2.0 Himpunan Mahasiswa Kkuntansi pada 13 November 2025...",
+            "raw": "",
             "fields": [
                 ("Nama Kegiatan", "GRADIANT 2.0", "GRADIANT 2.0", "EXACT MATCH"),
                 ("Nomor Sertifikat", "016/A.1/GRADIANT 2.0/HMA/XI/2025", "016/A.1/GRADIANT 2.0/HMA/XI/2025", "EXACT MATCH (Pemisah spasi dinormalisasi)"),
@@ -585,7 +617,7 @@ def generate_technical_report_docx():
             "stem": "2065179_219642_skp.pdf",
             "kategori": "Digital PDF (diuji via Pure 100% OCR)",
             "tipe_kasus": "Kasus Ekstraksi Dokumen Himpunan Mahasiswa",
-            "raw": "SERTIFIKAT REGTER 2023 Diberikan kepada Raafa Agna Rasyada atas partisiasinya sebagai PESERTA Dalam acara REGTER (REGENERASI TERPADU) 2023 yang diselenggarakan oleh Himpunan Mahasiswa Teknologi Sains Data pada tanggal 1 Oktober 2023...",
+            "raw": "",
             "fields": [
                 ("Nama Kegiatan", "REGTER (REGENERASI TERPADU) 2023", "REGTER (Regenerasi Terpadu) 2023", "EXACT MATCH"),
                 ("Nomor Sertifikat", "—", "-", "NA (Dokumen fisik tanpa nomor)"),
@@ -598,10 +630,21 @@ def generate_technical_report_docx():
         },
     ]
 
+    texts_pure_dir = os.path.join(RUN_PURE_DIR, "extracted_texts")
+    for c in examples_data:
+        stem_base = c["stem"][:-4] if c["stem"].endswith(".pdf") else c["stem"]
+        raw_path = os.path.join(texts_pure_dir, f"{stem_base}.txt")
+        if os.path.exists(raw_path):
+            lines = [l for l in open(raw_path, "r", encoding="utf-8").read().splitlines() if not l.startswith("#")]
+            c["raw_full"] = "\n".join(lines).strip()
+        else:
+            c["raw_full"] = ""
+
     for c in examples_data:
         _add_styled_p(doc, f"Contoh {c['no']}: {c['stem']}", bold=True, color=COLOR_PRIMARY)
         _add_styled_p(doc, f"Tipe: {c['kategori']} | Karakteristik: {c['tipe_kasus']}", italic=True, space_after=2)
-        _add_styled_p(doc, f"Potongan Cuplikan Raw OCR Tesseract:\n\"{c['raw']}\"", italic=True, space_after=3)
+        _add_styled_p(doc, "Teks Mentah Raw OCR Tesseract (Lengkap):", bold=True, space_after=2)
+        _add_raw_text_box(doc, c["raw_full"])
 
         c_headers = ["Field Formulir KHP", "Hasil Bersih Pipeline", "Ground Truth v9", "Status Kecocokan"]
         c_rows = [[f_name, f_pred or "—", f_gt, f_status] for f_name, f_pred, f_gt, f_status in c["fields"]]
