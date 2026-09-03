@@ -73,7 +73,7 @@ def _kind(name: str) -> str:
         return "hybrid_pp"
     if name.startswith("run_fulltext_llm"):
         return "llm_fulltext"
-    if name.startswith("ner_encoder_"):
+    if name.startswith("ner_encoder_") or name.startswith("gliner_"):
         return "ner_encoder"
     if name.startswith("run_ner_v1"):
         return "ner_v1"
