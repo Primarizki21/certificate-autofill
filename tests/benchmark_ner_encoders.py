@@ -64,6 +64,7 @@ FREE_INSTITUTION_FIELDS = {
     "nomor_bukti_fisik_nomor_sertifikasi",
 }
 MODEL_SPECS = {
+    "indobert-ner-gold": "treamyracle/indobert-ner-gold",
     "mdeberta-v3-base": "microsoft/mdeberta-v3-base",
     "xlm-roberta-large": "FacebookAI/xlm-roberta-large",
 }
