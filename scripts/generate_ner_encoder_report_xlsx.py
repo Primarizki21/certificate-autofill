@@ -101,7 +101,9 @@ def build_excel_report():
     rows_t1 = [
         ["IndoBERT Pre-trained (indobert-ner-gold)", "Token Classification (Zero-Shot)", 0.128, 0.288, "[9.50%, 16.20%]", 0.164, 0.000, 0.110, 0.273, 0.073, "N/A", "5.1 detik (0.07s/c)", "~2.5 GB", "Baseline Pre-trained (Off-the-shelf)"],
         ["IndoBERT Fine-Tuned Gagal (indobert-base-p1)", "Full Fine-Tuning (59 Sampel)", 0.015, 0.082, "N/A", 0.027, 0.000, 0.014, 0.036, 0.000, "N/A", "~240 detik (5 ep)", "~3.5 GB", "Gagal (Catastrophic Forgetting)"],
+        ["GLiNER2.5 Base (arXiv:2507.18546)", "Zero-Shot Boundary Extractor", 0.2871, 0.3871, "[23.64%, 34.39%]", 0.3108, 0.0385, 0.2027, 0.4545, 0.4364, "N/A", "3.9 detik (0.052s/c)", "~1.8 GB", "Zero-Shot Boundary (PASS)"],
         ["mDeBERTa-v3-base (86M)", "5-Fold CV Token Classif.", 0.3484, 0.5129, "[28.95%, 40.92%]", 0.2568, 0.5577, 0.2568, 0.3273, 0.4182, "N/A", "734 detik (~12.2m)", "4.08 GB", "Eksplorasi (PASS)"],
+        ["GLiNER v2.1 Multilingual (urchade)", "Zero-Shot Span Bi-Encoder", 0.3548, 0.4645, "[30.10%, 41.31%]", 0.1622, 0.1346, 0.3649, 0.5818, 0.5818, "N/A", "5.7 detik (0.077s/c)", "~2.4 GB", "Zero-Shot Multi (PASS)"],
         ["XLM-RoBERTa-large (560M)", "5-Fold CV Token Classif.", 0.4355, 0.5548, "[37.17%, 50.00%]", 0.3514, 0.5962, 0.3784, 0.4545, 0.4545, "N/A", "794 detik (~13.2m)", "7.09 GB (Adafactor)", "Eksplorasi (PASS)"],
         ["IndoBERT-ner-gold Fine-Tuned (334M)", "5-Fold CV Token Classif.", 0.4452, 0.5710, "[38.59%, 50.82%]", 0.4324, 0.5769, 0.3649, 0.4909, 0.4000, "N/A", "700.1 detik (~11.7m)", "4.65 GB", "BEST ENCODER (PASS)"],
         ["Direct Gemini 3.1 Flash Lite", "Two-Stage Tesseract-to-LLM", 0.6324, 0.7378, "[58.78%, 68.92%]", 0.6216, 0.5946, 0.5946, 0.6757, 0.6757, 0.6622, "100.6 detik (1.36s/c)", "Rp703 (~Rp9.50/c)", "PRODUKSI AKTIF (Opt A)"],
@@ -131,7 +133,7 @@ def build_excel_report():
                 cell.alignment = align_center
 
     # Summary Stats row using formulas
-    row_avg = 13
+    row_avg = 15
     ws1.row_dimensions[row_avg].height = 22
     ws1.cell(row=row_avg, column=1, value="Rata-rata Model Teruji").font = font_header
     ws1.cell(row=row_avg, column=1).fill = fill_title
@@ -145,7 +147,7 @@ def build_excel_report():
 
     for c in [3, 4]:
         col_letter = get_column_letter(c)
-        cell = ws1.cell(row=row_avg, column=c, value=f"=AVERAGE({col_letter}5:{col_letter}12)")
+        cell = ws1.cell(row=row_avg, column=c, value=f"=AVERAGE({col_letter}5:{col_letter}14)")
         cell.font = font_header
         cell.fill = fill_title
         cell.alignment = align_right
@@ -158,11 +160,11 @@ def build_excel_report():
         cell.border = thin_border
 
     # Section 2: Peningkatan Relatif vs Baseline NER v1
-    ws1.cell(row=15, column=1, value="ANALISIS DELTA PERFORMANSI VS BASELINE PRE-TRAINED NER V1 (INDOBERT)").font = font_sub_header
+    ws1.cell(row=17, column=1, value="ANALISIS DELTA PERFORMANSI VS BASELINE PRE-TRAINED NER V1 (INDOBERT)").font = font_sub_header
     headers_t2 = ["Model Komparasi", "Baseline Exact", "Model Exact", "Peningkatan Mutlak (pp)", "Peningkatan Relatif (%)", "Kesimpulan Arsitektural"]
-    ws1.row_dimensions[16].height = 24
+    ws1.row_dimensions[18].height = 24
     for c_idx, text in enumerate(headers_t2, start=1):
-        cell = ws1.cell(row=16, column=c_idx, value=text)
+        cell = ws1.cell(row=18, column=c_idx, value=text)
         cell.font = font_header
         cell.fill = fill_section
         cell.alignment = align_center
@@ -170,15 +172,17 @@ def build_excel_report():
 
     delta_rows = [
         ["IndoBERT Fine-Tuned Gagal (Phase v2)", 5, 6, "Anjlok -11.3pp akibat catastrophic forgetting pada 59 sampel dan ketiadaan weighted loss."],
-        ["mDeBERTa-v3-base (86M)", 5, 7, "Peningkatan substansial (+22.04pp) pada recall entitas non-O via FP32 & soft-capping."],
-        ["XLM-RoBERTa-large (560M)", 5, 8, "Model 560M melompat +30.75pp; representasi BPE multilingual sangat kuat."],
-        ["IndoBERT-ner-gold Fine-Tuned (334M)", 5, 9, "ENCODER TERBAIK (+31.72pp vs pre-trained, +0.97pp vs XLM-RoBERTa-large, kegiatan melonjak ke 43.2%)."],
-        ["Direct Gemini 3.1 Flash Lite", 5, 10, "LLM murni melampaui seluruh encoder lokal tanpa memerlukan fine-tuning."],
-        ["Composite v4.x (Pure OCR Rules)", 5, 11, "Rule deterministik offline tetap paling unggul pada domain penanggalan & nomor."],
-        ["Combined v4.2 (Hybrid Pipeline)", 5, 12, "Pipeline komposit offline terbaik, unggul +74.62pp dibanding baseline NER v1."],
+        ["GLiNER2.5 Base (arXiv:2507.18546)", 5, 7, "Zero-shot boundary extractor melompat +15.91pp; nama kegiatan exact mencapai 31.1%."],
+        ["mDeBERTa-v3-base (86M)", 5, 8, "Peningkatan substansial (+22.04pp) pada recall entitas non-O via FP32 & soft-capping."],
+        ["GLiNER v2.1 Multilingual (urchade)", 5, 9, "Zero-shot multilingual melompat +22.68pp; tanggal 58.2% & mutasi OOD drop 0.0pt."],
+        ["XLM-RoBERTa-large (560M)", 5, 10, "Model 560M melompat +30.75pp; representasi BPE multilingual sangat kuat."],
+        ["IndoBERT-ner-gold Fine-Tuned (334M)", 5, 11, "ENCODER TERBAIK (+31.72pp vs pre-trained, +0.97pp vs XLM-RoBERTa-large, kegiatan 43.2%)."],
+        ["Direct Gemini 3.1 Flash Lite", 5, 12, "LLM murni melampaui seluruh encoder lokal tanpa memerlukan fine-tuning."],
+        ["Composite v4.x (Pure OCR Rules)", 5, 13, "Rule deterministik offline tetap paling unggul pada domain penanggalan & nomor."],
+        ["Combined v4.2 (Hybrid Pipeline)", 5, 14, "Pipeline komposit offline terbaik, unggul +74.62pp dibanding baseline NER v1."],
     ]
 
-    for idx, (label, base_r, model_r, notes) in enumerate(delta_rows, start=17):
+    for idx, (label, base_r, model_r, notes) in enumerate(delta_rows, start=19):
         ws1.row_dimensions[idx].height = 20
         c1 = ws1.cell(row=idx, column=1, value=label)
         c2 = ws1.cell(row=idx, column=2, value=f"=C{base_r}")
@@ -554,11 +558,13 @@ def build_excel_report():
 
     headers_ood = [
         "Kondisi Uji Gangguan", "Jumlah Sel",
-        "Akurasi IndoBERT", "Penurunan IndoBERT",
-        "Akurasi mDeBERTa", "Penurunan mDeBERTa",
-        "Akurasi XLM-RoBERTa", "Penurunan XLM-RoBERTa",
-        "Akurasi Composite v4.x", "Penurunan Composite v4.x",
-        "Toleransi & Karakteristik"
+        "Akurasi GLiNER v2.1", "Drop GLiNER v2.1",
+        "Akurasi GLiNER2.5", "Drop GLiNER2.5",
+        "Akurasi IndoBERT", "Drop IndoBERT",
+        "Akurasi mDeBERTa", "Drop mDeBERTa",
+        "Akurasi XLM-RoBERTa", "Drop XLM-RoBERTa",
+        "Akurasi Composite v4.x", "Drop Composite v4.x",
+        "Toleransi & Karakteristik Arsitektural"
     ]
     ws4.row_dimensions[4].height = 26
     for c_idx, text in enumerate(headers_ood, start=1):
@@ -569,33 +575,35 @@ def build_excel_report():
         cell.border = header_border
 
     ood_table = [
-        ["Clean Baseline (Tanpa Noise)", 236, 0.4703, 0.3771, 0.4534, 0.8800, "Kondisi teks masukan OCR standar"],
-        ["Mutasi Entitas (UNAIR->UNS dll)", 236, 0.3983, 0.3051, 0.3771, 0.8060, "Mengganti nama univ/fakultas/hima ke institusi lain"],
-        ["Perturbasi Noise OCR 10%", 236, 0.3051, 0.2500, 0.2924, 0.7990, "Simulasi kebingungan karakter 5<->S, 8<->B, 0<->O, 1<->I"],
-        ["Perturbasi Noise OCR 25%", 236, 0.1822, 0.2034, 0.1949, 0.6980, "Tingkat noise OCR sedang pada dokumen buram"],
-        ["Perturbasi Noise OCR 50%", 236, 0.0890, 0.1017, 0.1229, 0.5410, "Tingkat noise OCR ekstrem pada pindaian sangat rusak"],
+        ["Clean Baseline (Tanpa Noise)", 236, 0.3517, 0.2839, 0.4703, 0.3771, 0.4534, 0.8800, "Kondisi teks masukan OCR standar"],
+        ["Mutasi Entitas (UNAIR->UNS dll)", 236, 0.3517, 0.2797, 0.3983, 0.3051, 0.3771, 0.8060, "GLiNER kebal mutasi (drop 0.0pt) karena berbasis query skema dinamis"],
+        ["Perturbasi Noise OCR 10%", 236, 0.2712, 0.2288, 0.3051, 0.2500, 0.2924, 0.7990, "Simulasi kebingungan karakter 5<->S, 8<->B, 0<->O, 1<->I"],
+        ["Perturbasi Noise OCR 25%", 236, 0.1780, 0.1525, 0.1822, 0.2034, 0.1949, 0.6980, "Tingkat noise OCR sedang pada dokumen buram"],
+        ["Perturbasi Noise OCR 50%", 236, 0.1017, 0.0720, 0.0890, 0.1017, 0.1229, 0.5410, "Tingkat noise OCR ekstrem pada pindaian sangat rusak"],
     ]
 
-    for idx, (cond, n_cells, indob_acc, mdeb_acc, xlm_acc, comp_acc, notes) in enumerate(ood_table, start=5):
+    for idx, (cond, n_cells, g1_acc, g2_acc, indob_acc, mdeb_acc, xlm_acc, comp_acc, notes) in enumerate(ood_table, start=5):
         ws4.row_dimensions[idx].height = 20
         c1 = ws4.cell(row=idx, column=1, value=cond); c1.font = font_data_bold; c1.alignment = align_left
         c2 = ws4.cell(row=idx, column=2, value=n_cells); c2.alignment = align_center; c2.number_format = "0"
-        c3 = ws4.cell(row=idx, column=3, value=indob_acc); c3.alignment = align_right; c3.number_format = "0.0%"
+        c3 = ws4.cell(row=idx, column=3, value=g1_acc); c3.alignment = align_right; c3.number_format = "0.0%"
         c4 = ws4.cell(row=idx, column=4, value=f"=C{idx}-C$5"); c4.alignment = align_right; c4.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c4.font = font_formula
-        c5 = ws4.cell(row=idx, column=5, value=mdeb_acc); c5.alignment = align_right; c5.number_format = "0.0%"
+        c5 = ws4.cell(row=idx, column=5, value=g2_acc); c5.alignment = align_right; c5.number_format = "0.0%"
         c6 = ws4.cell(row=idx, column=6, value=f"=E{idx}-E$5"); c6.alignment = align_right; c6.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c6.font = font_formula
-        c7 = ws4.cell(row=idx, column=7, value=xlm_acc); c7.alignment = align_right; c7.number_format = "0.0%"
+        c7 = ws4.cell(row=idx, column=7, value=indob_acc); c7.alignment = align_right; c7.number_format = "0.0%"
         c8 = ws4.cell(row=idx, column=8, value=f"=G{idx}-G$5"); c8.alignment = align_right; c8.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c8.font = font_formula
-        c9 = ws4.cell(row=idx, column=9, value=comp_acc); c9.alignment = align_right; c9.number_format = "0.0%"
+        c9 = ws4.cell(row=idx, column=9, value=mdeb_acc); c9.alignment = align_right; c9.number_format = "0.0%"
         c10 = ws4.cell(row=idx, column=10, value=f"=I{idx}-I$5"); c10.alignment = align_right; c10.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c10.font = font_formula
-        c11 = ws4.cell(row=idx, column=11, value=notes); c11.alignment = align_left; c11.font = font_data
+        c11 = ws4.cell(row=idx, column=11, value=xlm_acc); c11.alignment = align_right; c11.number_format = "0.0%"
+        c12 = ws4.cell(row=idx, column=12, value=f"=K{idx}-K$5"); c12.alignment = align_right; c12.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c12.font = font_formula
+        c13 = ws4.cell(row=idx, column=13, value=comp_acc); c13.alignment = align_right; c13.number_format = "0.0%"
+        c14 = ws4.cell(row=idx, column=14, value=f"=M{idx}-M$5"); c14.alignment = align_right; c14.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c14.font = font_formula
+        c15 = ws4.cell(row=idx, column=15, value=notes); c15.alignment = align_left; c15.font = font_data
 
         fill_curr = fill_ice if idx % 2 == 1 else fill_gray
-        for c in [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11]:
+        for c in [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11, c12, c13, c14, c15]:
             c.border = thin_border
             c.fill = fill_curr
-
-
     # =========================================================================
     # SHEET 5: Arsitektur Pipeline Gemini
     # =========================================================================
