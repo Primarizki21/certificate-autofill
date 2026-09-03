@@ -407,7 +407,7 @@ def main():
             "organizer", "variant", "tingkat", "macro", "tokens_cert", "calls",
             "latency_ms", "notes"]
     with open(OUT_CSV, "w", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore")
+        w = csv.DictWriter(f, fieldnames=cols, extrasaction="ignore", lineterminator="\n")
         w.writeheader()
         for r in runs:
             w.writerow(r)

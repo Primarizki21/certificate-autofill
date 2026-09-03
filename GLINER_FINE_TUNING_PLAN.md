@@ -77,21 +77,28 @@ disupersede oleh kontrak ini; pipeline produksi tetap tidak disentuh.
    pertama yang salah; 10 field tidak memiliki span whole-token yang valid, sedangkan 7
    memiliki kemunculan whole-token lain yang valid. Runner tidak boleh mengubah fungsi
    shared tersebut. Tambahkan enumerator lokal whole-token yang menerima hanya span dengan
-   `normalize_token("".join(tokens[start:end])) == normalize_token(gt_value)`. Dari 213
-   field yang memiliki span whole-token, hanya 135 memiliki tepat satu posisi; 78 lainnya
-   ambigu karena muncul pada lebih dari satu posisi. Tanpa bukti konteks tambahan, runner
-   hanya melabeli 135 field unambiguous (117 tuple `(stem, start, end_inclusive, label)`
-   setelah date-dedup). Semua 78 kandidat ambigu dan 10 boundary-unmatched ditolak serta
-   dicatat, bukan dipilih berdasar first occurrence. Audit wajib merekam:
-   `candidate_found=223`, `initial_unmatched=87`, `first_hit_nonexact=17`,
-   `fields_with_valid_whole_token=213`, `whole_token_ambiguous=78`,
-   `whole_token_unambiguous=135`, `boundary_unmatched=10`, dan
-   `usable_label_tuples=117`. Tidak ada fallback fuzzy, manual, atau label dari kandidat
-   boundary-expanded maupun ambiguous.
+   `normalize_token("".join(tokens[start:end])) == normalize_token(gt_value)`, lalu
+   kanonisasi posisi dengan menolak token batas yang normalisasinya kosong. Probe awal 78
+   ambigu menghitung `-`/tanda baca di tepi sebagai posisi kedua; enumerator kanonik
+   menghapus 13 duplikasi artifisial tersebut. Dari 213 field yang memiliki span
+   whole-token, 148 memiliki tepat satu posisi dan 65 benar-benar ambigu. Tanpa bukti
+   konteks tambahan, runner hanya melabeli 148 field unambiguous (130 tuple
+   `(stem, start, end_inclusive, label)` setelah date-dedup). Semua 65 kandidat ambigu dan
+   10 boundary-unmatched ditolak serta dicatat, bukan dipilih berdasar first occurrence.
+   Audit wajib merekam: `candidate_found=223`, `initial_unmatched=87`,
+   `first_hit_nonexact=17`, `fields_with_valid_whole_token=213`,
+   `whole_token_ambiguous=65`, `whole_token_unambiguous=148`,
+   `boundary_unmatched=10`, dan `usable_label_tuples=130`. Tidak ada fallback fuzzy,
+   manual, atau label dari kandidat boundary-expanded maupun ambiguous.
 2. **Konvensi indeks v1.** Setiap end dari `find_token_span` dan enumerator internal bersifat
    eksklusif; `to_gliner_v1_records()` wajib menulis `end_exclusive - 1`. GLiNER v2.1
    memang memakai indeks akhir inklusif. Test harus mencakup konversi ini dan first-hit
    palsu di nomor sertifikat.
+   `max_width` wajib diteruskan pada `GLiNER.from_pretrained(..., max_length=512,
+   max_width=64)`, bukan dimutasi sesudah load: span-representation layer dibangun saat
+   konstruksi dan tetap width 12 bila config saja diubah. Preflight harus assert
+   `model.config.max_len == 512`, `model.config.max_width == 64`, dan
+   `model.model.span_rep_layer.span_rep_layer.max_width == 64` sebelum training.
 3. **Validasi InputExample.** `InputExample.validate()` mengembalikan `list[str]`, bukan
    melempar exception. Runner wajib mengumpulkan error non-kosong lalu melempar
    `ValueError`; tidak boleh hanya memanggil hasilnya atau memakai `sanitize()`.
@@ -114,6 +121,12 @@ disupersede oleh kontrak ini; pipeline produksi tetap tidak disentuh.
    confidence. Safety net yang dibuktikan adalah zero production blast radius. OOD paritas
    mempertahankan set runner encoder yang sebenarnya: kegiatan, dua tanggal, dan nomor;
    peranan tidak berada pada lima field evaluasi dan penyelenggara dikecualikan.
+
+7. **OOD mutation tidak boleh mengkontaminasi ground truth.** Jika teks sumber
+   mengubah entitas institusi, expected field yang memuat entitas tersebut wajib diubah
+   secara ekuivalen atau dikeluarkan dari metrik. Laporan memisahkan field bebas institusi
+   yang dapat memakai GT asli dari field pembawa institusi; skor terhadap GT lama tidak
+   boleh diklaim sebagai robustness.
 
 **Gate pra-latih tambahan:** hentikan sebelum model load bila statistik kandidat tidak
 sama, ada label non-whole-token, span window terpotong, validasi `InputExample` gagal, atau
