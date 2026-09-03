@@ -49,6 +49,7 @@ tests/ner_model/
 *.xlsx
 !docs/report/gt_review.xlsx
 !docs/report/raw_vs_pipeline_tesseract.xlsx
+!docs/report/komparasi_ner_encoder_dan_pipeline.xlsx
 
 # One-off docs (handoff superseded versions, verification reports)
 docs/handoff.md
