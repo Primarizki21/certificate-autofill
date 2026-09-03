@@ -36,6 +36,7 @@ tests/benchmark_results.json
 
 # Generated docx documents (literature review summaries)
 *.docx
+!docs/report/technical_report_tesseract_ocr.docx
 
 # Marker pipeline input/output (external paper PDFs)
 input_marker_paper/
@@ -47,6 +48,7 @@ tests/ner_model/
 # Generated Excel outputs
 *.xlsx
 !docs/report/gt_review.xlsx
+!docs/report/raw_vs_pipeline_tesseract.xlsx
 
 # One-off docs (handoff superseded versions, verification reports)
 docs/handoff.md

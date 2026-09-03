@@ -314,12 +314,12 @@ Setiap perubahan pipeline, penambahan rule router, ekstraktor regex, atau normal
         - **Bab 1: Ringkasan Eksekutif & Garis Evolusi Pipeline**: Mencakup garis evolusi dari baseline awal (misal v4.x yang masih memakai RapidOCR + Tesseract), transisi ke arsitektur primer/hybrid, hingga versi pure/final.
         - **Bab 2: Arsitektur Pipeline, Konfigurasi & Alur Lengkap**: Parameter rendering (zoom 3.0× / 300 DPI), konfigurasi OCR (multi-PSM Tesseract `""`, `--psm 6`, `--psm 11`, kamus bahasa `ind+eng`), dan urutan modul post-processing v4.x deterministik.
         - **Bab 3: Tabel Komparasi Metrik Lengkap**: Tabel 4-arah yang membandingkan (1) Baseline legacy awal (v9), (2) Pipeline v4.x terbaik eksisting sebelum Tesseract (berbasis teks produksi RapidOCR+Tesseract / Composite B8), (3) Tesseract-Primary Hybrid (49 scan via Tesseract + 25 digital via layer asli), dan (4) Pure 100% Tesseract (74/74 seluruhnya dibaca murni via OCR gambar raster).
-        - **Bab 4: Contoh Konkret Raw OCR vs Hasil Field Pipeline**: Wajib menyertakan minimal 5 contoh nyata yang menampilkan **LENGKAP SELURUH 6 FIELD** (Nama Kegiatan, Nomor Sertifikat, Penyelenggara, Tanggal Mulai, Tanggal Selesai, Tingkat — dilarang hanya menampilkan sebagian field), mencakup cuplikan teks mentah (raw OCR snippet), nilai bersih pipeline, Ground Truth, dan status kecocokan.
+        - **Bab 4: Contoh Konkret Raw OCR vs Hasil Field Pipeline**: Wajib menyertakan minimal 5 contoh nyata yang menampilkan **LENGKAP SELURUH 6 FIELD** (Nama Kegiatan, Nomor Sertifikat, Penyelenggara, Tanggal Mulai, Tanggal Selesai, Tingkat — dilarang hanya menampilkan sebagian field), mencakup teks mentah OCR lengkap (full raw OCR text), nilai bersih pipeline, Ground Truth, dan status kecocokan.
         - **Bab 5: Empirical Robustness & Generalization Proof**: Wajib menyertakan 4 lapis pembuktian empiris lengkap (5-Fold CV min-fold 100%, OOD stress test mutasi & noise, semantic anchors anti-hardcoding, calibrated confidence safety net).
         - **Bab 6: Kesimpulan & Rekomendasi Deployment**.
      3. **Deliverable Dokumen XLSX (`docs/report/*.xlsx`)**:
         - Berisi data lengkap seluruh 74 sertifikat dataset.
-        - Kolom wajib: No, Stem File, Tipe Dokumen (Scan/Digital), Cuplikan Raw OCR, Prediksi per Field, Ground Truth per Field, Status Match per Field (EXACT/FUZZY/MISMATCH dengan styling warna hijau/kuning/merah), dan Total Exact per baris.
+        - Kolom wajib: No, Stem File, Tipe Dokumen (Scan/Digital), Teks Raw OCR Lengkap, Prediksi per Field, Ground Truth per Field, Status Match per Field (EXACT/FUZZY/MISMATCH dengan styling warna hijau/kuning/merah), dan Total Exact per baris.
 
 6. **Aturan Regression & Baseline Evaluasi**:
    - Setiap perubahan ekstraktor/router $\to$ `pytest tests/` (seluruh test passing) + zero-regression vs baseline GT v9 + matcher v2 (`GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv`).
