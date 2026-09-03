@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 113 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 118 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -103,8 +103,13 @@
 | `akt5_20260814_142534` | 2026-08-14 | other |  | — | 73.7% | — | — |  |  |
 | `gliner_gliner2_5_base_20260903_195828` | 2026-09-03 | ner_encoder |  | — | 28.7% | — | — |  |  |
 | `gliner_gliner2_5_base_20260903_195953` | 2026-09-03 | ner_encoder |  | — | 28.7% | — | — |  |  |
+| `gliner_gliner2_5_base_20260903_213803` | 2026-09-03 | ner_encoder |  | — | 28.7% | — | — |  |  |
 | `gliner_gliner_multi_v2_1_20260903_195712` | 2026-09-03 | ner_encoder |  | — | 35.5% | — | — |  |  |
 | `gliner_gliner_multi_v2_1_20260903_195927` | 2026-09-03 | ner_encoder |  | — | 35.5% | — | — |  |  |
+| `gliner_gliner_multi_v2_1_20260903_213732` | 2026-09-03 | ner_encoder |  | — | 35.5% | — | — |  |  |
+| `gliner_sanity_gliner_multi_v2.1_20260903_213828` | 2026-09-03 | ner_encoder |  | — | — | — | — |  |  |
+| `gliner_sanity_gliner_multi_v2.1_20260903_213953` | 2026-09-03 | ner_encoder |  | — | — | — | — |  |  |
+| `gliner_sanity_gliner_multi_v2.1_20260903_214108` | 2026-09-03 | ner_encoder |  | — | — | — | — |  |  |
 | `hyb_kb_20260824_094821` | 2026-08-24 | hyb_kb |  | — | — | — | — |  |  |
 | `hyb_kb_20260824_095024` | 2026-08-24 | hyb_kb |  | — | — | — | — |  |  |
 | `hyb_kb_scale_20260824_101641` | 2026-08-24 | hyb_kb_scale |  | — | — | — | — |  |  |
