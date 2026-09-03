@@ -103,6 +103,7 @@ def build_excel_report():
         ["IndoBERT Fine-Tuned Gagal (indobert-base-p1)", "Full Fine-Tuning (59 Sampel)", 0.015, 0.082, "N/A", 0.027, 0.000, 0.014, 0.036, 0.000, "N/A", "~240 detik (5 ep)", "~3.5 GB", "Gagal (Catastrophic Forgetting)"],
         ["mDeBERTa-v3-base (86M)", "5-Fold CV Token Classif.", 0.3484, 0.5129, "[28.95%, 40.92%]", 0.2568, 0.5577, 0.2568, 0.3273, 0.4182, "N/A", "734 detik (~12.2m)", "4.08 GB", "Eksplorasi (PASS)"],
         ["XLM-RoBERTa-large (560M)", "5-Fold CV Token Classif.", 0.4355, 0.5548, "[37.17%, 50.00%]", 0.3514, 0.5962, 0.3784, 0.4545, 0.4545, "N/A", "794 detik (~13.2m)", "7.09 GB (Adafactor)", "Eksplorasi (PASS)"],
+        ["IndoBERT-ner-gold Fine-Tuned (334M)", "5-Fold CV Token Classif.", 0.4452, 0.5710, "[38.59%, 50.82%]", 0.4324, 0.5769, 0.3649, 0.4909, 0.4000, "N/A", "700.1 detik (~11.7m)", "4.65 GB", "BEST ENCODER (PASS)"],
         ["Direct Gemini 3.1 Flash Lite", "Two-Stage Tesseract-to-LLM", 0.6324, 0.7378, "[58.78%, 68.92%]", 0.6216, 0.5946, 0.5946, 0.6757, 0.6757, 0.6622, "100.6 detik (1.36s/c)", "Rp703 (~Rp9.50/c)", "PRODUKSI AKTIF (Opt A)"],
         ["Composite v4.x (Pure OCR)", "Pure 100% Tesseract OCR + Rules", 0.7710, 0.8516, "[72.10%, 81.80%]", 0.7600, 0.8947, 0.3600, 0.9000, 0.9000, 0.6847, "0 detik (Offline)", "0 GB (CPU Local)", "Baseline Pure OCR"],
         ["Combined v4.2 (Hybrid)", "Hybrid Layer + 3 Pillars & Crop", 0.8742, 0.9000, "[83.50%, 91.20%]", 0.7970, 0.9230, 0.6620, 0.9090, 0.9090, 0.7682, "0 detik (Offline)", "0 GB (CPU Local)", "Fallback Produksi"],
@@ -130,7 +131,7 @@ def build_excel_report():
                 cell.alignment = align_center
 
     # Summary Stats row using formulas
-    row_avg = 12
+    row_avg = 13
     ws1.row_dimensions[row_avg].height = 22
     ws1.cell(row=row_avg, column=1, value="Rata-rata Model Teruji").font = font_header
     ws1.cell(row=row_avg, column=1).fill = fill_title
@@ -144,7 +145,7 @@ def build_excel_report():
 
     for c in [3, 4]:
         col_letter = get_column_letter(c)
-        cell = ws1.cell(row=row_avg, column=c, value=f"=AVERAGE({col_letter}5:{col_letter}11)")
+        cell = ws1.cell(row=row_avg, column=c, value=f"=AVERAGE({col_letter}5:{col_letter}12)")
         cell.font = font_header
         cell.fill = fill_title
         cell.alignment = align_right
@@ -157,11 +158,11 @@ def build_excel_report():
         cell.border = thin_border
 
     # Section 2: Peningkatan Relatif vs Baseline NER v1
-    ws1.cell(row=14, column=1, value="ANALISIS DELTA PERFORMANSI VS BASELINE PRE-TRAINED NER V1 (INDOBERT)").font = font_sub_header
+    ws1.cell(row=15, column=1, value="ANALISIS DELTA PERFORMANSI VS BASELINE PRE-TRAINED NER V1 (INDOBERT)").font = font_sub_header
     headers_t2 = ["Model Komparasi", "Baseline Exact", "Model Exact", "Peningkatan Mutlak (pp)", "Peningkatan Relatif (%)", "Kesimpulan Arsitektural"]
-    ws1.row_dimensions[15].height = 24
+    ws1.row_dimensions[16].height = 24
     for c_idx, text in enumerate(headers_t2, start=1):
-        cell = ws1.cell(row=15, column=c_idx, value=text)
+        cell = ws1.cell(row=16, column=c_idx, value=text)
         cell.font = font_header
         cell.fill = fill_section
         cell.alignment = align_center
@@ -171,12 +172,13 @@ def build_excel_report():
         ["IndoBERT Fine-Tuned Gagal (Phase v2)", 5, 6, "Anjlok -11.3pp akibat catastrophic forgetting pada 59 sampel dan ketiadaan weighted loss."],
         ["mDeBERTa-v3-base (86M)", 5, 7, "Peningkatan substansial (+22.04pp) pada recall entitas non-O via FP32 & soft-capping."],
         ["XLM-RoBERTa-large (560M)", 5, 8, "Model 560M melompat +30.75pp; representasi BPE multilingual sangat kuat."],
-        ["Direct Gemini 3.1 Flash Lite", 5, 9, "LLM murni melampaui seluruh encoder lokal tanpa memerlukan fine-tuning."],
-        ["Composite v4.x (Pure OCR Rules)", 5, 10, "Rule deterministik offline tetap paling unggul pada domain penanggalan & nomor."],
-        ["Combined v4.2 (Hybrid Pipeline)", 5, 11, "Pipeline komposit offline terbaik, unggul +74.62pp dibanding baseline NER v1."],
+        ["IndoBERT-ner-gold Fine-Tuned (334M)", 5, 9, "ENCODER TERBAIK (+31.72pp vs pre-trained, +0.97pp vs XLM-RoBERTa-large, kegiatan melonjak ke 43.2%)."],
+        ["Direct Gemini 3.1 Flash Lite", 5, 10, "LLM murni melampaui seluruh encoder lokal tanpa memerlukan fine-tuning."],
+        ["Composite v4.x (Pure OCR Rules)", 5, 11, "Rule deterministik offline tetap paling unggul pada domain penanggalan & nomor."],
+        ["Combined v4.2 (Hybrid Pipeline)", 5, 12, "Pipeline komposit offline terbaik, unggul +74.62pp dibanding baseline NER v1."],
     ]
 
-    for idx, (label, base_r, model_r, notes) in enumerate(delta_rows, start=16):
+    for idx, (label, base_r, model_r, notes) in enumerate(delta_rows, start=17):
         ws1.row_dimensions[idx].height = 20
         c1 = ws1.cell(row=idx, column=1, value=label)
         c2 = ws1.cell(row=idx, column=2, value=f"=C{base_r}")
@@ -215,7 +217,7 @@ def build_excel_report():
     ws2["A2"].alignment = align_center
     ws2.row_dimensions[2].height = 18
 
-    headers_t3 = ["Parameter / Spesifikasi", "microsoft/mdeberta-v3-base", "facebookai/xlm-roberta-large", "Rasional & Detail Desain Arsitektural"]
+    headers_t3 = ["Parameter / Spesifikasi", "treamyracle/indobert-ner-gold", "microsoft/mdeberta-v3-base", "facebookai/xlm-roberta-large", "Rasional & Detail Desain Arsitektural"]
     ws2.row_dimensions[4].height = 26
     for c_idx, text in enumerate(headers_t3, start=1):
         cell = ws2.cell(row=4, column=c_idx, value=text)
@@ -225,31 +227,31 @@ def build_excel_report():
         cell.border = header_border
 
     configs = [
-        ["Model Checkpoint", "microsoft/mdeberta-v3-base", "facebookai/xlm-roberta-large", "Bobot resmi dari Hugging Face Hub."],
-        ["Jumlah Parameter", "86 Juta Parameter", "560 Juta Parameter", "XLM-RoBERTa 6.5x lebih besar dengan kapasitas representasi lebih tinggi."],
-        ["Arsitektur Dasar", "DeBERTa-v2 (Disentangled Attention)", "RoBERTa (Transformer Encoder)", "DeBERTa memisahkan representasi isi kata dan posisi relatif."],
-        ["Tokenizer & Vocab", "DeBERTaV2TokenizerFast (SPM: 250k)", "XLMRobertaTokenizerFast (BPE: 250k)", "SentencePiece (SPM) vs Byte-Pair Encoding (BPE) multilingual."],
-        ["Skema Validasi", "5-Fold Stratified Cross-Validation", "5-Fold Stratified Cross-Validation", "Stratified berdasarkan distribusi kelengkapan field pada 74 dokumen."],
-        ["Loss Function", "Weighted Cross Entropy", "Weighted Cross Entropy", "Penyeimbang ketimpangan ekstrem antara kelas O (92%) vs entitas non-O (8%)."],
-        ["Formula Bobot Kelas", "Square-Root Inverse-Frequency", "Square-Root Inverse-Frequency", "w_c = min(sqrt(N_max / N_c), 10.0) mencegah bobot ekstrem meledakkan loss."],
-        ["Batas Bobot Maksimal", "10.0x", "10.0x", "Bobot dibatasi maksimal 10.0 (menggantikan bobot 100x yang memicu NaN)."],
-        ["Optimizer", "Adafactor (scale=False, rel=False)", "Adafactor (scale=False, rel=False)", "Memfaktorkan momen orde kedua; memangkas memori dari ~4.5GB ke ~50MB."],
-        ["Learning Rate", "2.0e-5 (0.00002)", "2.0e-5 (0.00002)", "Learning rate standar fine-tuning; 1e-4 terbukti divergen pada DeBERTa."],
-        ["Weight Decay", "0.01", "0.01", "Regularisasi L2 standar untuk mencegah overfitting pada dataset kecil."],
-        ["Batch Size (Per Device)", "1", "1", "Menghindari lonjakan memori aktivasi token pada GPU 8GB."],
-        ["Gradient Accumulation", "8 langkah", "8 langkah", "Akumulasi gradien menghasilkan Effective Batch Size = 8."],
-        ["Effective Batch Size", "8 dokumen", "8 dokumen", "Ukuran batch efektif yang stabil untuk optimasi gradien."],
-        ["Total Epoch", "10 Epoch", "10 Epoch", "10 epoch per fold; total 80-100 langkah pembaruan bobot per fold."],
-        ["Langkah Optimizer / Fold", "80 - 100 Langkah", "80 - 100 Langkah", "80 langkah untuk 51 train doc, 100 langkah untuk 69 train doc."],
-        ["Presisi Bobot (Master)", "torch.float32 (model.float())", "torch.float32 (model.float())", "KRITIKAL: DeBERTa di-cast ke FP32 untuk mencegah overflow FP16 pada Adam/Ada."],
-        ["Presisi Autocast", "bfloat16 (autocast GPU)", "bfloat16 (autocast GPU)", "Didukung native oleh arsitektur RTX 5050; dynamic range sama dengan FP32."],
-        ["Gradient Checkpointing", "Aktif (gradient_checkpointing_enable)", "Aktif (gradient_checkpointing_enable)", "Menukar sedikit komputasi dengan penghematan VRAM aktivasi ~60%."],
-        ["Max Sequence Length", "512 Token", "512 Token", "Batas panjang konteks maksimum standar model encoder."],
-        ["Sliding Window Stride", "64 Token", "64 Token", "Overlap jendela sliding agar token di batas 512 tidak terpotong."],
-        ["Inisialisasi Seed", "SEED = 42 + fold_index", "SEED = 42 + fold_index", "Deterministik penuh untuk reproduksibilitas hasil eksperimen."],
-        ["Hasil Sanity Overfit", "100.0% Recall (25/25 token)", "100.0% Recall (25/25 token)", "Verifikasi bahwa model mampu menghafal label non-O sebelum pelatihan OOF."],
-        ["Total Waktu Latih (5 Fold)", "734 detik (~12.2 menit)", "794 detik (~13.2 menit)", "Kecepatan eksekusi rata-rata 1.4 - 1.8 detik per langkah optimizer."],
-        ["Puncak Konsumsi VRAM", "4.08 GB / 8.15 GB", "7.09 GB / 8.15 GB", "Kedua model berhasil dilatih pada workstation RTX 5050 tanpa error OOM."]
+        ["Model Checkpoint", "treamyracle/indobert-ner-gold", "microsoft/mdeberta-v3-base", "facebookai/xlm-roberta-large", "Bobot resmi dari Hugging Face Hub."],
+        ["Jumlah Parameter", "334 Juta Parameter", "86 Juta Parameter", "560 Juta Parameter", "IndoBERT-large (334M) di tengah antara mDeBERTa dan XLM-RoBERTa."],
+        ["Arsitektur Dasar", "BERT-large (Bidirectional Transformer)", "DeBERTa-v2 (Disentangled Attention)", "RoBERTa (Transformer Encoder)", "IndoBERT fokus monolingual Indonesia vs DeBERTa & XLM-RoBERTa multilingual."],
+        ["Tokenizer & Vocab", "BertTokenizerFast (Indo4B: 32k)", "DeBERTaV2TokenizerFast (SPM: 250k)", "XLMRobertaTokenizerFast (BPE: 250k)", "Kosakata IndoBERT utuh pada kata Indonesia; tidak terfragmentasi seperti multilingual."],
+        ["Skema Validasi", "5-Fold Stratified Cross-Validation", "5-Fold Stratified Cross-Validation", "5-Fold Stratified Cross-Validation", "Identik 100%: stratified berdasarkan kelengkapan field 74 dokumen."],
+        ["Loss Function", "Weighted Cross Entropy", "Weighted Cross Entropy", "Weighted Cross Entropy", "Penyeimbang ketimpangan ekstrem antara kelas O (92%) vs entitas non-O (8%)."],
+        ["Formula Bobot Kelas", "Square-Root Inverse-Frequency", "Square-Root Inverse-Frequency", "Square-Root Inverse-Frequency", "w_c = min(sqrt(N_max / N_c), 10.0) mencegah bobot ekstrem meledakkan loss."],
+        ["Batas Bobot Maksimal", "10.0x", "10.0x", "10.0x", "Bobot dibatasi maksimal 10.0 mencegah divergensi gradien."],
+        ["Optimizer", "Adafactor (scale=False, rel=False)", "Adafactor (scale=False, rel=False)", "Adafactor (scale=False, rel=False)", "Memfaktorkan momen orde kedua; memangkas memori dari ~2.5GB ke ~35MB."],
+        ["Learning Rate", "2.0e-5 (0.00002)", "2.0e-5 (0.00002)", "2.0e-5 (0.00002)", "Learning rate standar fine-tuning transformer encoder."],
+        ["Weight Decay", "0.01", "0.01", "0.01", "Regularisasi L2 standar untuk mencegah overfitting pada dataset kecil."],
+        ["Batch Size (Per Device)", "1", "1", "1", "Menghindari lonjakan memori aktivasi token pada GPU 8GB."],
+        ["Gradient Accumulation", "8 langkah", "8 langkah", "8 langkah", "Akumulasi gradien menghasilkan Effective Batch Size = 8."],
+        ["Effective Batch Size", "8 dokumen", "8 dokumen", "8 dokumen", "Ukuran batch efektif yang stabil untuk optimasi gradien."],
+        ["Total Epoch", "10 Epoch", "10 Epoch", "10 Epoch", "10 epoch per fold; total 70-100 langkah pembaruan bobot per fold."],
+        ["Langkah Optimizer / Fold", "70 - 100 Langkah", "80 - 100 Langkah", "80 - 100 Langkah", "Langkah optimasi per fold sesuai pembagian fold data latih."],
+        ["Presisi Bobot (Master)", "torch.float32 (model.float())", "torch.float32 (model.float())", "torch.float32 (model.float())", "Stabilitas master weight FP32."],
+        ["Presisi Autocast", "bfloat16 (autocast GPU)", "bfloat16 (autocast GPU)", "bfloat16 (autocast GPU)", "Didukung native oleh arsitektur RTX 5050; dynamic range FP32."],
+        ["Gradient Checkpointing", "Aktif (gradient_checkpointing_enable)", "Aktif (gradient_checkpointing_enable)", "Aktif (gradient_checkpointing_enable)", "Menukar sedikit komputasi dengan penghematan VRAM aktivasi ~60%."],
+        ["Max Sequence Length", "512 Token", "512 Token", "512 Token", "Batas panjang konteks maksimum standar model encoder."],
+        ["Sliding Window Stride", "64 Token", "64 Token", "64 Token", "Overlap jendela sliding agar token di batas 512 tidak terpotong."],
+        ["Inisialisasi Seed", "SEED = 42 + fold_index", "SEED = 42 + fold_index", "SEED = 42 + fold_index", "Deterministik penuh untuk reproduksibilitas hasil eksperimen."],
+        ["Hasil Sanity Overfit", "96.0% Recall (24/25 token)", "100.0% Recall (25/25 token)", "100.0% Recall (25/25 token)", "Verifikasi bahwa model mampu menghafal label non-O sebelum pelatihan OOF."],
+        ["Total Waktu Latih (5 Fold)", "700.1 detik (~11.7 menit)", "734 detik (~12.2 menit)", "794 detik (~13.2 menit)", "Kecepatan eksekusi rata-rata 1.4 - 1.8 detik per langkah optimizer."],
+        ["Puncak Konsumsi VRAM", "4.65 GB / 8.15 GB", "4.08 GB / 8.15 GB", "7.09 GB / 8.15 GB", "Ketiga model berhasil dilatih pada workstation RTX 5050 tanpa error OOM."]
     ]
 
     for r_idx, row_data in enumerate(configs, start=5):
@@ -260,7 +262,8 @@ def build_excel_report():
             cell.font = font_data_bold if c_idx == 1 else font_data
             cell.fill = fill_curr
             cell.border = thin_border
-            cell.alignment = align_left if c_idx in [1, 4] else align_center
+            cell.alignment = align_left if c_idx in [1, 5] else align_center
+
 
 
     # Section 2 di Sheet 2: Analisis Mendalam Kegagalan Fine-Tune IndoBERT & Potensi Retry
@@ -460,20 +463,61 @@ def build_excel_report():
         cell = ws3.cell(row=row_avg_x, column=col, value=f"=AVERAGE({col_letter}14:{col_letter}18)")
         cell.font = font_header; cell.fill = fill_title; cell.alignment = align_right; cell.border = thin_border; cell.number_format = "0.0%"
 
-    # Table Bootstrap CI
-    ws3.cell(row=21, column=1, value="3. Validasi Statistik Bootstrap 1000x Resampling (Exact Macro)").font = font_sub_header
-    headers_ci = ["Model Evaluasi", "Sampel Dokumen", "Mean Bootstrap", "Batas Bawah (2.5%)", "Batas Atas (97.5%)", "Rentang CI 95% (Width)", "Stabilitas Estimasi"]
+
+    # Table IndoBERT-ner-gold (334M)
+    ws3.cell(row=21, column=1, value="3. Evaluasi Per-Fold: treamyracle/indobert-ner-gold (334M) — BEST ENCODER").font = font_sub_header
     ws3.row_dimensions[22].height = 24
-    for c_idx, text in enumerate(headers_ci, start=1):
+    for c_idx, text in enumerate(headers_folds, start=1):
         cell = ws3.cell(row=22, column=c_idx, value=text)
+        cell.font = font_header; cell.fill = fill_section; cell.alignment = align_center; cell.border = header_border
+
+    indobert_folds = [
+        [1, 51, 23, 114.0, 0.4348, 0.5294, 0.3043, 0.4737, 0.4737, 0.4356, 0.5545],
+        [2, 53, 21, 118.5, 0.5238, 0.5000, 0.4286, 0.5000, 0.3571, 0.4643, 0.5714],
+        [3, 59, 15, 134.2, 0.2000, 0.8000, 0.2000, 0.4167, 0.2500, 0.3438, 0.5156],
+        [4, 64, 10, 140.3, 0.5000, 0.4286, 0.5000, 0.8000, 0.6000, 0.5405, 0.6757],
+        [5, 69, 5, 161.2, 0.6000, 0.7500, 0.6000, 0.4000, 0.4000, 0.5417, 0.6250],
+    ]
+
+    for r_idx, r_data in enumerate(indobert_folds, start=23):
+        ws3.row_dimensions[r_idx].height = 20
+        fill_curr = fill_ice if r_idx % 2 == 1 else fill_gray
+        for c_idx, val in enumerate(r_data, start=1):
+            cell = ws3.cell(row=r_idx, column=c_idx, value=val)
+            cell.font = font_data; cell.fill = fill_curr; cell.border = thin_border
+            if isinstance(val, float) and c_idx >= 5:
+                cell.number_format = "0.0%"; cell.alignment = align_right
+            elif c_idx == 4:
+                cell.number_format = "0.0"; cell.alignment = align_right
+            else:
+                cell.alignment = align_center
+
+    row_avg_i = 28
+    ws3.row_dimensions[row_avg_i].height = 22
+    ws3.cell(row=row_avg_i, column=1, value="Rata-rata OOF").font = font_header
+    ws3.cell(row=row_avg_i, column=1).fill = fill_title; ws3.cell(row=row_avg_i, column=1).border = thin_border
+    ws3.cell(row=row_avg_i, column=2, value="=SUM(B23:B27)/5").font = font_header; ws3.cell(row=row_avg_i, column=2).fill = fill_title; ws3.cell(row=row_avg_i, column=2).alignment = align_center; ws3.cell(row=row_avg_i, column=2).number_format = "0"
+    ws3.cell(row=row_avg_i, column=3, value="=SUM(C23:C27)").font = font_header; ws3.cell(row=row_avg_i, column=3).fill = fill_title; ws3.cell(row=row_avg_i, column=3).alignment = align_center; ws3.cell(row=row_avg_i, column=3).number_format = "0"
+    ws3.cell(row=row_avg_i, column=4, value="=SUM(D23:D27)").font = font_header; ws3.cell(row=row_avg_i, column=4).fill = fill_title; ws3.cell(row=row_avg_i, column=4).alignment = align_right; ws3.cell(row=row_avg_i, column=4).number_format = "0.0s"
+    for col in range(5, 12):
+        col_letter = get_column_letter(col)
+        cell = ws3.cell(row=row_avg_i, column=col, value=f"=AVERAGE({col_letter}23:{col_letter}27)")
+        cell.font = font_header; cell.fill = fill_title; cell.alignment = align_right; cell.border = thin_border; cell.number_format = "0.0%"
+    # Table Bootstrap CI
+    ws3.cell(row=30, column=1, value="4. Validasi Statistik Bootstrap 1000x Resampling (Exact Macro)").font = font_sub_header
+    headers_ci = ["Model Evaluasi", "Sampel Dokumen", "Mean Bootstrap", "Batas Bawah (2.5%)", "Batas Atas (97.5%)", "Rentang CI 95% (Width)", "Stabilitas Estimasi"]
+    ws3.row_dimensions[31].height = 24
+    for c_idx, text in enumerate(headers_ci, start=1):
+        cell = ws3.cell(row=31, column=c_idx, value=text)
         cell.font = font_header; cell.fill = fill_section; cell.alignment = align_center; cell.border = header_border
 
     ci_data = [
         ["mDeBERTa-v3-base (86M)", 74, 0.3478, 0.2895, 0.4092, "Sangat Stabil (Normal Distribution)"],
         ["XLM-RoBERTa-large (560M)", 74, 0.4357, 0.3717, 0.5000, "Sangat Stabil (Normal Distribution)"],
+        ["IndoBERT-ner-gold (334M)", 74, 0.4457, 0.3859, 0.5082, "ENCODER TERBAIK (95% CI Tertinggi: 38.6% - 50.8%)"],
     ]
 
-    for idx, (m_name, n_doc, mean_v, low_v, high_v, notes) in enumerate(ci_data, start=23):
+    for idx, (m_name, n_doc, mean_v, low_v, high_v, notes) in enumerate(ci_data, start=32):
         ws3.row_dimensions[idx].height = 20
         c1 = ws3.cell(row=idx, column=1, value=m_name); c1.font = font_data_bold; c1.alignment = align_left
         c2 = ws3.cell(row=idx, column=2, value=n_doc); c2.alignment = align_center; c2.number_format = "0"
@@ -486,6 +530,7 @@ def build_excel_report():
         for c in [c1, c2, c3, c4, c5, c6, c7]:
             c.border = thin_border
             c.fill = fill_ice if idx % 2 == 1 else fill_gray
+
 
     # =========================================================================
     # SHEET 4: Uji Ketahanan OOD
@@ -508,8 +553,12 @@ def build_excel_report():
     ws4.row_dimensions[2].height = 18
 
     headers_ood = [
-        "Kondisi Uji Gangguan", "Jumlah Sel", "Akurasi mDeBERTa", "Penurunan mDeBERTa",
-        "Akurasi XLM-RoBERTa", "Penurunan XLM-RoBERTa", "Akurasi Composite v4.x", "Penurunan Composite v4.x", "Toleransi & Karakteristik"
+        "Kondisi Uji Gangguan", "Jumlah Sel",
+        "Akurasi IndoBERT", "Penurunan IndoBERT",
+        "Akurasi mDeBERTa", "Penurunan mDeBERTa",
+        "Akurasi XLM-RoBERTa", "Penurunan XLM-RoBERTa",
+        "Akurasi Composite v4.x", "Penurunan Composite v4.x",
+        "Toleransi & Karakteristik"
     ]
     ws4.row_dimensions[4].height = 26
     for c_idx, text in enumerate(headers_ood, start=1):
@@ -520,29 +569,32 @@ def build_excel_report():
         cell.border = header_border
 
     ood_table = [
-        ["Clean Baseline (Tanpa Noise)", 236, 0.3771, 0.4534, 0.8800, "Kondisi teks masukan OCR standar"],
-        ["Mutasi Entitas (UNAIR->UNS dll)", 236, 0.3051, 0.3771, 0.8060, "Mengganti nama univ/fakultas/hima ke institusi lain"],
-        ["Perturbasi Noise OCR 10%", 236, 0.2500, 0.2924, 0.7990, "Simulasi kebingungan karakter 5<->S, 8<->B, 0<->O, 1<->I"],
-        ["Perturbasi Noise OCR 25%", 236, 0.2034, 0.1949, 0.6980, "Tingkat noise OCR sedang pada dokumen buram"],
-        ["Perturbasi Noise OCR 50%", 236, 0.1017, 0.1229, 0.5410, "Tingkat noise OCR ekstrem pada pindaian sangat rusak"],
+        ["Clean Baseline (Tanpa Noise)", 236, 0.4703, 0.3771, 0.4534, 0.8800, "Kondisi teks masukan OCR standar"],
+        ["Mutasi Entitas (UNAIR->UNS dll)", 236, 0.3983, 0.3051, 0.3771, 0.8060, "Mengganti nama univ/fakultas/hima ke institusi lain"],
+        ["Perturbasi Noise OCR 10%", 236, 0.3051, 0.2500, 0.2924, 0.7990, "Simulasi kebingungan karakter 5<->S, 8<->B, 0<->O, 1<->I"],
+        ["Perturbasi Noise OCR 25%", 236, 0.1822, 0.2034, 0.1949, 0.6980, "Tingkat noise OCR sedang pada dokumen buram"],
+        ["Perturbasi Noise OCR 50%", 236, 0.0890, 0.1017, 0.1229, 0.5410, "Tingkat noise OCR ekstrem pada pindaian sangat rusak"],
     ]
 
-    for idx, (cond, n_cells, mdeb_acc, xlm_acc, comp_acc, notes) in enumerate(ood_table, start=5):
+    for idx, (cond, n_cells, indob_acc, mdeb_acc, xlm_acc, comp_acc, notes) in enumerate(ood_table, start=5):
         ws4.row_dimensions[idx].height = 20
         c1 = ws4.cell(row=idx, column=1, value=cond); c1.font = font_data_bold; c1.alignment = align_left
         c2 = ws4.cell(row=idx, column=2, value=n_cells); c2.alignment = align_center; c2.number_format = "0"
-        c3 = ws4.cell(row=idx, column=3, value=mdeb_acc); c3.alignment = align_right; c3.number_format = "0.0%"
+        c3 = ws4.cell(row=idx, column=3, value=indob_acc); c3.alignment = align_right; c3.number_format = "0.0%"
         c4 = ws4.cell(row=idx, column=4, value=f"=C{idx}-C$5"); c4.alignment = align_right; c4.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c4.font = font_formula
-        c5 = ws4.cell(row=idx, column=5, value=xlm_acc); c5.alignment = align_right; c5.number_format = "0.0%"
+        c5 = ws4.cell(row=idx, column=5, value=mdeb_acc); c5.alignment = align_right; c5.number_format = "0.0%"
         c6 = ws4.cell(row=idx, column=6, value=f"=E{idx}-E$5"); c6.alignment = align_right; c6.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c6.font = font_formula
-        c7 = ws4.cell(row=idx, column=7, value=comp_acc); c7.alignment = align_right; c7.number_format = "0.0%"
+        c7 = ws4.cell(row=idx, column=7, value=xlm_acc); c7.alignment = align_right; c7.number_format = "0.0%"
         c8 = ws4.cell(row=idx, column=8, value=f"=G{idx}-G$5"); c8.alignment = align_right; c8.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c8.font = font_formula
-        c9 = ws4.cell(row=idx, column=9, value=notes); c9.alignment = align_left; c9.font = font_data
+        c9 = ws4.cell(row=idx, column=9, value=comp_acc); c9.alignment = align_right; c9.number_format = "0.0%"
+        c10 = ws4.cell(row=idx, column=10, value=f"=I{idx}-I$5"); c10.alignment = align_right; c10.number_format = "-0.0%pp;+0.0%pp;0.0%pp"; c10.font = font_formula
+        c11 = ws4.cell(row=idx, column=11, value=notes); c11.alignment = align_left; c11.font = font_data
 
         fill_curr = fill_ice if idx % 2 == 1 else fill_gray
-        for c in [c1, c2, c3, c4, c5, c6, c7, c8, c9]:
+        for c in [c1, c2, c3, c4, c5, c6, c7, c8, c9, c10, c11]:
             c.border = thin_border
             c.fill = fill_curr
+
 
     # =========================================================================
     # SHEET 5: Arsitektur Pipeline Gemini

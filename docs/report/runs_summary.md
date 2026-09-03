@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 108 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 109 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -118,6 +118,7 @@
 | `kb_warmup_20260810_111952` | 2026-08-10 | other |  | — | 84.4% | — | — |  |  |
 | `ner_encoder_facebookai_xlm_roberta_large_20260902_152248` | 2026-09-02 | ner_encoder |  | — | 43.5% | — | — |  |  |
 | `ner_encoder_microsoft_mdeberta_v3_base_20260902_150927` | 2026-09-02 | ner_encoder |  | — | 34.8% | — | — |  |  |
+| `ner_encoder_treamyracle_indobert_ner_gold_20260903_183549` | 2026-09-03 | ner_encoder |  | — | 44.5% | — | — |  |  |
 | `ood_probe_v3_20260810_114145` | 2026-08-10 | other |  | — | 59.6% | — | — |  |  |
 | `ood_probe_v3_20260810_161809` | 2026-08-10 | other |  | — | 61.2% | — | — |  |  |
 | `org_format_20260813_100441` | 2026-08-13 | other |  | — | 63.5% | — | — |  |  |
