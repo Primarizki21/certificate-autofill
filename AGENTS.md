@@ -377,6 +377,21 @@ ollama pull llama3.1:8b
 - Tidak ada migration tool — `Base.metadata.create_all()` di `init_db()`
 - Schema: `Document` - `DocumentFile` (1:1), `Document` - `ExtractionJob` (1:N), `Document` - `ExtractedField` (1:N)
 
+
+### Keamanan & Proteksi Rahasia (Zero Secret Leakage — WAJIB)
+Aspek keamanan kredensial dan API key adalah **prioritas absolut dan dilarang keras dilanggar dalam kondisi apa pun**:
+- **DILARANG KERAS MEMASUKKAN KUNCI API ASLI KE GIT / REPO**:
+  * File `.env` dan `.env.google` yang memuat nilai rahasia asli WAJIB terdaftar di `.gitignore` dan **DILARANG SEKALI PUN DI-STAGE ATAU DI-COMMIT**.
+  * Sebelum melakukan commit (`git commit`), agent WAJIB memastikan file yang di-stage (`git diff --staged`) **TIDAK memuat token/kunci API privat**.
+  * Pada file template (`.env.example`, `.env.docker.example`) atau dokumentasi (`README.md`), hanya gunakan placeholder kosong (`GOOGLE_API_KEY=`) atau dummy generik (`GOOGLE_API_KEY="AIzaSy..."`).
+- **DILARANG MEMBOCORKAN KUNCI KE CHAT ATAU LOG**:
+  * Agent dilarang keras menampilkan isi kunci API asli (`GOOGLE_API_KEY`) ke respons chat pengguna, artefak publik, atau commit message.
+  * Semua modul pemanggil external API (`gemini_extractor.py`, `gemini_client.py`) WAJIB menyamarkan/meredaksi kunci (`[REDACTED_API_KEY]`) sehingga pesan error atau exception logger tidak mencatat key ke log file maupun terminal.
+- **OTENTIKASI VIA PRIVATE HTTP HEADERS**:
+  * Pengiriman kunci API ke Google Cloud API WAJIB melalui private HTTP header `x-goog-api-key`, BUKAN query parameter URL (`?key=...`), agar kunci tidak tercatat di URL log proxy/server.
+- **VERIFIKASI KEAMANAN MANDATORI**:
+  * Jika pengguna meminta audit keamanan atau sebelum `git push`, pastikan verifikasi dengan:
+    `git log -E -G"AIza[0-9A-Za-z_-]{35}" --all` menghasilkan **0 temuan**.
 ---
 
 ## Perubahan yang Ada & yang Mungkin Datang
@@ -393,6 +408,7 @@ Yang sudah berubah:
 - Combined v3: 5 branches (ROUTER-006 + DATE-001 + ORG-006 + ACT-006 + NUM-003) — 85.7% exact
 - Combined v4.2: 3 OOD pillars + High-DPI crop — 76.82% all-cells / 87.42% framework
 
+- Option A: Direct Tesseract-to-Gemini extraction (EXP-LLM-002 / PROD-GEMINI-001/002) aktif di produksi (`ENABLE_TESSERACT_GEMINI=true`) dengan graceful fallback
 Yang mungkin berubah ke depannya:
 - Promosi Combined v4.2 ke production (perlu user approval)
 - Resume eksperimen OCR (DocTR sebagai kandidat)
@@ -420,7 +436,7 @@ Yang mungkin berubah ke depannya:
 ---
 
 ## Dokumen Referensi
-- **Status eksperimen terbaru:** handoff TERBARU (`docs/handoff_v44.md` — Combined v4.2) + `docs/experiments_ledger.md` (closed approaches)
+- **Status eksperimen terbaru:** handoff TERBARU (`docs/handoff_v48.md` — Encoder NER vs LLM vs Rules) + `docs/experiments_ledger.md` (closed approaches)
 - **Laporan eksperimen:** [docs/report/README.md](docs/report/README.md) — benchmark_methods, evaluation_methodology, phase_v4_methodology, phase_v4_results_summary (`.docx` + mirror `.md`)
 - **Laporan resmi (docx/xlsx):** `docs/report/report_data.json` = source of truth (`experiments[]` + `per_field_src` per eksperimen + blocks dokumen) → `scripts/generate_report.py` → docx/md + `results_comparison.xlsx` (7 sheet, termasuk "Per-Field by Experiment" — per-field per eksperimen, OCR "n/a"). xlsx TIDAK di-commit (`*.xlsx` di-ignore) — regenerate lokal.
 - **Improvement tracking:** [docs/improvements.md](docs/improvements.md) — checklist perbaikan teridentifikasi
