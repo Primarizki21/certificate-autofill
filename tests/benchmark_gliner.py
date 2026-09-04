@@ -535,7 +535,7 @@ def to_gliner_v1_records(windows: list[GlinerTrainingWindow]) -> list[dict[str, 
     return [{
         "tokenized_text": window.tokens,
         "ner": [[span.start_word, span.end_word - 1, span.label] for span in window.spans],
-    } for window in windows]
+    } for window in windows if window.spans]
 
 
 def to_gliner2_examples(windows: list[GlinerTrainingWindow]) -> list[Any]:
@@ -604,7 +604,11 @@ def _clear_cuda() -> None:
     gc.collect()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
-
+    try:
+        import ctypes
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+    except Exception:
+        pass
 
 def _package_versions() -> dict[str, str]:
     return {name: importlib.metadata.version(name) for name in ("gliner", "gliner2", "transformers", "torch")}
@@ -858,34 +862,80 @@ def finetune_manifest(
     }
 
 
+def run_finetuned_fold(
+    model_key: str, fold_num: int, run_dir: Path, examples: list[Example], args: argparse.Namespace,
+) -> None:
+    training_examples, _ = build_gliner_training_examples(examples)
+    from tests.benchmark_ner_encoders import stratified_folds
+    folds = stratified_folds(examples, args.folds)
+    fold_index = fold_num - 1
+    held_out = folds[fold_index]
+    by_stem = {example.stem: example for example in training_examples}
+    train = [by_stem[example.stem] for index, fold in enumerate(folds) if index != fold_index for example in fold]
+    fold_dir = run_dir / f"fold_{fold_num}"
+    fold_dir.mkdir(parents=True, exist_ok=True)
+    out_file = fold_dir / "fold_output.json"
+    if out_file.exists():
+        print(f"[{model_key}] Fold {fold_num}/{args.folds} sudah ada ({out_file}), skip.", flush=True)
+        return
+    import psutil
+    avail_gb = psutil.virtual_memory().available / (1024**3)
+    if avail_gb < 1.5:
+        raise RuntimeError(f"Memori sistem terlalu rendah ({avail_gb:.2f} GB). Hentikan untuk mencegah crash WSL.")
+    print(f"[{model_key}] Starting Fold {fold_num}/{args.folds} ({len(train)} train docs, {len(held_out)} held-out, RAM avail: {avail_gb:.2f} GB)...", flush=True)
+    runner = run_gliner2_fold if model_key == "gliner2.5-base" else run_gliner_v1_fold
+    clean, ood, predictions, report = runner(GLINER_MODELS[model_key], fold_index, train, held_out, fold_dir, args)
+    macro_acc = report.get("summary", {}).get("macro_avg", {}).get("exact_acc", 0.0)
+    print(f"[{model_key}] Fold {fold_num}/{args.folds} finished in {report['seconds']:.1f}s | Peak VRAM: {report['peak_vram_bytes'] / (1024**2):.1f} MB | Fold Exact: {macro_acc:.1%}", flush=True)
+    payload = {"clean": clean, "ood": ood, "predictions": predictions, "report": report}
+    out_file.write_text(json.dumps(payload, indent=2, default=str))
+
+
 def run_finetuned_model(model_key: str, examples: list[Example], args: argparse.Namespace) -> Path:
+    import subprocess, sys
     training_examples, alignment_audit = build_gliner_training_examples(examples)
     slug = model_key.replace("-", "_").replace(".", "_")
-    run_dir = RUNS_DIR / f"gliner_ft_{slug}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
-    run_dir.mkdir(parents=True, exist_ok=False)
+    run_dir = Path(args.run_dir) if args.run_dir else RUNS_DIR / f"gliner_ft_{slug}_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    run_dir.mkdir(parents=True, exist_ok=True)
     config = finetune_manifest(
         model_key, args, alignment_audit, _checkpoint_revision(GLINER_MODELS[model_key]),
     )
     (run_dir / "config.json").write_text(json.dumps(config, indent=2, default=str))
     (run_dir / "alignment_audit.json").write_text(json.dumps(alignment_audit, indent=2, default=str))
-    from tests.benchmark_ner_encoders import stratified_folds
-    folds = stratified_folds(examples, args.folds)
+    started = time.perf_counter()
+    for fold_num in range(1, args.folds + 1):
+        fold_out = run_dir / f"fold_{fold_num}" / "fold_output.json"
+        if not fold_out.exists():
+            cmd = [
+                sys.executable, "-m", "tests.benchmark_gliner",
+                "--mode", "fine-tune",
+                "--models", model_key,
+                "--fold", str(fold_num),
+                "--run-dir", str(run_dir),
+                "--folds", str(args.folds),
+                "--epochs", str(args.epochs),
+                "--batch-size", str(args.batch_size),
+                "--gradient-accumulation-steps", str(args.gradient_accumulation_steps),
+                "--learning-rate", str(args.learning_rate),
+            ]
+            if args.skip_ood:
+                cmd.append("--skip-ood")
+            res = subprocess.run(cmd)
+            if res.returncode != 0:
+                raise RuntimeError(f"Fold {fold_num} gagal dengan return code {res.returncode}")
     all_clean: list[dict] = []
     all_ood = {"mutation": [], "noise_10": [], "noise_25": [], "noise_50": []}
     all_predictions: list[dict] = []
     fold_reports: list[dict] = []
-    started = time.perf_counter()
-    by_stem = {example.stem: example for example in training_examples}
-    for fold_index, held_out in enumerate(folds):
-        train = [by_stem[example.stem] for index, fold in enumerate(folds) if index != fold_index for example in fold]
-        fold_dir = run_dir / f"fold_{fold_index + 1}"
-        fold_dir.mkdir()
-        runner = run_gliner2_fold if model_key == "gliner2.5-base" else run_gliner_v1_fold
-        clean, ood, predictions, report = runner(GLINER_MODELS[model_key], fold_index, train, held_out, fold_dir, args)
-        all_clean.extend(clean)
-        all_predictions.extend(predictions)
-        fold_reports.append(report)
-        for name, values in ood.items():
+    for fold_num in range(1, args.folds + 1):
+        fold_out = run_dir / f"fold_{fold_num}" / "fold_output.json"
+        if not fold_out.exists():
+            raise FileNotFoundError(f"Fold output tidak ditemukan: {fold_out}")
+        data = json.loads(fold_out.read_text())
+        all_clean.extend(data["clean"])
+        all_predictions.extend(data["predictions"])
+        fold_reports.append(data["report"])
+        for name, values in data["ood"].items():
             all_ood[name].extend(values)
     if len(all_clean) != 74:
         raise RuntimeError(f"prediksi OOF harus 74, didapat {len(all_clean)}")
@@ -948,6 +998,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--models", nargs="+", choices=list(GLINER_MODELS), default=list(GLINER_MODELS))
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--folds", type=int, default=5)
+    parser.add_argument("--fold", type=int, default=None, help="Index fold 1-N (jika ingin menjalankan satu fold saja)")
+    parser.add_argument("--run-dir", type=str, default=None, help="Direktori run target")
     parser.add_argument("--epochs", type=float, default=10)
     parser.add_argument("--batch-size", type=int, default=1)
     parser.add_argument("--gradient-accumulation-steps", type=int, default=8)
@@ -968,6 +1020,13 @@ def main() -> None:
     examples, stats = build_examples()
     if stats != {"documents": 74, "fields_expected": 310, "fields_matched": 223, "fields_unmatched": 87}:
         raise RuntimeError(f"baseline encoder alignment berubah: {stats!r}")
+    if args.fold is not None:
+        if len(args.models) != 1:
+            raise ValueError("--fold hanya dapat dijalankan untuk satu model")
+        if not args.run_dir:
+            raise ValueError("--fold memerlukan --run-dir")
+        run_finetuned_fold(args.models[0], args.fold, Path(args.run_dir), examples, args)
+        return
     if args.sanity_overfit:
         for model_key in args.models:
             print(f"Sanity overfit selesai: {run_sanity_overfit(model_key, examples, args)}")
