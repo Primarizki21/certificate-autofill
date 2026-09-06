@@ -3,7 +3,7 @@
 > Registry ringkas dari `tests/benchmark_runs/`. Baca bersama `docs/handoff_v10.md` + `docs/experiments_ledger.md` + codegraph untuk context lengkap sesi eksperimen.
 > Regenerate: `uv run python scripts/generate_runs_summary.py`
 
-**Total run terindeks:** 120 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
+**Total run terindeks:** 127 (korpus `layout_texts_*` di-skip). Dataset 74 sertifikat.
 
 ## Authoritative runs
 
@@ -137,7 +137,14 @@
 | `organizer_v3_20260810_160232` | 2026-08-10 | other |  | — | 61.2% | — | — |  |  |
 | `organizer_v3_20260813_095301` | 2026-08-13 | other |  | — | 61.2% | — | — |  |  |
 | `prod_port_20260813_135019` | 2026-08-13 | other |  | — | 63.0% | — | — |  |  |
+| `production_input_matrix_20260906_121030` | 2026-09-06 | production_input_matrix |  | — | — | — | — |  | Winner:  (All-Cells 6F, 74 fresh source) |
+| `production_input_matrix_20260906_121201` | 2026-09-06 | production_input_matrix | production_conditional | 100.0% | 77.8% | — | — |  | Winner: production_conditional (All-Cells 6F, 74 fresh source) |
+| `production_input_matrix_20260906_121257` | 2026-09-06 | production_input_matrix | production_conditional | 100.0% | 100.0% | — | — |  | Winner: production_conditional (All-Cells 6F, 74 fresh source) |
+| `production_input_matrix_20260906_121329` | 2026-09-06 | production_input_matrix | production_conditional | 100.0% | 100.0% | — | — |  | Winner: production_conditional (All-Cells 6F, 74 fresh source) |
+| `production_input_matrix_20260906_121437` | 2026-09-06 | production_input_matrix | tesseract_only | 100.0% | 88.9% | — | — |  | Winner: tesseract_only (All-Cells 6F, 74 fresh source) |
+| `production_input_matrix_20260906_121617` | 2026-09-06 | production_input_matrix | production_conditional | 64.9% | 67.6% | — | — |  | Winner: production_conditional (All-Cells 6F, 74 fresh source) |
 | `run_20260728_131835` | 2026-07-28 | baseline_regex |  | — | 42.2% | — | — |  |  |
+| `run_20260906_105947` | 2026-09-06 | other |  | — | 84.5% | — | — |  |  |
 | `run_fulltext_llm_20260730_201832` | 2026-07-30 | llm_fulltext |  | 23.0% | 47.7% | 614 | 74 |  |  |
 | `run_fulltext_llm_20260730_202823` | 2026-07-30 | llm_fulltext |  | 36.5% | 58.3% | 834 | 74 |  |  |
 | `run_hybrid_llm_20260730_192808` | 2026-07-30 | other |  | — | 49.4% | 833 | 125 |  |  |
