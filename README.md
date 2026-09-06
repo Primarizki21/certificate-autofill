@@ -4,7 +4,7 @@ Prototype internal — ekstraksi PDF sertifikat mahasiswa dan autofill form Kart
 
 **Stack Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR:** PyMuPDF (fast text) + Docling + Tesseract OCR + RapidOCR
+- **Text & OCR:** PyMuPDF (fast text) + Tesseract OCR + RapidOCR
 - **Ekstraksi Semantik (Default):** Google Gemini (`gemini-3.1-flash-lite`) via Direct Tesseract-to-Gemini REST API
 - **Ekstraksi Offline (Fallback):** Combined v4.2 (Structural Semantic Rules + High-DPI Region Crop)
 - **Monitoring:** Prometheus + Grafana + Loki

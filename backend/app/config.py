@@ -23,7 +23,6 @@ class Settings:
     )
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
-    enable_docling: bool = os.getenv("ENABLE_DOCLING", "true").lower() == "true"
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
     # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur

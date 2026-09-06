@@ -16,7 +16,7 @@ Arah pengembangan: hybrid rule-based + LLM untuk klasifikasi field, transisi ke 
 ### Arsitektur Hybrid yang Diusulkan
 
 ```
-PDF → Text Extraction (PyMuPDF/Docling/OCR)
+PDF → Text Extraction (PyMuPDF/OCR)
        ↓
     Raw Text (cleaned + filtered)
        ↓

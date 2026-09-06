@@ -9,6 +9,5 @@ PyMuPDF
 pytesseract
 Pillow
 rapidocr-onnxruntime
-docling
 python-dotenv
 tqdm

@@ -39,7 +39,6 @@ Especially watch for:
 ### OCR Gotchas
 - `pytesseract` requires system-level Tesseract installation — not pip-installable.
 - `rapidocr-onnxruntime` downloads models on first run.
-- Docling first call is slow (model download).
 - OCR errors have known aliases in `field_extractor.py` (AGUSTU5→AGUSTUS, SEPTEM8ER→SEPTEMBER, etc.)
 
 ### Database Safety
