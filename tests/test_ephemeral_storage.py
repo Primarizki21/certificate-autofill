@@ -164,3 +164,76 @@ class TestEphemeralPipelineProcessing:
             assert not test_store._resolve_key(temp_key).is_file()
             with pytest.raises(FileNotFoundError):
                 test_store.open_bytes(temp_key)
+
+
+class TestUploadDeduplicationAutoRetrieval:
+    def test_duplicate_upload_returns_cached_document(self, monkeypatch):
+        from fastapi.testclient import TestClient
+        from app.main import app
+        from app.database import get_db
+
+        from sqlalchemy.pool import StaticPool
+        engine = create_engine("sqlite:///:memory:", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+        TestingSessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)
+        Base.metadata.create_all(bind=engine)
+        def override_get_db():
+            db = TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+
+        with tempfile.TemporaryDirectory() as td:
+            test_store = TemporaryUploadStore(root_dir=td)
+            monkeypatch.setattr("app.main.upload_store", test_store)
+            monkeypatch.setattr("app.services.job_processor.upload_store", test_store)
+            monkeypatch.setattr("app.services.job_processor.SessionLocal", TestingSessionLocal)
+
+            def mock_run_pipeline(*args, **kwargs):
+                from app.services.field_extractor import ExtractedValue
+                return PipelineResult(
+                    parser_engine="test_engine_mock",
+                    raw_text="Mock text",
+                    raw_markdown=None,
+                    raw_json={"status": "mock"},
+                    mapped_fields={
+                        "nama_kegiatan_sertifikasi": ExtractedValue(value="Lomba Test", confidence=0.95, source="mock"),
+                    },
+                )
+            import dataclasses
+            from app.config import settings
+            monkeypatch.setattr("app.main.settings", dataclasses.replace(settings, processing_mode="sync"))
+            import fitz
+            doc = fitz.open()
+            doc.new_page()
+            pdf_bytes = doc.tobytes()
+            doc.close()
+            client = TestClient(app)
+
+            # 1. First upload -> processes synchronously
+            resp1 = client.post(
+                "/api/documents",
+                data={"tahun_akademik": "2023/2024", "bukti_fisik": "Sertifikat"},
+                files={"file": ("cert.pdf", pdf_bytes, "application/pdf")},
+            )
+            assert resp1.status_code == 200
+            data1 = resp1.json()
+            doc_id_1 = data1["document_id"]
+            assert data1["status"] in {"completed", "needs_review"}
+            assert data1["job_id"] != "cached"
+
+            # 2. Second upload of identical PDF -> instant cache hit!
+            resp2 = client.post(
+                "/api/documents",
+                data={"tahun_akademik": "2023/2024", "bukti_fisik": "Sertifikat"},
+                files={"file": ("cert.pdf", pdf_bytes, "application/pdf")},
+            )
+            assert resp2.status_code == 200
+            data2 = resp2.json()
+            assert data2["document_id"] == doc_id_1
+            assert data2["job_id"] == "cached"
+            assert data2["status"] in {"completed", "needs_review"}
+
+        app.dependency_overrides.clear()

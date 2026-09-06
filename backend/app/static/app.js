@@ -38,6 +38,7 @@ async function init() {
   bindEvents();
   await loadOptions();
   setInitialDefaults();
+  await restoreLastSession();
 }
 
 function bindEvents() {
@@ -130,6 +131,9 @@ async function uploadAndParse(event) {
 
     const uploaded = await response.json();
     state.currentDocumentId = uploaded.document_id;
+    try {
+      localStorage.setItem('cert_last_document_id', uploaded.document_id);
+    } catch (e) {}
     setStatus('PDF berhasil diupload. Menunggu hasil parsing extraction...');
     pollResult(uploaded.document_id);
   } catch (error) {
@@ -225,6 +229,9 @@ function resetPage() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = null;
   state.currentDocumentId = null;
+  try {
+    localStorage.removeItem('cert_last_document_id');
+  } catch (e) {}
   if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
   state.objectUrl = null;
 
@@ -234,6 +241,31 @@ function resetPage() {
   el('pdfPreview').src = '';
   setLoading(false);
   setStatus('Upload PDF untuk melakukan parsing extraction.');
+}
+
+async function restoreLastSession() {
+  try {
+    const urlParams = new URLSearchParams(window.location.search);
+    const docId = urlParams.get('doc') || localStorage.getItem('cert_last_document_id');
+    if (!docId) return;
+
+    const response = await fetch(`${API_BASE}/api/documents/${docId}/result`);
+    if (!response.ok) {
+      try { localStorage.removeItem('cert_last_document_id'); } catch (e) {}
+      return;
+    }
+    const data = await response.json();
+    if (['completed', 'needs_review'].includes(data.status)) {
+      state.currentDocumentId = docId;
+      showAfterUploadSection();
+      applyResult(data);
+      applyStrictOrganizerRuleFromLevel();
+      const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
+      setStatus(data.needs_review ? `Hasil sebelumnya berhasil dimuat ulang${engineTag}. Beberapa field perlu dicek ulang.` : `Hasil sebelumnya berhasil dimuat ulang${engineTag}. Form sudah terisi otomatis.`);
+    }
+  } catch (err) {
+    console.warn('Gagal memulihkan dokumen sebelumnya:', err);
+  }
 }
 
 function setLoading(isLoading) {

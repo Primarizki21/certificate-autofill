@@ -21,8 +21,9 @@ Arsitektur baru mengeliminasi 100% penyimpanan biner PDF di database dengan memi
 | **Teks Mentah OCR/LLM** | Tabel `parsed_documents` | Dieliminasi dari DB, engine dicatat di `Document` | Menghemat kapasitas baris dan index PostgreSQL |
 | **Pencegahan File Yatim (Orphans)** | Tidak ada | `reap_orphans()` otomatis (<1 jam) | Direktori sementara selalu bersih meski worker crash |
 | **Proteksi Keamanan Upload** | Ekstensi nama file | Validasi magic bytes `%PDF-` + isolasi UUID | Mencegah file berbahaya dan path traversal |
-| **Unit Test Coverage** | 178 passing tests | 183 passing tests (+5 test baru) | Zero regression, stabilitas fungsional 100% |
-
+| **Unit Test Coverage** | 178 passing tests | 184 passing tests (+6 test baru) | Zero regression, stabilitas fungsional 100% |
+| **Deduplikasi Upload Identik** | Diproses ulang dari nol | Cek `checksum_sha256` instan (<10ms) | 0 token terbuang untuk file yang sama |
+| **Persistensi Sesi Browser** | Reset ke kosong saat refresh | `localStorage` auto-restore | Form otomatis terisi kembali saat F5 |
 ---
 
 ## Rincian File yang Diubah dan Dibuat
@@ -39,18 +40,20 @@ Arsitektur baru mengeliminasi 100% penyimpanan biner PDF di database dengan memi
 3. **`backend/app/main.py`**:
    - Endpoint `upload_document` melakukan staging ke `TemporaryUploadStore` terlebih dahulu.
    - Menyimpan `temp_file_key` ke database dalam transaksi atomik (rollback langsung menghapus file staging bila gagal).
+   - Endpoint `upload_document` melakukan deduplikasi hash SHA-256: jika file identik sudah berstatus `completed`/`needs_review`, langsung mengembalikan ID yang ada tanpa panggil LLM/OCR ulang.
    - Endpoint `get_result` mengambil `parser_engine` langsung dari `Document`.
-4. **`backend/app/services/job_processor.py`**:
    - Membaca bytes PDF secara eksklusif dari `TemporaryUploadStore.open_bytes(job.temp_file_key)`.
    - Mengisi hasil ekstraksi ke `ExtractedField` dan menandai `document.parser_engine`.
    - Memastikan file fisik PDF sementara di-unlink seketika di blok `finally`.
 5. **`backend/app/config.py`**:
    - Menambahkan konfigurasi `upload_temp_dir`, `result_retention_hours`, dan `temp_file_ttl_hours`.
 6. **`tests/test_ephemeral_storage.py` (Baru)**:
-   - 5 unit test komprehensif memvalidasi roundtrip staging, penolakan non-PDF, penolakan path traversal, orphan reaper, dan siklus pemusnahan file pada `job_processor`.
-7. **`tests/test_gemini_pipeline.py`**:
+   - 6 unit test komprehensif memvalidasi roundtrip staging, penolakan non-PDF, penolakan path traversal, orphan reaper, siklus pemusnahan file pada `job_processor`, dan auto-retrieval deduplikasi upload.
+7. **`frontend/app.js` & `backend/app/static/app.js`**:
+   - Menambahkan persistensi `localStorage` (`cert_last_document_id`) dan `restoreLastSession()` pada saat browser dibuka/di-refresh (F5).
+   - Pembersihan sesi saat tombol Reset Form diklik.
+8. **`tests/test_gemini_pipeline.py`**:
    - Memperbarui regression test schema `TestDocumentModelSchema` memvalidasi panjang kolom `parser_engine` pada `Document`.
-
 ---
 
 ## 4 Lapis Pembuktian Empiris & Keamanan
