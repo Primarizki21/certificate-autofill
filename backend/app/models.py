@@ -54,7 +54,7 @@ class ParsedDocument(Base):
 
     id = Column(UUID(as_uuid=False), primary_key=True)
     document_id = Column(UUID(as_uuid=False), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
-    parser_engine = Column(String(50), nullable=False)
+    parser_engine = Column(String(150), nullable=False)
     raw_text = Column(Text, nullable=True)
     raw_markdown = Column(Text, nullable=True)
     raw_json = Column(JSONB, nullable=True)
