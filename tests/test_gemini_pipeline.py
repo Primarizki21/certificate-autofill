@@ -291,16 +291,16 @@ class TestEmpirical4LayerComponents:
         assert sn_res["review_recall_pct"] == 100.0
 
 
-class TestParsedDocumentModelSchema:
+class TestDocumentModelSchema:
     def test_parser_engine_column_length_sufficient_for_ocr_and_llm(self):
         """Regression test: parser_engine column length must safely accommodate combined tags.
 
         Root cause of bug: 'pymupdf_fast_path+ocr_date_check+gemini-3.1-flash-lite' (54 chars)
         overflowed String(50). Column must be at least 150 chars.
         """
-        from app.models import ParsedDocument
+        from app.models import Document
 
-        col_type = ParsedDocument.__table__.c.parser_engine.type
+        col_type = Document.__table__.c.parser_engine.type
         assert col_type.length >= 150
 
         tag_fast_path = "pymupdf_fast_path+gemini-3.1-flash-lite"
@@ -309,9 +309,14 @@ class TestParsedDocumentModelSchema:
 
         for tag in [tag_fast_path, tag_ocr_fallback, tag_combined]:
             assert len(tag) <= col_type.length
-            doc = ParsedDocument(
+            doc = Document(
                 id="test-id",
-                document_id="doc-id",
+                tahun_akademik="2023/2024",
+                bukti_fisik="Sertifikat",
+                original_file_name="test.pdf",
+                mime_type="application/pdf",
+                file_size=100,
+                checksum_sha256="abc",
                 parser_engine=tag,
             )
             assert doc.parser_engine == tag

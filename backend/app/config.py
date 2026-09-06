@@ -22,6 +22,9 @@ class Settings:
         "postgresql+psycopg2://postgres:changeme@127.0.0.1:5434/certautofill",
     )
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+    upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
+    result_retention_hours: int = int(os.getenv("RESULT_RETENTION_HOURS", "24"))
+    temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render

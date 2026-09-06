@@ -19,9 +19,10 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, init_db
 from app.master_data import FORM_OPTIONS
-from app.models import Document, DocumentFile, ExtractionJob, ExtractedField, ParsedDocument
+from app.models import Document, ExtractionJob, ExtractedField
 from app.schemas import ExtractionResult, FieldResult, OptionsResponse, UploadResponse
 from app.services.job_processor import process_document_job
+from app.services.temporary_upload_store import upload_store
 
 app = FastAPI(title="Certificate Autofill Prototype", version="0.1.0")
 app.add_middleware(
@@ -85,6 +86,11 @@ def upload_document(
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Ukuran PDF maksimal {settings.max_upload_size_mb} MB.")
 
+    try:
+        temp_key = upload_store.stage_bytes(content)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
     document_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
     checksum = hashlib.sha256(content).hexdigest()
@@ -100,14 +106,22 @@ def upload_document(
         checksum_sha256=checksum,
         status="queued",
     )
-    document_file = DocumentFile(document_id=document_id, pdf_data=content)
-    job = ExtractionJob(id=job_id, document_id=document_id, status="queued", retry_count=0)
+    job = ExtractionJob(
+        id=job_id,
+        document_id=document_id,
+        temp_file_key=temp_key,
+        status="queued",
+        retry_count=0,
+    )
 
-    db.add(document)
-    db.add(document_file)
-    db.add(job)
-    db.commit()
-
+    try:
+        db.add(document)
+        db.add(job)
+        db.commit()
+    except Exception:
+        db.rollback()
+        upload_store.delete(temp_key)
+        raise
     # No RabbitMQ variant. The extraction job is processed either in the
     # FastAPI background task, synchronously, or by the optional DB-polling worker.
     if settings.processing_mode == "sync":
@@ -133,12 +147,6 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
 
     fields = db.query(ExtractedField).filter(ExtractedField.document_id == document_id).all()
-    parsed = (
-        db.query(ParsedDocument)
-        .filter(ParsedDocument.document_id == document_id)
-        .order_by(ParsedDocument.created_at.desc())
-        .first()
-    )
 
     field_dict = {
         f.form_field_name: FieldResult(
@@ -149,18 +157,13 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         )
         for f in fields
     }
-    needs_review = any(item.needs_review for item in field_dict.values())
-    preview = None
-    parser_engine = None
-    if parsed:
-        preview = (parsed.raw_text or "")[:1000]
-        parser_engine = parsed.parser_engine
+    needs_review = any(item.needs_review for item in field_dict.values()) or document.status == "needs_review"
 
     return ExtractionResult(
         document_id=document_id,
         status=document.status,
         needs_review=needs_review,
         fields=field_dict,
-        raw_text_preview=preview,
-        parser_engine=parser_engine,
+        raw_text_preview=None,
+        parser_engine=document.parser_engine,
     )
