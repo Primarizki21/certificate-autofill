@@ -85,6 +85,21 @@ def upload_document(
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Ukuran PDF maksimal {settings.max_upload_size_mb} MB.")
+    checksum = hashlib.sha256(content).hexdigest()
+
+    # Auto-retrieve: check if identical PDF was already processed with completed fields
+    existing = (
+        db.query(Document)
+        .filter(Document.checksum_sha256 == checksum, Document.status.in_(["completed", "needs_review"]))
+        .order_by(Document.created_at.desc())
+        .first()
+    )
+    if existing:
+        has_fields = db.query(ExtractedField).filter(ExtractedField.document_id == existing.id).count() > 0
+        if has_fields:
+            UPLOAD_COUNT.inc()
+            UPLOAD_SIZE.observe(len(content))
+            return UploadResponse(document_id=existing.id, job_id="cached", status=existing.status)
 
     try:
         temp_key = upload_store.stage_bytes(content)
@@ -93,8 +108,6 @@ def upload_document(
 
     document_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
-    checksum = hashlib.sha256(content).hexdigest()
-
     document = Document(
         id=document_id,
         source_system="prototype_ui",
