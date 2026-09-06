@@ -82,7 +82,7 @@ class TestGeminiExtractorProduction:
         orig_val = settings.enable_tesseract_gemini
         try:
             object.__setattr__(settings, "enable_tesseract_gemini", False)
-            res = run_extraction_pipeline(pdf_bytes, sample_files[0], "2024/2025", "Sertifikat")
+            res = run_extraction_pipeline(pdf_bytes, "2024/2025", "Sertifikat")
             assert "gemini" not in res.parser_engine
             assert "nama_kegiatan_sertifikasi" in res.mapped_fields
         finally:
@@ -98,7 +98,7 @@ class TestGeminiExtractorProduction:
 
         # Simulasikan Gemini error
         with patch("app.services.gemini_extractor.extract_fields_with_gemini", return_value=(None, {"error": "Connection refused"})):
-            res = run_extraction_pipeline(pdf_bytes, sample_files[0], "2024/2025", "Sertifikat")
+            res = run_extraction_pipeline(pdf_bytes, "2024/2025", "Sertifikat")
             assert res is not None
             assert "nama_kegiatan_sertifikasi" in res.mapped_fields
             assert "gemini" not in res.parser_engine
@@ -114,7 +114,7 @@ class TestGeminiExtractorProduction:
         with open(sample_pdf_path, "rb") as f:
             pdf_bytes = f.read()
 
-        res = run_extraction_pipeline(pdf_bytes, "1952296_219642_skp.pdf", "2024/2025", "Sertifikat")
+        res = run_extraction_pipeline(pdf_bytes, "2024/2025", "Sertifikat")
         assert res is not None
         assert "gemini" in res.parser_engine.lower()
         assert res.mapped_fields["nama_kegiatan_sertifikasi"].value is not None

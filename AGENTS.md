@@ -55,7 +55,7 @@ cd frontend && python -m http.server 5173
 
 ### Pipeline
 ```
-PDF → PyMuPDF (fast text) → Docling (fallback) → OCR (RapidOCR+Tesseract)
+PDF → PyMuPDF (fast text) → OCR (RapidOCR+Tesseract)
     → Field Extractor (regex) → Form Mapper (rules) → PostgreSQL
 ```
 
@@ -67,7 +67,7 @@ PDF → PyMuPDF (fast text) → Docling (fallback) → OCR (RapidOCR+Tesseract)
 | `db_worker` | Worker polling PostgreSQL | `python -m app.worker` |
 
 ### Stack
-- **Backend:** FastAPI + SQLAlchemy + PyMuPDF + Docling + RapidOCR + Tesseract
+- **Backend:** FastAPI + SQLAlchemy + PyMuPDF + RapidOCR + Tesseract
 - **Frontend:** Vanilla HTML/CSS/JS (no framework, no build step)
 - **DB:** PostgreSQL 17 (PDF disimpan sebagai `BYTEA`)
 - **Monitoring:** Prometheus + Grafana + Loki
@@ -91,7 +91,6 @@ backend/
     services/
       extraction_pipeline.py  # Orchestrator pipeline (yang manage urutan parser)
       pdf_fast_path.py        # PyMuPDF text + PNG render
-      docling_parser.py       # Docling converter wrapper
       ocr_fallback.py         # RapidOCR + Tesseract merger
       field_extractor.py      # Regex extraction: dates, role, activity, organizer, cert number
       form_mapper.py          # Rule-based mapping ke form options + needs_review logic
@@ -426,7 +425,6 @@ Yang mungkin berubah ke depannya:
 - `pika` masih ada di `requirements.txt` tapi sudah tidak dipakai (RabbitMQ dihapus)
 - `pytesseract` perlu Tesseract terinstall di sistem — tidak otomatis dari pip
 - `rapidocr-onnxruntime` perlu download model on first run
-- Docling bergantung pada model yang di-download saat runtime — slow first call
 - Form mapper punya 2 fungsi validasi: `validate_with_needs_review` (required fields) dan `field_needs_review` (per-field threshold confidence < 0.80)
 - `has_student_association_signature_context()` mendeteksi dari pola *signer dekat dengan nama organisasi*, bukan dari lokasi fisik tanda tangan
 - Ollama perlu CUDA library path untuk RTX 5050 — lihat `scripts/start_ollama.sh`

@@ -41,7 +41,6 @@ def process_document_job(job_id: str, document_id: str) -> None:
 
         result = run_extraction_pipeline(
             pdf_bytes=document.file.pdf_data,
-            original_file_name=document.original_file_name,
             tahun_akademik=document.tahun_akademik,
             bukti_fisik=document.bukti_fisik,
         )

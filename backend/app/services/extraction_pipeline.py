@@ -4,7 +4,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 from app.config import settings
-from app.services.docling_parser import parse_with_docling
 from app.services.field_extractor import extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form
 from app.services.ocr_fallback import extract_text_with_ocr
@@ -22,7 +21,6 @@ class PipelineResult:
 
 def run_extraction_pipeline(
     pdf_bytes: bytes,
-    original_file_name: str,
     tahun_akademik: str,
     bukti_fisik: str,
 ) -> PipelineResult:
@@ -32,23 +30,12 @@ def run_extraction_pipeline(
     raw_markdown = None
     raw_json: dict[str, Any] | None = None
 
-    if settings.enable_docling and len(raw_text.strip()) < settings.min_text_length:
-        docling_result = parse_with_docling(pdf_bytes, original_file_name)
-        if len(docling_result.text.strip()) >= settings.min_text_length:
-            raw_text = docling_result.text
-            parser_engine = "docling"
-            raw_markdown = docling_result.markdown
-            raw_json = docling_result.json_data
-        elif docling_result.text.strip():
-            raw_text = f"{raw_text}\n{docling_result.text}".strip()
-            raw_markdown = docling_result.markdown
-            raw_json = docling_result.json_data
 
     # Tahap OCR tidak hanya dipakai saat teks kosong. Pada sertifikat berbasis gambar,
-    # Docling/RapidOCR kadang sudah menghasilkan teks panjang tetapi melewatkan baris
-    # tanggal kecil seperti "24 Agustus - 22 September 2024". Karena itu pipeline
-    # melakukan ekstraksi field sementara dulu, lalu memaksa OCR tambahan jika field
-    # tanggal belum ditemukan. Ini bukan hardcode tanggal; OCR tetap membaca isi PDF.
+    # RapidOCR kadang menghasilkan teks panjang tetapi melewatkan baris tanggal kecil
+    # seperti "24 Agustus - 22 September 2024". Karena itu pipeline melakukan ekstraksi
+    # field sementara dulu, lalu memaksa OCR tambahan jika field tanggal belum ditemukan.
+    # Ini bukan hardcode tanggal; OCR tetap membaca isi PDF.
     extracted = extract_certificate_fields(raw_text)
 
     date_missing = not (

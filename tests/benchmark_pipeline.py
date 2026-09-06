@@ -65,7 +65,7 @@ def run_benchmark():
         try:
             pdf_bytes = read_pdf_bytes(filepath)
             t0 = time.perf_counter()
-            mapped = run_extraction_pipeline(pdf_bytes, filename, "2024/2025", "Sertifikat")
+            mapped = run_extraction_pipeline(pdf_bytes, "2024/2025", "Sertifikat")
             elapsed = round(time.perf_counter() - t0, 2)
             timings.append(elapsed)
 
