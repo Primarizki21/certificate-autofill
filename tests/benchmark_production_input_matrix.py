@@ -660,20 +660,27 @@ def main() -> int:
             end="",
             flush=True,
         )
-
-        t_pymupdf = extract_fresh_text_for_engine("pymupdf", fpath, fb)
-        t_rapid = extract_fresh_text_for_engine("rapid", fpath, fb)
-        t_tess = extract_fresh_text_for_engine("tess", fpath, fb)
-        t_rapid_tess = merge_unique_lines([t_rapid, t_tess])
-        t_always_hybrid = merge_unique_lines([t_pymupdf, t_rapid_tess])
-
-        fresh_texts[stem] = {
-            "pymupdf": t_pymupdf,
-            "rapid": t_rapid,
-            "tess": t_tess,
-            "rapid_tess": t_rapid_tess,
-            "always_hybrid": t_always_hybrid,
-        }
+        cache_dir = os.path.join(run_dir, "cache_texts")
+        os.makedirs(cache_dir, exist_ok=True)
+        cache_file = os.path.join(cache_dir, f"{stem}.json")
+        if os.path.exists(cache_file):
+            with open(cache_file, "r", encoding="utf-8") as cf:
+                fresh_texts[stem] = json.load(cf)
+        else:
+            t_pymupdf = extract_fresh_text_for_engine("pymupdf", fpath, fb)
+            t_rapid = extract_fresh_text_for_engine("rapid", fpath, fb)
+            t_tess = extract_fresh_text_for_engine("tess", fpath, fb)
+            t_rapid_tess = merge_unique_lines([t_rapid, t_tess])
+            t_always_hybrid = merge_unique_lines([t_pymupdf, t_rapid_tess])
+            fresh_texts[stem] = {
+                "pymupdf": t_pymupdf,
+                "rapid": t_rapid,
+                "tess": t_tess,
+                "rapid_tess": t_rapid_tess,
+                "always_hybrid": t_always_hybrid,
+            }
+            with open(cache_file, "w", encoding="utf-8") as cf:
+                json.dump(fresh_texts[stem], cf)
         print(" OK!")
     ocr_duration = time.perf_counter() - t0_ocr
     print(f"   Ekstraksi teks fresh selesai dalam {ocr_duration:.2f}s.\n")
@@ -746,13 +753,14 @@ def main() -> int:
                     raw_text = fresh_texts[stem]["rapid_tess"]
                 elif variant == "always_hybrid":
                     raw_text = fresh_texts[stem]["always_hybrid"]
+            # Simpan teks fresh ke direktori varian
+            txt_save_path = os.path.join(
+                raw_texts_base, variant, f"{stem}.txt"
+            )
+            with open(txt_save_path, "w", encoding="utf-8") as tf:
+                tf.write(raw_text)
 
-                # Simpan teks fresh ke disk run
-                txt_save_path = os.path.join(
-                    raw_texts_base, variant, f"{stem}.txt"
-                )
-                with open(txt_save_path, "w", encoding="utf-8") as tf:
-                    tf.write(raw_text)
+            if variant != "production_conditional":
 
                 if args.skip_gemini:
                     # Dry run offline
