@@ -87,8 +87,9 @@ def _kind(name: str) -> str:
         return "hyb_kb"
     if name.startswith("layout_texts"):
         return "corpus"
+    if name.startswith("production_input_matrix_"):
+        return "production_input_matrix"
     return "other"
-
 
 def _pct(v) -> str:
     try:
@@ -197,6 +198,24 @@ def scan_run(run_dir: str) -> dict:
         "latency_ms": "—",
         "notes": "",
     }
+    if name.startswith("production_input_matrix_"):
+        meta = _load(os.path.join(run_dir, "run_metadata.json")) or {}
+        summary = _load(os.path.join(run_dir, "summary.json")) or {}
+        winner = summary.get("accuracy_winner", "")
+        variants = summary.get("variants", {})
+        win_data = variants.get(winner, {})
+        ov = win_data.get("overall", {})
+        all_ex = ov.get("all_cells_6f", {}).get("exact_pct")
+        tkt = ov.get("per_field", {}).get("tingkat", {}).get("exact_pct")
+        rec["model"] = meta.get("gemini_model", "")
+        rec["gt"] = os.path.basename(meta.get("gt_csv", ""))
+        rec["variant"] = winner
+        if all_ex is not None:
+            rec["macro"] = f"{all_ex:.1f}%"
+        if tkt is not None:
+            rec["tingkat"] = f"{tkt:.1f}%"
+        rec["notes"] = f"Winner: {winner} (All-Cells 6F, 74 fresh source)"
+        return rec
     cfg = _load(os.path.join(run_dir, "config.json"))
     if cfg:
         rec["model"] = cfg.get("model", "")
