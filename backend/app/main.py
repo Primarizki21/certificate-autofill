@@ -23,6 +23,7 @@ from app.master_data import FORM_OPTIONS
 from app.models import Document, ExtractionJob, ExtractedField
 from app.schemas import ExtractionResult, FieldResult, OptionsResponse, UploadResponse
 from app.services.job_processor import process_document_job
+from app.services.preview_generator import generate_compressed_preview
 from app.services.retention_cleanup import cleanup_expired_previews_and_documents
 from app.services.temporary_upload_store import upload_store
 
@@ -109,10 +110,15 @@ def upload_document(
     if existing:
         has_fields = db.query(ExtractedField).filter(ExtractedField.document_id == existing.id).count() > 0
         if has_fields:
+            if not existing.preview_image:
+                try:
+                    existing.preview_image = generate_compressed_preview(content)
+                    db.commit()
+                except Exception:
+                    db.rollback()
             UPLOAD_COUNT.inc()
             UPLOAD_SIZE.observe(len(content))
             return UploadResponse(document_id=existing.id, job_id="cached", status=existing.status)
-
     try:
         temp_key = upload_store.stage_bytes(content)
     except ValueError as exc:

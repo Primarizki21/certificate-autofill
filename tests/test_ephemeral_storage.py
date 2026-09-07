@@ -224,7 +224,14 @@ class TestUploadDeduplicationAutoRetrieval:
             assert data1["status"] in {"completed", "needs_review"}
             assert data1["job_id"] != "cached"
 
-            # 2. Second upload of identical PDF -> instant cache hit!
+            # Clear preview_image to simulate legacy document before preview feature
+            db_check = TestingSessionLocal()
+            doc_obj = db_check.get(Document, doc_id_1)
+            doc_obj.preview_image = None
+            db_check.commit()
+            db_check.close()
+
+            # 2. Second upload of identical PDF -> instant cache hit and backfills preview!
             resp2 = client.post(
                 "/api/documents",
                 data={"tahun_akademik": "2023/2024", "bukti_fisik": "Sertifikat"},
@@ -236,6 +243,11 @@ class TestUploadDeduplicationAutoRetrieval:
             assert data2["job_id"] == "cached"
             assert data2["status"] in {"completed", "needs_review"}
 
+            # Verify preview was backfilled
+            db_check2 = TestingSessionLocal()
+            doc_obj2 = db_check2.get(Document, doc_id_1)
+            assert doc_obj2.preview_image is not None
+            db_check2.close()
         app.dependency_overrides.clear()
 
 
