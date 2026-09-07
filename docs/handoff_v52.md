@@ -1,89 +1,71 @@
-# Handoff v52 — Arsitektur Ephemeral Zero-PDF Storage di PostgreSQL (PROD-EPHEMERAL-001)
+# Handoff v52 — Ephemeral Zero-PDF Storage
 
 > Supersedes `docs/handoff_v51.md`.
 
 ## Ringkasan Eksekutif
 
-Dalam rangka mencegah penumpukan data (*database storage bloat*) dan risiko kegagalan server akibat penyimpanan ribuan file PDF sertifikat berukuran besar di PostgreSQL (`BYTEA`), telah diimplementasikan arsitektur **Ephemeral Zero-PDF Storage** (`PROD-EPHEMERAL-001`).
+PDF sertifikat sekarang hanya berada sementara di filesystem `UPLOAD_TEMP_DIR`.
+PostgreSQL menyimpan metadata dokumen, status job, dan field hasil ekstraksi.
+Tidak ada bytes PDF, raw OCR, preview, deduplikasi upload, atau pemulihan `localStorage` pada implementasi ini.
 
-Sebelum perubahan ini, setiap berkas PDF yang diunggah disimpan permanen dalam format biner (`BYTEA`) di tabel `document_files`, serta teks mentah OCR/LLM disimpan di tabel `parsed_documents`. Pada beban ribuan mahasiswa, ratusan gigabyte PDF akan membebani memory cache database (*shared buffers*), memperlambat dump/backup, dan mengancam kehabisan storage server.
-Arsitektur baru mengeliminasi 100% penyimpanan berkas PDF asli (multi-MB) di database dengan memindahkan siklus hidup berkas ke `TemporaryUploadStore` berbasis filesystem sementara (`UPLOAD_TEMP_DIR`). Berkas PDF asli **langsung dimusnahkan seketika (`os.unlink()`) di dalam blok `finally`** segera setelah job mencapai status terminal (`completed`, `needs_review`, `failed`). Untuk mendukung pengalaman pengguna pada antarmuka web, sistem menyimpan thumbnail preview JPEG halaman 1 terkompresi berukuran terbatas (cap <=150 KB, sampel uji 34 KB) pada kolom `documents.preview_image` dengan masa retensi 24 jam berbasis `ExtractionJob.finished_at`. Ruang penyimpanan baris dan TOAST yang kedaluwarsa dibersihkan secara berkala oleh reaper sehingga menjadi *reusable* bagi transaksi baru dan dikembalikan ke OS melalui PostgreSQL autovacuum.
----
+## Cutover Database Lama
 
-## Tabel Komparasi: Arsitektur Lama vs Arsitektur Ephemeral Baru
+Model SQLAlchemy saja tidak mengubah database PostgreSQL yang sudah ada.
+Script `scripts/migrate_ephemeral_storage.py` wajib dijalankan satu kali sebelum deploy ke database lama.
 
-| Parameter / Dimensi | Arsitektur Lama (Legacy) | Arsitektur Baru (Ephemeral Zero-PDF) | Keuntungan & Dampak |
-|---|---|---|---|
-| **Penyimpanan Berkas PDF** | `BYTEA` di tabel `document_files` (Permanen) | PDF mentah musnah seketika; thumbnail JPEG di `documents.preview_image` | Mengeliminasi berkas PDF multi-MB; storage database terkendali batas preview & TTL |
-| **Pencegahan File Yatim (Orphans)** | Tidak ada | `reap_orphans()` otomatis (<1 jam) | Direktori sementara selalu bersih meski worker crash |
-| **Proteksi Keamanan Upload** | Ekstensi nama file | Validasi magic bytes `%PDF-` + isolasi UUID | Mencegah file berbahaya dan path traversal |
-| **Unit Test Coverage** | 178 passing tests | 186 passing tests (+8 test baru) | Zero regression, stabilitas fungsional 100% |
-| **Preview Dokumen** | Hilang saat refresh | Thumbnail JPEG terkompresi (target cap 150 KB, sampel uji 34 KB) | Tampil langsung di form saat refresh/load |
-| **Deduplikasi Upload Identik** | Diproses ulang dari nol | Cek `checksum_sha256` instan (<10ms) | 0 token terbuang untuk file yang sama |
-| **Persistensi Sesi Browser** | Reset ke kosong saat refresh | `localStorage` auto-restore | Form otomatis terisi kembali saat F5 |
-| **Siklus Pembersihan (TTL)** | Manual / tidak ada | Reaper berkala 24 jam (`finished_at`); ruang reusable internal | Mencegah penumpukan data lama |
----
+1. Buat backup yang sudah diuji pemulihannya.
+2. Jalankan dry-run:
+   ```bash
+   uv run python scripts/migrate_ephemeral_storage.py
+   ```
+3. Periksa tabel lama dan kolom yang akan ditambah.
+4. Jalankan migrasi:
+   ```bash
+   uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage
+   ```
 
-## Rincian File yang Diubah dan Dibuat
+Migrasi menambah `documents.parser_engine` dan empat kolom antrean: `temp_file_key`, `available_at`, `lease_expires_at`, `worker_id`.
+Setelah itu migrasi menghapus permanen `document_files` dan `parsed_documents`; keduanya berisi PDF atau OCR mentah lama.
 
-1. **`backend/app/services/temporary_upload_store.py` (Baru)**:
-   - Service pengelola file PDF sementara dengan izin ketat (`0o600`).
-   - Penamaan berbasis UUID aman dari *path traversal*.
-   - Validasi batas ukuran file dan *magic bytes* header `%PDF-`.
-   - Fungsi `reap_orphans()` untuk membersihkan sisa file yang terputus.
-2. **`backend/app/models.py`**:
-   - Menghapus model `DocumentFile` dan `ParsedDocument`.
-   - Menambahkan kolom `parser_engine VARCHAR(150)` pada model `Document`.
-   - Menambahkan kolom antrean ber-fencing (`temp_file_key`, `available_at`, `lease_expires_at`, `worker_id`) pada model `ExtractionJob`.
-3. **`backend/app/main.py`**:
-   - Endpoint `upload_document` melakukan staging ke `TemporaryUploadStore` terlebih dahulu.
-   - Menyimpan `temp_file_key` ke database dalam transaksi atomik (rollback langsung menghapus file staging bila gagal).
-   - Endpoint `upload_document` melakukan deduplikasi hash SHA-256: jika file identik sudah berstatus `completed`/`needs_review`, langsung mengembalikan ID yang ada tanpa panggil LLM/OCR ulang.
-   - Endpoint `get_result` mengambil `parser_engine` langsung dari `Document`.
-   - Membaca bytes PDF secara eksklusif dari `TemporaryUploadStore.open_bytes(job.temp_file_key)`.
-   - Mengisi hasil ekstraksi ke `ExtractedField` dan menandai `document.parser_engine`.
-   - Memastikan file fisik PDF sementara di-unlink seketika di blok `finally`.
-5. **`backend/app/config.py`**:
-   - Menambahkan konfigurasi `upload_temp_dir`, `result_retention_hours`, dan `temp_file_ttl_hours`.
-6. **`backend/app/services/preview_generator.py` (Baru)**:
-   - Generator preview JPEG halaman 1 terkompresi (batas cap 150 KB, sampel uji 34 KB) pada DPI 110 dengan fallback downsampling DPI 72 bila melebihi 150 KB.
-   - Bersifat fail-safe: tidak pernah melempar exception sehingga kegagalan render visual tidak menggagalkan ekstraksi form.
-7. **`backend/app/services/retention_cleanup.py` (Baru)**:
-   - Service pembersih data terintegrasi: menghapus dokumen dan preview yang berusia lebih dari 24 jam dihitung dari `ExtractionJob.finished_at`.
-   - Dijalankan berkala setiap 300 detik pada mode `db_worker` dan dieksekusi saat startup FastAPI pada mode `background`.
-   - Menghapus baris dokumen kedaluwarsa beserta relasi terkait secara cascade, menandai baris dan TOAST sebagai ruang yang dapat digunakan kembali secara internal oleh PostgreSQL (*reusable pages*).
-   - Catatan rilis: status verifikasi adalah **Staging/Conditional PASS** menunggu otentikasi/RBAC endpoint preview pada rilis produksi final.
-8. **`tests/test_ephemeral_storage.py` (Baru)**:
-   - 8 unit test komprehensif memvalidasi roundtrip staging, penolakan non-PDF, penolakan path traversal, orphan reaper, siklus pemusnahan file pada `job_processor`, auto-retrieval deduplikasi upload, generasi preview JPEG (cap 150 KB, sampel 34 KB), dan siklus pembersihan dokumen kedaluwarsa.
-9. **`frontend/app.js` & `backend/app/static/app.js`**:
-   - Menambahkan persistensi `localStorage` (`cert_last_document_id`) dan `restoreLastSession()` pada saat browser dibuka/di-refresh (F5).
-   - Menampilkan preview berkas sertifikat dari endpoint `GET /api/documents/{id}/preview` saat halaman dimuat ulang.
-   - Pembersihan sesi saat tombol Reset Form diklik.
-10. **`tests/test_gemini_pipeline.py`**:
-   - Memperbarui regression test schema `TestDocumentModelSchema` memvalidasi panjang kolom `parser_engine` pada `Document`.
----
+## Siklus Hidup Job
 
-## 4 Lapis Pembuktian Empiris & Keamanan
+1. Upload memvalidasi magic bytes PDF lalu menulis file UUID dengan mode `0o600`.
+2. Transaksi database menyimpan `temp_file_key` dan job `queued`.
+3. Processor mengunci dan mengubah satu job menjadi `processing`, menyimpan worker ID serta lease.
+4. Hanya pemilik lease aktif yang dapat menulis hasil atau menandai kegagalan.
+5. Status terminal menghapus PDF pada blok `finally`.
+6. Crash atau lease kedaluwarsa direkonsiliasi: job valid dapat diantrikan ulang sampai `MAX_JOB_RETRIES`; job melewati TTL menjadi `failed` lalu file dihapus.
 
-1. **Lapis 1: Keandalan Transaksi & Zero PDF Residue**:
-   - File fisik sementara terbukti 100% terhapus setelah `process_document_job` selesai (diverifikasi via `assert not path.is_file()` di `tests/test_ephemeral_storage.py`).
-   - Jika commit database gagal saat upload, handler menangkap exception dan langsung menghapus file staging agar tidak ada file yatim.
-2. **Lapis 2: Pertahanan Path Traversal & File Spoofing**:
-   - Input kunci file divalidasi ketat sebagai UUID v4; payload berbahaya seperti `../../etc/passwd` langsung ditolak dengan `ValueError`.
-3. **Lapis 3: Eliminasi Beban Berkas PDF Asli & Pengendalian Storage**:
-   - Berkas PDF asli berukuran multi-megabytes dieliminasi 100% dari PostgreSQL (zero retention untuk PDF mentah).
-   - Thumbnail preview JPEG dibatasi secara ketat (cap <=150 KB), menghemat ~98% kapasitas dibanding berkas scan mentah.
-   - Dokumen kedaluwarsa dibersihkan otomatis dengan batas waktu 24 jam berbasis `finished_at`, menjaga ruang database tetap terkendali dan dapat digunakan kembali (*reusable*) via autovacuum.
-4. **Lapis 4: Zero Regression Test Suite**:
-   - Seluruh 186 unit test lulus (`186 passed in 47.77s`), membuktikan bahwa pipeline ekstraksi (PyMuPDF, OCR, Gemini, router tingkat, form mapper, dan preview/cleanup) bekerja normal tanpa gangguan.
+`reap_orphans()` berjalan saat startup FastAPI, berkala pada FastAPI, dan berkala pada `db_worker`.
+Reaper menerima daftar `temp_file_key` job `queued` atau `processing`, sehingga file aktif tidak terhapus hanya karena umur file.
 
----
+## File Perubahan
 
-## Batasan Operasional & Catatan Rilis
+- `scripts/migrate_ephemeral_storage.py`: dry-run default; apply membutuhkan konfirmasi hapus data legacy.
+- `backend/app/services/job_processor.py`: atomic claim, lease owner, recovery, cleanup.
+- `backend/app/services/temporary_upload_store.py`: reaper dengan daftar file aktif terlindungi.
+- `backend/app/main.py`: cleanup startup dan task periodik.
+- `backend/app/worker.py`: cleanup periodik dan claim melalui processor.
+- `backend/app/config.py`, `.env.example`, `.env.docker.example`: TTL, lease, dan interval cleanup.
+- `tests/test_ephemeral_storage.py`, `tests/test_ephemeral_storage_recovery.py`: unlink terminal, cutover schema, lease lintas worker, cleanup crash, dan task startup.
 
-1. **Akses Endpoint Preview**:
-   - Endpoint `GET /api/documents/{id}/preview` menyajikan gambar berdasarkan UUID dokumen. Karena prototype saat ini belum memiliki otentikasi/RBAC pengguna, dokumen dapat diakses selama ID UUID diketahui.
-2. **Pembersihan Berkala (Periodic Reaper)**:
-   - Loop pembersihan otomatis berjalan setiap 5 menit pada mode `db_worker`. Pada mode `background`, pembersihan otomatis dieksekusi saat aplikasi boot-up/startup.
-3. **Rebuild Container Staging**:
-   - Jalankan `docker compose build backend && docker compose restart backend` agar image Docker memuat kode baru di branch `feat/ephemeral-zero-storage`.
+## Bukti Saat Ini
+
+- `uv run pytest tests/test_ephemeral_storage.py tests/test_ephemeral_storage_recovery.py -v`: `10 passed in 1.25s`.
+- `uv run pytest tests/ -v`: `188 passed in 49.91s`; 4 warning deprecation FastAPI `on_event` sudah ada, tidak mengubah hasil test.
+- Dry-run migrasi SQLite memaparkan kolom yang hilang tanpa perubahan database; test migrasi memakai schema legacy dan membuktikan kolom antrean ditambah serta tabel PDF/OCR lama dihapus.
+
+## Konfigurasi Operasional
+
+| Variabel | Default | Fungsi |
+|---|---:|---|
+| `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Lokasi PDF sementara |
+| `TEMP_FILE_TTL_HOURS` | `1` | TTL file tanpa job aktif |
+| `JOB_LEASE_SECONDS` | `900` | Masa kepemilikan job |
+| `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup |
+| `MAX_JOB_RETRIES` | `3` | Batas requeue lease kedaluwarsa |
+
+## Open Frontier
+
+- Operator menjalankan migrasi destructive setelah backup terverifikasi.
+- Deploy worker atau FastAPI baru hanya setelah migrasi sukses.

@@ -96,8 +96,11 @@ class TestEphemeralPipelineProcessing:
             monkeypatch.setattr("app.services.job_processor.SessionLocal", TestingSessionLocal)
             monkeypatch.setattr("app.services.job_processor.upload_store", test_store)
 
+            calls = 0
             # Mock extraction pipeline to avoid external API calls
             def mock_run_pipeline(*args, **kwargs):
+                nonlocal calls
+                calls += 1
                 from app.services.field_extractor import ExtractedValue
                 return PipelineResult(
                     parser_engine="test_engine_mock",
@@ -145,8 +148,10 @@ class TestEphemeralPipelineProcessing:
             db.commit()
             db.close()
 
-            # Execute job processor
+            # Execute job processor twice; only its first atomic claim may run.
             process_document_job(job_id=job_id, document_id=doc_id)
+            process_document_job(job_id=job_id, document_id=doc_id)
+            assert calls == 1
 
             # Verify database state
             db = TestingSessionLocal()
