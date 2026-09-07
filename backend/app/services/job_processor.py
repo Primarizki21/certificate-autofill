@@ -1,9 +1,10 @@
 import logging
 import os
 import socket
+import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
@@ -81,12 +82,48 @@ def _mark_owned_job_failed(db: Session, job_id: str, worker_id: str, error_messa
     return True
 
 
+def _renew_lease(job_id: str, worker_id: str) -> bool:
+    """Extend an active worker lease without reviving a reclaimed job."""
+    db: Session = SessionLocal()
+    try:
+        now = utcnow()
+        result = db.execute(
+            update(ExtractionJob)
+            .where(
+                ExtractionJob.id == job_id,
+                ExtractionJob.status == "processing",
+                ExtractionJob.worker_id == worker_id,
+                ExtractionJob.lease_expires_at > now,
+            )
+            .values(lease_expires_at=now + timedelta(seconds=settings.job_lease_seconds))
+        )
+        db.commit()
+        return result.rowcount == 1
+    except Exception:
+        db.rollback()
+        logger.exception("Could not renew job lease job_id=%s worker_id=%s", job_id, worker_id)
+        return False
+    finally:
+        db.close()
+
+
+def _run_lease_heartbeat(job_id: str, worker_id: str, stop_event: threading.Event) -> None:
+    interval_seconds = max(0.1, settings.job_lease_seconds / 3)
+    while not stop_event.wait(interval_seconds):
+        if not _renew_lease(job_id, worker_id):
+            if not stop_event.is_set():
+                logger.warning("Lease heartbeat stopped job_id=%s worker_id=%s", job_id, worker_id)
+            return
+
+
 def process_document_job(job_id: str, document_id: str, worker_id: str | None = None) -> None:
     """Process a queued job once while holding its database lease."""
     db: Session = SessionLocal()
     owner = worker_id or _new_worker_id()
     temp_key: str | None = None
     terminal_status = False
+    heartbeat_stop: threading.Event | None = None
+    heartbeat: threading.Thread | None = None
     try:
         job = _claim_job(db, job_id, document_id, owner)
         if job is None:
@@ -100,12 +137,23 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
         if document is None:
             raise RuntimeError(f"Dokumen ({document_id}) tidak ditemukan di PostgreSQL.")
 
+        tahun_akademik = document.tahun_akademik
+        bukti_fisik = document.bukti_fisik
+        db.close()
+        heartbeat_stop = threading.Event()
+        heartbeat = threading.Thread(
+            target=_run_lease_heartbeat,
+            args=(job_id, owner, heartbeat_stop),
+            daemon=True,
+        )
+        heartbeat.start()
+
         logger.info("Processing document_id=%s file=%s temp_key=%s", document_id, document.original_file_name, temp_key)
         pdf_bytes = upload_store.open_bytes(temp_key)
         result = run_extraction_pipeline(
             pdf_bytes=pdf_bytes,
-            tahun_akademik=document.tahun_akademik,
-            bukti_fisik=document.bukti_fisik,
+            tahun_akademik=tahun_akademik,
+            bukti_fisik=bukti_fisik,
         )
 
         job = _lock_owned_job(db, job_id, owner)
@@ -153,6 +201,10 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
             raise
         logger.warning("Ignored failed stale lease document_id=%s job_id=%s", document_id, job_id)
     finally:
+        if heartbeat_stop is not None:
+            heartbeat_stop.set()
+        if heartbeat is not None:
+            heartbeat.join(timeout=1)
         if temp_key and terminal_status:
             deleted = upload_store.delete(temp_key)
             if deleted:

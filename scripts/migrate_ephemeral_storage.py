@@ -45,8 +45,14 @@ def inspect_cutover(engine: Engine) -> dict[str, object]:
     }
 
 
-def apply_ephemeral_storage_cutover(engine: Engine) -> dict[str, object]:
+def apply_ephemeral_storage_cutover(
+    engine: Engine,
+    *,
+    maintenance_window_confirmed: bool = False,
+) -> dict[str, object]:
     """Add queue fields, then permanently remove legacy PDF and OCR tables."""
+    if not maintenance_window_confirmed:
+        raise ValueError("A maintenance window is required before destructive migration.")
     Base.metadata.create_all(bind=engine)
     with engine.begin() as connection:
         state = inspect_cutover(engine)
@@ -68,6 +74,11 @@ def main() -> None:
         action="store_true",
         help="Confirm permanent deletion of document_files and parsed_documents.",
     )
+    parser.add_argument(
+        "--confirm-maintenance-window",
+        action="store_true",
+        help="Confirm all API instances and workers are stopped before applying the migration.",
+    )
     args = parser.parse_args()
     engine = create_engine(args.database_url, pool_pre_ping=True)
     before = inspect_cutover(engine)
@@ -75,10 +86,12 @@ def main() -> None:
     if not args.apply:
         print(json.dumps({"mode": "dry-run", **before}, indent=2, sort_keys=True))
         return
+    if not args.confirm_maintenance_window:
+        parser.error("Stop every API instance and worker, then add --confirm-maintenance-window.")
     if before["legacy_tables"] and not args.confirm_delete_legacy_storage:
         parser.error("Legacy PDF/OCR tables detected; add --confirm-delete-legacy-storage after verified backup.")
 
-    after = apply_ephemeral_storage_cutover(engine)
+    after = apply_ephemeral_storage_cutover(engine, maintenance_window_confirmed=True)
     print(json.dumps({"mode": "applied", "before": before, "after": after}, indent=2, sort_keys=True))
 
 

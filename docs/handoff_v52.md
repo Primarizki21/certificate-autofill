@@ -18,10 +18,10 @@ Script `scripts/migrate_ephemeral_storage.py` wajib dijalankan satu kali sebelum
    ```bash
    uv run python scripts/migrate_ephemeral_storage.py
    ```
-3. Periksa tabel lama dan kolom yang akan ditambah.
+3. Hentikan seluruh instance FastAPI dan `db_worker`; pastikan tidak ada job lama yang masih berjalan.
 4. Jalankan migrasi:
    ```bash
-   uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage
+   uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage --confirm-maintenance-window
    ```
 
 Migrasi menambah `documents.parser_engine` dan empat kolom antrean: `temp_file_key`, `available_at`, `lease_expires_at`, `worker_id`.
