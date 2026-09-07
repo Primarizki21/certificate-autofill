@@ -1,10 +1,12 @@
 """Regression tests for storage cutover, leases, and orphan cleanup."""
 from __future__ import annotations
 
+from dataclasses import replace
 import asyncio
 import importlib.util
 import os
 import sys
+import subprocess
 import tempfile
 import threading
 import time
@@ -12,6 +14,7 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
@@ -24,6 +27,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from app.database import Base
 from app.models import Document, ExtractionJob
+from app.config import settings
 from app.services.extraction_pipeline import PipelineResult
 from app.services.field_extractor import ExtractedValue
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
@@ -41,6 +45,31 @@ def _load_migration_module():
     return module
 
 
+
+
+def test_cutover_requires_maintenance_window_confirmation():
+    engine = create_engine("sqlite:///:memory:")
+    with engine.begin() as connection:
+        connection.execute(text("CREATE TABLE document_files (document_id VARCHAR, pdf_data BLOB)"))
+
+    module = _load_migration_module()
+    with pytest.raises(ValueError, match="maintenance window"):
+        module.apply_ephemeral_storage_cutover(engine)
+
+    assert "document_files" in inspect(engine).get_table_names()
+
+
+def test_cli_apply_requires_maintenance_window_confirmation():
+    result = subprocess.run(
+        [sys.executable, "scripts/migrate_ephemeral_storage.py", "--apply"],
+        cwd=REPO_ROOT,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "--confirm-maintenance-window" in result.stderr
 def test_cutover_adds_queue_columns_and_drops_legacy_storage():
     engine = create_engine("sqlite:///:memory:")
     with engine.begin() as connection:
@@ -50,7 +79,7 @@ def test_cutover_adds_queue_columns_and_drops_legacy_storage():
         connection.execute(text("CREATE TABLE parsed_documents (document_id VARCHAR, raw_text TEXT)"))
 
     module = _load_migration_module()
-    result = module.apply_ephemeral_storage_cutover(engine)
+    result = module.apply_ephemeral_storage_cutover(engine, maintenance_window_confirmed=True)
     inspector = inspect(engine)
 
     assert result == {"legacy_tables": [], "missing_columns": {}}
@@ -124,7 +153,7 @@ def test_reaper_keeps_active_key_even_when_file_is_stale():
         assert path.exists()
 
 
-def test_second_worker_cannot_run_claimed_job(monkeypatch, tmp_path):
+def test_heartbeat_prevents_expired_lease_requeue(monkeypatch, tmp_path):
     engine = create_engine(
         f"sqlite:///{tmp_path / 'jobs.sqlite'}",
         connect_args={"check_same_thread": False},
@@ -134,6 +163,10 @@ def test_second_worker_cannot_run_claimed_job(monkeypatch, tmp_path):
     store = TemporaryUploadStore(root_dir=str(tmp_path / "uploads"))
     monkeypatch.setattr("app.services.job_processor.SessionLocal", testing_session)
     monkeypatch.setattr("app.services.job_processor.upload_store", store)
+    monkeypatch.setattr(
+        "app.services.job_processor.settings",
+        replace(settings, job_lease_seconds=1),
+    )
 
     started = threading.Event()
     release = threading.Event()
@@ -185,6 +218,13 @@ def test_second_worker_cannot_run_claimed_job(monkeypatch, tmp_path):
     first_worker.start()
     assert started.wait(timeout=3)
 
+    time.sleep(1.2)
+    assert cleanup_expired_jobs_and_uploads() == 0
+    db = testing_session()
+    renewed_job = db.get(ExtractionJob, job_id)
+    assert renewed_job.status == "processing"
+    assert renewed_job.lease_expires_at.replace(tzinfo=timezone.utc) > datetime.now(timezone.utc)
+    db.close()
     process_document_job(job_id=job_id, document_id=document_id, worker_id="worker-two")
     release.set()
     first_worker.join(timeout=3)
