@@ -382,7 +382,7 @@ Aspek keamanan kredensial dan API key adalah **prioritas absolut dan dilarang ke
 - **DILARANG KERAS MEMASUKKAN KUNCI API ASLI KE GIT / REPO**:
   * File `.env` dan `.env.google` yang memuat nilai rahasia asli WAJIB terdaftar di `.gitignore` dan **DILARANG SEKALI PUN DI-STAGE ATAU DI-COMMIT**.
   * Sebelum melakukan commit (`git commit`), agent WAJIB memastikan file yang di-stage (`git diff --staged`) **TIDAK memuat token/kunci API privat**.
-  * Pada file template (`.env.example`, `.env.docker.example`) atau dokumentasi (`README.md`), hanya gunakan placeholder kosong (`GOOGLE_API_KEY=`) atau dummy generik (`GOOGLE_API_KEY="AIzaSy..."`).
+  * Pada file template (`.env.example`, `.env.docker.example`) atau dokumentasi (`README.md`), hanya gunakan placeholder kosong (`GOOGLE_API_KEY=`) atau placeholder netral (`GOOGLE_API_KEY=""`). Dilarang mencantumkan awalan kunci API asli.
 - **DILARANG MEMBOCORKAN KUNCI KE CHAT ATAU LOG**:
   * Agent dilarang keras menampilkan isi kunci API asli (`GOOGLE_API_KEY`) ke respons chat pengguna, artefak publik, atau commit message.
   * Semua modul pemanggil external API (`gemini_extractor.py`, `gemini_client.py`) WAJIB menyamarkan/meredaksi kunci (`[REDACTED_API_KEY]`) sehingga pesan error atau exception logger tidak mencatat key ke log file maupun terminal.

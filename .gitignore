@@ -69,3 +69,6 @@ RUN_FRONTEND_STANDALONE.ps1
 # Ephemeral planning documents
 *_PLAN.md
 *PLAN*.md
+
+# Changelogs and legacy rule docs
+CHANGELOG_RULES_*.md
