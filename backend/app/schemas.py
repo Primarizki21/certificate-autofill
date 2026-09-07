@@ -22,7 +22,7 @@ class ExtractionResult(BaseModel):
     fields: dict[str, FieldResult]
     raw_text_preview: str | None = None
     parser_engine: str | None = None
-    has_preview: bool = False
+
 
 class OptionsResponse(BaseModel):
     options: dict[str, list[str]]

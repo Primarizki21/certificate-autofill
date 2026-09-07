@@ -9,7 +9,6 @@ from app.database import SessionLocal
 from app.models import Document, ExtractionJob, ExtractedField
 from app.services.extraction_pipeline import run_extraction_pipeline
 from app.services.form_mapper import field_needs_review
-from app.services.preview_generator import generate_compressed_preview
 from app.services.temporary_upload_store import upload_store
 
 logger = logging.getLogger("certificate-job-processor")
@@ -58,8 +57,9 @@ def process_document_job(job_id: str, document_id: str) -> None:
             tahun_akademik=document.tahun_akademik,
             bukti_fisik=document.bukti_fisik,
         )
+
         document.parser_engine = result.parser_engine
-        document.preview_image = generate_compressed_preview(pdf_bytes)
+
         db.query(ExtractedField).filter(ExtractedField.document_id == document_id).delete()
         any_review = False
         for field_name, extracted in result.mapped_fields.items():

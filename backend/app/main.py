@@ -6,7 +6,6 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import hashlib
-import logging
 import uuid
 from pathlib import Path
 
@@ -18,16 +17,13 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy.orm import Session
 
 from app.config import settings
-from app.database import SessionLocal, get_db, init_db
+from app.database import get_db, init_db
 from app.master_data import FORM_OPTIONS
 from app.models import Document, ExtractionJob, ExtractedField
 from app.schemas import ExtractionResult, FieldResult, OptionsResponse, UploadResponse
 from app.services.job_processor import process_document_job
-from app.services.preview_generator import generate_compressed_preview
-from app.services.retention_cleanup import cleanup_expired_previews_and_documents
 from app.services.temporary_upload_store import upload_store
 
-logger = logging.getLogger("certificate-autofill-main")
 app = FastAPI(title="Certificate Autofill Prototype", version="0.1.0")
 app.add_middleware(
     CORSMiddleware,
@@ -48,15 +44,6 @@ app.mount("/static", StaticFiles(directory=static_dir), name="static")
 @app.on_event("startup")
 def on_startup() -> None:
     init_db()
-    try:
-        cleanup_db = SessionLocal()
-        try:
-            cleanup_expired_previews_and_documents(cleanup_db)
-        finally:
-            cleanup_db.close()
-        upload_store.reap_orphans()
-    except Exception as exc:
-        logger.warning("Startup retention cleanup error: %s", exc)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -98,27 +85,7 @@ def upload_document(
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Ukuran PDF maksimal {settings.max_upload_size_mb} MB.")
-    checksum = hashlib.sha256(content).hexdigest()
 
-    # Auto-retrieve: check if identical PDF was already processed with completed fields
-    existing = (
-        db.query(Document)
-        .filter(Document.checksum_sha256 == checksum, Document.status.in_(["completed", "needs_review"]))
-        .order_by(Document.created_at.desc())
-        .first()
-    )
-    if existing:
-        has_fields = db.query(ExtractedField).filter(ExtractedField.document_id == existing.id).count() > 0
-        if has_fields:
-            if not existing.preview_image:
-                try:
-                    existing.preview_image = generate_compressed_preview(content)
-                    db.commit()
-                except Exception:
-                    db.rollback()
-            UPLOAD_COUNT.inc()
-            UPLOAD_SIZE.observe(len(content))
-            return UploadResponse(document_id=existing.id, job_id="cached", status=existing.status)
     try:
         temp_key = upload_store.stage_bytes(content)
     except ValueError as exc:
@@ -126,6 +93,8 @@ def upload_document(
 
     document_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
+    checksum = hashlib.sha256(content).hexdigest()
+
     document = Document(
         id=document_id,
         source_system="prototype_ui",
@@ -190,7 +159,6 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
     }
     needs_review = any(item.needs_review for item in field_dict.values()) or document.status == "needs_review"
 
-    has_preview = bool(document.preview_image is not None)
     return ExtractionResult(
         document_id=document_id,
         status=document.status,
@@ -198,28 +166,4 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         fields=field_dict,
         raw_text_preview=None,
         parser_engine=document.parser_engine,
-        has_preview=has_preview,
-    )
-
-
-@app.get("/api/documents/{document_id}/preview")
-def get_document_preview(document_id: str, db: Session = Depends(get_db)) -> Response:
-    """Return the lightweight compressed JPEG preview of the certificate."""
-    REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/preview").inc()
-    try:
-        uuid.UUID(str(document_id))
-    except (ValueError, TypeError, AttributeError):
-        raise HTTPException(status_code=400, detail="ID dokumen tidak valid.")
-
-    document = db.get(Document, document_id)
-    if not document or not document.preview_image:
-        raise HTTPException(status_code=404, detail="Preview gambar tidak ditemukan untuk dokumen ini.")
-
-    return Response(
-        content=document.preview_image,
-        media_type="image/jpeg",
-        headers={
-            "Cache-Control": "private, max-age=86400",
-            "Content-Disposition": f'inline; filename="preview_{document_id}.jpg"',
-        },
     )
