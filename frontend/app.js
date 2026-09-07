@@ -38,7 +38,6 @@ async function init() {
   bindEvents();
   await loadOptions();
   setInitialDefaults();
-  await restoreDocumentFromUrl();
 }
 
 function bindEvents() {
@@ -171,9 +170,6 @@ function pollResult(documentId) {
         state.pollTimer = null;
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
-        if (!state.objectUrl && data.has_preview) {
-          el('pdfPreview').src = `${API_BASE}/api/documents/${documentId}/preview`;
-        }
         setLoading(false);
         const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
         setStatus(data.needs_review ? `Parsing selesai${engineTag}. Form sudah terisi, tetapi beberapa field perlu dicek ulang.` : `Parsing selesai${engineTag}. Form sudah terisi otomatis.`);
@@ -229,14 +225,6 @@ function resetPage() {
   if (state.pollTimer) clearInterval(state.pollTimer);
   state.pollTimer = null;
   state.currentDocumentId = null;
-  try {
-    localStorage.removeItem('cert_last_document_id');
-  } catch (e) {}
-  if (window.location.search.includes('doc=')) {
-    const url = new URL(window.location);
-    url.searchParams.delete('doc');
-    window.history.replaceState({}, '', url.pathname + (url.search || ''));
-  }
   if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
   state.objectUrl = null;
 
@@ -246,31 +234,6 @@ function resetPage() {
   el('pdfPreview').src = '';
   setLoading(false);
   setStatus('Upload PDF untuk melakukan parsing extraction.');
-}
-
-async function restoreDocumentFromUrl() {
-  try {
-    const urlParams = new URLSearchParams(window.location.search);
-    const docId = urlParams.get('doc');
-    if (!docId) return;
-
-    const response = await fetch(`${API_BASE}/api/documents/${docId}/result`);
-    if (!response.ok) return;
-    const data = await response.json();
-    if (['completed', 'needs_review'].includes(data.status)) {
-      state.currentDocumentId = docId;
-      showAfterUploadSection();
-      applyResult(data);
-      applyStrictOrganizerRuleFromLevel();
-      if (data.has_preview) {
-        el('pdfPreview').src = `${API_BASE}/api/documents/${docId}/preview`;
-      }
-      const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
-      setStatus(data.needs_review ? `Dokumen dimuat dari URL${engineTag}. Beberapa field perlu dicek ulang.` : `Dokumen dimuat dari URL${engineTag}. Form sudah terisi otomatis.`);
-    }
-  } catch (err) {
-    console.warn('Gagal memulihkan dokumen dari URL:', err);
-  }
 }
 
 function setLoading(isLoading) {
