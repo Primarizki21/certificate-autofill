@@ -1,9 +1,10 @@
 import logging
+import os
+import socket
 import uuid
-from datetime import datetime, timezone
-
+from datetime import datetime, timedelta, timezone
+from sqlalchemy import select
 from sqlalchemy.orm import Session
-
 from app.config import settings
 from app.database import SessionLocal
 from app.models import Document, ExtractionJob, ExtractedField
@@ -18,48 +19,105 @@ def utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def process_document_job(job_id: str, document_id: str) -> None:
-    """Process one extraction job with ephemeral PDF storage.
+def _new_worker_id() -> str:
+    return f"{socket.gethostname()[:32]}-{os.getpid()}-{uuid.uuid4().hex[:16]}"
 
-    Invariants:
-    - PDF bytes are read exclusively from TemporaryUploadStore.
-    - Zero PDF bytes or raw OCR text are stored in PostgreSQL.
-    - The ephemeral PDF file is unlinked in the finally block upon terminal status.
-    """
+
+def _claim_job(db: Session, job_id: str, document_id: str, worker_id: str) -> ExtractionJob | None:
+    now = utcnow()
+    job = db.execute(
+        select(ExtractionJob)
+        .where(
+            ExtractionJob.id == job_id,
+            ExtractionJob.document_id == document_id,
+            ExtractionJob.status == "queued",
+            (ExtractionJob.available_at.is_(None)) | (ExtractionJob.available_at <= now),
+        )
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+    if job is None:
+        return None
+
+    job.status = "processing"
+    job.started_at = now
+    job.available_at = None
+    job.worker_id = worker_id
+    job.lease_expires_at = now + timedelta(seconds=settings.job_lease_seconds)
+    document = db.get(Document, document_id)
+    if document is not None:
+        document.status = "processing"
+    db.commit()
+    return job
+
+
+def _lock_owned_job(db: Session, job_id: str, worker_id: str) -> ExtractionJob | None:
+    return db.execute(
+        select(ExtractionJob)
+        .where(
+            ExtractionJob.id == job_id,
+            ExtractionJob.status == "processing",
+            ExtractionJob.worker_id == worker_id,
+            ExtractionJob.lease_expires_at > utcnow(),
+        )
+        .with_for_update()
+    ).scalar_one_or_none()
+
+
+def _mark_owned_job_failed(db: Session, job_id: str, worker_id: str, error_message: str) -> bool:
+    job = _lock_owned_job(db, job_id, worker_id)
+    if job is None:
+        db.rollback()
+        return False
+
+    document = db.get(Document, job.document_id)
+    job.status = "failed"
+    job.error_message = error_message
+    job.finished_at = utcnow()
+    job.worker_id = None
+    job.lease_expires_at = None
+    if document is not None:
+        document.status = "failed"
+    db.commit()
+    return True
+
+
+def process_document_job(job_id: str, document_id: str, worker_id: str | None = None) -> None:
+    """Process a queued job once while holding its database lease."""
     db: Session = SessionLocal()
+    owner = worker_id or _new_worker_id()
     temp_key: str | None = None
-    terminal_status: bool = False
+    terminal_status = False
     try:
-        job = db.get(ExtractionJob, job_id)
-        document = db.get(Document, document_id)
-        if job is None or document is None:
-            raise RuntimeError(f"Job ({job_id}) atau Dokumen ({document_id}) tidak ditemukan di PostgreSQL.")
+        job = _claim_job(db, job_id, document_id, owner)
+        if job is None:
+            return
 
         temp_key = job.temp_file_key
         if not temp_key:
             raise RuntimeError(f"Job ({job_id}) tidak memiliki temp_file_key.")
 
-        if job.status == "completed" or document.status in {"completed", "needs_review"}:
-            logger.info("Skip already processed document_id=%s job_id=%s", document_id, job_id)
-            terminal_status = True
-            return
+        document = db.get(Document, document_id)
+        if document is None:
+            raise RuntimeError(f"Dokumen ({document_id}) tidak ditemukan di PostgreSQL.")
 
         logger.info("Processing document_id=%s file=%s temp_key=%s", document_id, document.original_file_name, temp_key)
-        job.status = "processing"
-        job.started_at = utcnow()
-        document.status = "processing"
-        db.commit()
-
         pdf_bytes = upload_store.open_bytes(temp_key)
-
         result = run_extraction_pipeline(
             pdf_bytes=pdf_bytes,
             tahun_akademik=document.tahun_akademik,
             bukti_fisik=document.bukti_fisik,
         )
 
-        document.parser_engine = result.parser_engine
+        job = _lock_owned_job(db, job_id, owner)
+        if job is None:
+            logger.warning("Lease expired before completion document_id=%s job_id=%s", document_id, job_id)
+            return
 
+        document = db.get(Document, document_id)
+        if document is None:
+            raise RuntimeError(f"Dokumen ({document_id}) tidak ditemukan di PostgreSQL.")
+
+        document.parser_engine = result.parser_engine
         db.query(ExtractedField).filter(ExtractedField.document_id == document_id).delete()
         any_review = False
         for field_name, extracted in result.mapped_fields.items():
@@ -81,29 +139,100 @@ def process_document_job(job_id: str, document_id: str) -> None:
 
         job.status = "completed"
         job.finished_at = utcnow()
+        job.worker_id = None
+        job.lease_expires_at = None
         document.status = "needs_review" if any_review else "completed"
         db.commit()
         terminal_status = True
         logger.info("Completed document_id=%s status=%s parser_engine=%s", document_id, document.status, document.parser_engine)
     except Exception as exc:
         db.rollback()
-        terminal_status = True
-        try:
-            job = db.get(ExtractionJob, job_id)
-            document = db.get(Document, document_id)
-            if job:
-                job.status = "failed"
-                job.error_message = str(exc)
-                job.finished_at = utcnow()
-            if document:
-                document.status = "failed"
-            db.commit()
-        finally:
+        terminal_status = _mark_owned_job_failed(db, job_id, owner, str(exc))
+        if terminal_status:
             logger.exception("Failed processing document_id=%s job_id=%s: %s", document_id, job_id, exc)
-        raise
+            raise
+        logger.warning("Ignored failed stale lease document_id=%s job_id=%s", document_id, job_id)
     finally:
         if temp_key and terminal_status:
             deleted = upload_store.delete(temp_key)
             if deleted:
                 logger.info("Ephemeral PDF successfully unlinked: temp_key=%s", temp_key)
         db.close()
+
+
+def cleanup_expired_jobs_and_uploads() -> int:
+    """Recover expired leases and remove PDFs no active job owns."""
+    db: Session = SessionLocal()
+    terminal_keys: list[str] = []
+    try:
+        now = utcnow()
+        retention_cutoff = now - timedelta(hours=settings.temp_file_ttl_hours)
+        retryable_jobs = db.execute(
+            select(ExtractionJob)
+            .where(
+                ExtractionJob.status == "processing",
+                ExtractionJob.lease_expires_at < now,
+                ExtractionJob.created_at >= retention_cutoff,
+                ExtractionJob.retry_count < settings.max_job_retries,
+            )
+            .with_for_update(skip_locked=True)
+        ).scalars()
+        for job in retryable_jobs:
+            document = db.get(Document, job.document_id)
+            job.status = "queued"
+            job.retry_count += 1
+            job.available_at = now
+            job.worker_id = None
+            job.lease_expires_at = None
+            if document is not None:
+                document.status = "queued"
+
+        expired_jobs = db.execute(
+            select(ExtractionJob)
+            .where(
+                (
+                    (ExtractionJob.status == "queued")
+                    & (ExtractionJob.created_at < retention_cutoff)
+                )
+                | (
+                    (ExtractionJob.status == "processing")
+                    & (
+                        (ExtractionJob.created_at < retention_cutoff)
+                        | (
+                            (ExtractionJob.lease_expires_at < now)
+                            & (ExtractionJob.retry_count >= settings.max_job_retries)
+                        )
+                    )
+                )
+            )
+            .with_for_update(skip_locked=True)
+        ).scalars()
+        for job in expired_jobs:
+            document = db.get(Document, job.document_id)
+            job.status = "failed"
+            job.error_message = "Masa retensi file sementara berakhir."
+            job.finished_at = now
+            job.worker_id = None
+            job.lease_expires_at = None
+            if job.temp_file_key:
+                terminal_keys.append(job.temp_file_key)
+            if document is not None:
+                document.status = "failed"
+
+        db.commit()
+        protected_keys = set(
+            db.execute(
+                select(ExtractionJob.temp_file_key).where(
+                    ExtractionJob.status.in_(("queued", "processing")),
+                    ExtractionJob.temp_file_key.is_not(None),
+                )
+            ).scalars()
+        )
+    except Exception:
+        db.rollback()
+        raise
+    finally:
+        db.close()
+
+    deleted_count = sum(upload_store.delete(key) for key in terminal_keys)
+    return deleted_count + upload_store.reap_orphans(protected_keys=protected_keys)

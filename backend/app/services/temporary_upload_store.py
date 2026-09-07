@@ -86,21 +86,26 @@ class TemporaryUploadStore:
             return False
         return False
 
-    def reap_orphans(self, max_age_seconds: int | None = None) -> int:
-        """Remove leftover .part or .pdf files older than max_age_seconds."""
+    def reap_orphans(
+        self,
+        protected_keys: set[str] | None = None,
+        max_age_seconds: int | None = None,
+    ) -> int:
+        """Remove stale files that are not owned by an active job."""
+        protected = protected_keys or set()
         cutoff_age = max_age_seconds if max_age_seconds is not None else (settings.temp_file_ttl_hours * 3600)
         now = time.time()
         deleted_count = 0
 
         for entry in self.root_dir.iterdir():
-            if entry.is_file() and (entry.suffix in {".pdf", ".part"}):
-                try:
-                    mtime = entry.stat().st_mtime
-                    if (now - mtime) > cutoff_age:
-                        entry.unlink(missing_ok=True)
-                        deleted_count += 1
-                except OSError:
-                    pass
+            if entry.stem in protected or not entry.is_file() or entry.suffix not in {".pdf", ".part"}:
+                continue
+            try:
+                if (now - entry.stat().st_mtime) > cutoff_age:
+                    entry.unlink(missing_ok=True)
+                    deleted_count += 1
+            except OSError:
+                pass
 
         return deleted_count
 

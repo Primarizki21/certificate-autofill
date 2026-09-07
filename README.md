@@ -101,6 +101,26 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `GEMINI_TIMEOUT_SECONDS` | `30.0` | Batas waktu timeout pemanggilan API Gemini sebelum fallback |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
 | `ENABLE_COMBINED_V4_2` | `false` | Mengaktifkan pipeline staging offline v4.2 saat Gemini dinonaktifkan |
+| `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
+| `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
+| `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
+| `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
+
+### Storage Sementara dan Migrasi Database
+PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database menyimpan metadata dan hasil field, bukan bytes PDF atau OCR mentah.
+
+Untuk database lama, buat backup terverifikasi lalu cek rencana migrasi:
+```bash
+uv run python scripts/migrate_ephemeral_storage.py
+```
+
+Setelah output dry-run benar, jalankan:
+```bash
+uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage
+```
+
+Perintah kedua menghapus permanen tabel lama `document_files` dan `parsed_documents`. Jangan jalankan tanpa backup.
+
 
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
 Cukup ubah baris berikut di `.env`:
