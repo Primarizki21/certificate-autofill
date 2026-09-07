@@ -114,12 +114,12 @@ Untuk database lama, buat backup terverifikasi lalu cek rencana migrasi:
 uv run python scripts/migrate_ephemeral_storage.py
 ```
 
-Setelah output dry-run benar, jalankan:
+Hentikan seluruh instance FastAPI dan `db_worker`, lalu jalankan:
 ```bash
-uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage
+uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage --confirm-maintenance-window
 ```
 
-Perintah kedua menghapus permanen tabel lama `document_files` dan `parsed_documents`. Jangan jalankan tanpa backup.
+Perintah di atas menghapus permanen tabel lama `document_files` dan `parsed_documents`. Jangan jalankan tanpa backup.
 
 
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
