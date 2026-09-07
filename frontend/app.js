@@ -174,6 +174,9 @@ function pollResult(documentId) {
         state.pollTimer = null;
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
+        if (data.has_preview) {
+          el('pdfPreview').src = `${API_BASE}/api/documents/${documentId}/preview`;
+        }
         setLoading(false);
         const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
         setStatus(data.needs_review ? `Parsing selesai${engineTag}. Form sudah terisi, tetapi beberapa field perlu dicek ulang.` : `Parsing selesai${engineTag}. Form sudah terisi otomatis.`);
@@ -260,6 +263,9 @@ async function restoreLastSession() {
       showAfterUploadSection();
       applyResult(data);
       applyStrictOrganizerRuleFromLevel();
+      if (data.has_preview) {
+        el('pdfPreview').src = `${API_BASE}/api/documents/${docId}/preview`;
+      }
       const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
       setStatus(data.needs_review ? `Hasil sebelumnya berhasil dimuat ulang${engineTag}. Beberapa field perlu dicek ulang.` : `Hasil sebelumnya berhasil dimuat ulang${engineTag}. Form sudah terisi otomatis.`);
     }

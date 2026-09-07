@@ -6,7 +6,8 @@ from app.config import settings
 from app.database import SessionLocal, init_db
 from app.models import ExtractionJob
 from app.services.job_processor import process_document_job
-
+from app.services.retention_cleanup import cleanup_expired_previews_and_documents
+from app.services.temporary_upload_store import upload_store
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 logger = logging.getLogger("certificate-db-worker")
 
@@ -25,7 +26,20 @@ def main() -> None:
     """
     init_db()
     logger.info("DB worker started without RabbitMQ. polling=%ss", settings.db_worker_poll_seconds)
+    last_cleanup_at = 0.0
     while True:
+        now = time.time()
+        if now - last_cleanup_at > 300:
+            last_cleanup_at = now
+            try:
+                db_cleanup = SessionLocal()
+                try:
+                    cleanup_expired_previews_and_documents(db_cleanup)
+                finally:
+                    db_cleanup.close()
+                upload_store.reap_orphans()
+            except Exception as e:
+                logger.warning("Periodic retention cleanup error: %s", e)
         db = SessionLocal()
         try:
             job = (
