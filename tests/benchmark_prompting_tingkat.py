@@ -504,7 +504,7 @@ def run_benchmark(
             writer.writerow([
                 "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
                 "Is Match", "Needs Review", "Confidence", "Latency (s)",
-                "Model", "Status",
+                "Model", "Parse Status",
                 "Prompt Tokens", "Candidates Tokens", "Cached Tokens", "Thoughts Tokens", "Total Tokens",
                 "Cost (USD)", "Cost (IDR)", "Web Search Queries", "Call Metrics JSON", "Raw Response"
             ])
@@ -568,7 +568,7 @@ def run_benchmark(
             ws_details.append([
                 "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
                 "Match", "Needs Review", "Confidence", "Latency (s)",
-                "Model", "Status",
+                "Model", "Parse Status",
                 "Prompt Tokens", "Candidates Tokens", "Cached Tokens", "Thoughts Tokens", "Total Tokens",
                 "Cost (IDR)", "Cost (USD)", "Web Queries", "Call Metrics JSON"
             ])
