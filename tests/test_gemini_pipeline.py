@@ -50,6 +50,13 @@ from tests.validate_gemini_4layer import (
 )
 from tests.matchers import match_field
 
+def test_load_google_api_key_custom_path(tmp_path):
+    from tests.gemini_client import load_google_api_key
+    env_file = tmp_path / ".env.test"
+    env_file.write_text("GOOGLE_API_KEY=test_key_sample_123\n")
+    loaded = load_google_api_key(env_path=env_file)
+    assert loaded == "test_key_sample_123"
+
 
 class TestGeminiClientAccounting:
     def test_pricing_table_rates(self):
@@ -103,6 +110,43 @@ class TestGeminiClientAccounting:
         sanitized = client._sanitize_error(err_msg)
         assert "AIzaSySECRETKEYTEST12345" not in sanitized
         assert "[REDACTED_API_KEY]" in sanitized
+
+    def test_generate_text_mocked(self, monkeypatch):
+        """Uji generate_text dengan mock urllib response."""
+        import json
+        import urllib.request
+
+        mock_response_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "TINGKAT: Nasional\nLangkah 4: Nasional"}]
+                    }
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 50,
+                "candidatesTokenCount": 10,
+                "totalTokenCount": 60,
+            }
+        }
+
+        class MockResp:
+            def read(self):
+                return json.dumps(mock_response_data).encode("utf-8")
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: MockResp())
+        client = GeminiClient(api_key="mock_key_123", request_delay=0.0)
+        res = client.generate_text("Prompt test")
+        assert res.status == "success"
+        assert res.response_text == "TINGKAT: Nasional\nLangkah 4: Nasional"
+        assert res.prompt_tokens == 50
+        assert res.candidates_tokens == 10
+        assert res.parsed_json is None
 
 
 class TestGeminiFieldExtractor:

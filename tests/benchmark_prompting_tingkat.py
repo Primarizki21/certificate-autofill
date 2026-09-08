@@ -252,9 +252,12 @@ def evaluate_single(
 def run_benchmark(
     gt_path: Path,
     texts_path: Path,
+    mapping_path: Path | None = None,
     backend: str = "mock",
     techniques: list[str] | None = None,
     limit: int | None = None,
+    output_dir: Path | None = None,
+    gemini_model: str = "gemini-2.5-flash",
 ) -> dict[str, Any]:
     """Menjalankan benchmark lengkap untuk teknik prompting."""
     records = load_gt(gt_path)
@@ -264,6 +267,10 @@ def run_benchmark(
     # Load mapping teks OCR mentah secara ketat (fail-fast bila tidak ada)
     ocr_texts_map = load_ocr_texts_map(texts_path)
 
+    filename_map: dict[str, str] = {}
+    if mapping_path and mapping_path.exists():
+        filename_map = json.loads(mapping_path.read_text(encoding="utf-8"))
+
     selected_techniques = techniques or [
         "zero_shot",
         "few_shot",
@@ -272,9 +279,8 @@ def run_benchmark(
         "iterative",
     ]
 
-    llm_func = make_llm_runner(backend)
+    llm_func = make_llm_runner(backend, gemini_model=gemini_model)
     results_by_tech: dict[str, list[EvalRecord]] = {tech: [] for tech in selected_techniques}
-
     print(f"=== Menjalankan Benchmark Prompting Tingkat ===")
     print(f"Dataset: {gt_path.name} ({len(records)} baris)")
     print(f"Teks OCR Source: {texts_path}")
@@ -285,14 +291,15 @@ def run_benchmark(
     print("=" * 60)
 
     for i, row in enumerate(records, 1):
-        filename = row.get("Nama File", f"doc_{i}").strip()
+        orig_filename = row.get("Nama File", f"doc_{i}").strip()
+        target_filename = filename_map.get(orig_filename, orig_filename)
         gt_tingkat = (row.get("Tingkat") or "").strip()
 
         # Exact-map Nama File ke OCR artifact (tanpa fuzzy/stem guess)
-        norm_key = filename.lower()
+        norm_key = target_filename.lower()
         if norm_key not in ocr_texts_map:
             raise FileNotFoundError(
-                f"Teks OCR mentah tidak ditemukan untuk exact Nama File '{filename}' di {texts_path}. "
+                f"Teks OCR mentah tidak ditemukan untuk exact Nama File '{target_filename}' di {texts_path}. "
                 f"Dilarang menggunakan metadata GT sebagai fallback!"
             )
         raw_text = ocr_texts_map[norm_key]
@@ -308,7 +315,7 @@ def run_benchmark(
             is_match = (res.tingkat is not None) and (res.tingkat.upper() == gt_tingkat.upper())
 
             eval_rec = EvalRecord(
-                filename=filename,
+                filename=orig_filename,
                 gt_tingkat=gt_tingkat,
                 pred_tingkat=res.tingkat,
                 is_match=is_match,
@@ -320,6 +327,23 @@ def run_benchmark(
                 metadata=res.metadata,
             )
             results_by_tech[tech].append(eval_rec)
+
+            # Checkpoint per row bila output_dir disediakan
+            if output_dir:
+                output_dir.mkdir(parents=True, exist_ok=True)
+                ckpt_path = output_dir / "checkpoint_details.jsonl"
+                with open(ckpt_path, "a", encoding="utf-8") as f_ckpt:
+                    f_ckpt.write(json.dumps({
+                        "filename": orig_filename,
+                        "technique": tech,
+                        "gt_tingkat": gt_tingkat,
+                        "pred_tingkat": res.tingkat,
+                        "is_match": is_match,
+                        "needs_review": res.needs_review,
+                        "confidence": res.confidence,
+                        "latency_s": round(lat, 3),
+                    }) + "\n")
+
     # Hitung metrik per teknik
     summary: dict[str, Any] = {}
     for tech, evals in results_by_tech.items():
@@ -358,10 +382,75 @@ def run_benchmark(
             f"{stats['nasional_misclassified_as_fakultas']:>8}   | {stats['fakultas_misclassified_as_nasional']:>8}   | {stats['avg_latency_s']:.3f}s"
         )
     print("=" * 80)
+    # Simpan artefak dokumentasi jika output_dir dispesifikasikan
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        # 1. Summary JSON
+        summary_file = output_dir / "benchmark_summary.json"
+        summary_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
+
+        # 2. Evaluation Details CSV
+        details_file = output_dir / "evaluation_details.csv"
+        with open(details_file, "w", newline="", encoding="utf-8") as f:
+            writer = csv.writer(f)
+            writer.writerow([
+                "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
+                "Is Match", "Needs Review", "Confidence", "Latency (s)", "Raw Response"
+            ])
+            for tech, evals in results_by_tech.items():
+                for e in evals:
+                    writer.writerow([
+                        e.filename, e.technique, e.gt_tingkat, e.pred_tingkat,
+                        e.is_match, e.needs_review, e.confidence, f"{e.latency_s:.3f}", e.raw_response[:100]
+                    ])
+
+        # 3. Markdown Report
+        md_file = output_dir / "report.md"
+        md_lines = [
+            f"# Laporan Eksperimen Prompting Tingkat ({backend.upper()})",
+            f"\nDataset: `{gt_path.name}` ({len(records)} baris)  ",
+            f"Sumber Teks OCR: `{texts_path.name}`  ",
+            f"Tanggal Eksekusi: {time.strftime('%Y-%m-%d %H:%M:%S')}\n",
+            "## Ringkasan Perbandingan Teknik Prompting\n",
+            "| Teknik | Akurasi | Review Rate | Nas->Fak | Fak->Nas | Avg Latency |",
+            "|---|:---:|:---:|:---:|:---:|:---:|",
+        ]
+        for tech, stats in summary.items():
+            md_lines.append(
+                f"| {tech} | {stats['accuracy']:.2f}% | {stats['review_rate']:.2f}% | "
+                f"{stats['nasional_misclassified_as_fakultas']} | {stats['fakultas_misclassified_as_nasional']} | {stats['avg_latency_s']:.3f}s |"
+            )
+        md_file.write_text("\n".join(md_lines), encoding="utf-8")
+
+        # 4. Excel Report (.xlsx) via openpyxl
+        try:
+            import openpyxl
+            wb = openpyxl.Workbook()
+            ws_summary = wb.active
+            ws_summary.title = "Summary"
+            ws_summary.append(["Teknik", "Akurasi (%)", "Review Rate (%)", "Nasional -> Fakultas", "Fakultas -> Nasional", "Avg Latency (s)"])
+            for tech, stats in summary.items():
+                ws_summary.append([
+                    tech, stats["accuracy"], stats["review_rate"],
+                    stats["nasional_misclassified_as_fakultas"], stats["fakultas_misclassified_as_nasional"], stats["avg_latency_s"]
+                ])
+
+            ws_details = wb.create_sheet(title="Details")
+            ws_details.append(["Nama File", "Teknik", "GT Tingkat", "Pred Tingkat", "Match", "Needs Review", "Confidence", "Latency (s)"])
+            for tech, evals in results_by_tech.items():
+                for e in evals:
+                    ws_details.append([
+                        e.filename, e.technique, e.gt_tingkat, e.pred_tingkat,
+                        1 if e.is_match else 0, 1 if e.needs_review else 0, e.confidence, round(e.latency_s, 3)
+                    ])
+            xlsx_file = output_dir / "results.xlsx"
+            wb.save(xlsx_file)
+        except ImportError:
+            pass
+
+        print(f"\n[Dokumentasi Eksperimen Tersimpan]: {output_dir}/ (.json, .csv, .md, .xlsx)")
 
     return summary
-
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Benchmark 5 Teknik Prompting Tingkat")
     parser.add_argument(
@@ -377,11 +466,23 @@ def main() -> None:
         help="Path ke file marker (_extracted.txt) atau direktori teks OCR mentah",
     )
     parser.add_argument(
+        "--mapping-file",
+        type=str,
+        default=None,
+        help="Path ke file JSON mapping nama file CSV ke header OCR marker",
+    )
+    parser.add_argument(
         "--backend",
         type=str,
         choices=["mock", "ollama", "gemini"],
         default="mock",
         help="Backend LLM (mock, ollama, gemini)",
+    )
+    parser.add_argument(
+        "--gemini-model",
+        type=str,
+        default=os.environ.get("GOOGLE_GEMINI_MODEL", "gemini-2.5-flash"),
+        help="Model Gemini yang digunakan (default: gemini-2.5-flash atau dari env)",
     )
     parser.add_argument(
         "--technique",
@@ -390,6 +491,12 @@ def main() -> None:
         help="Teknik prompting (all, zero_shot, few_shot, cot, self_consistency, iterative)",
     )
     parser.add_argument("--limit", type=int, default=None, help="Batasi jumlah dokumen")
+    parser.add_argument(
+        "--output-dir",
+        type=str,
+        default=None,
+        help="Direktori penyimpanan output dokumentasi eksperimen (docs/experiments/<ID>/)",
+    )
     args = parser.parse_args()
 
     if not args.texts_path:
@@ -398,12 +505,24 @@ def main() -> None:
 
     gt_file = REPO_ROOT / args.gt_path if not Path(args.gt_path).is_absolute() else Path(args.gt_path)
     texts_file = REPO_ROOT / args.texts_path if not Path(args.texts_path).is_absolute() else Path(args.texts_path)
+    mapping_file = REPO_ROOT / args.mapping_file if args.mapping_file and not Path(args.mapping_file).is_absolute() else (Path(args.mapping_file) if args.mapping_file else None)
+    out_dir = REPO_ROOT / args.output_dir if args.output_dir and not Path(args.output_dir).is_absolute() else (Path(args.output_dir) if args.output_dir else None)
 
     techs = None
     if args.technique != "all":
         techs = [args.technique]
 
-    run_benchmark(gt_file, texts_file, backend=args.backend, techniques=techs, limit=args.limit)
+    run_benchmark(
+        gt_file,
+        texts_file,
+        mapping_path=mapping_file,
+        backend=args.backend,
+        techniques=techs,
+        limit=args.limit,
+        output_dir=out_dir,
+        gemini_model=args.gemini_model,
+    )
+
 
 if __name__ == "__main__":
     main()
