@@ -212,3 +212,39 @@ Sebelum suatu perubahan pada ekstraktor atau pipeline diklaim berhasil, alur pen
 5. Dokumentasi & Pelaporan
    └─ Catat status hasil pengujian (PASS/FAIL) secara independen di experiments_ledger.md
 ```
+
+---
+
+## 7. Protokol Evaluasi Eksperimen Prompting LLM (Klasifikasi Tingkat)
+
+Untuk eksperimen teknik prompting model bahasa (LLM) pada klasifikasi field `tingkat`, evaluasi wajib mengikuti protokol khusus berikut:
+
+### 7.1 Alur Pipeline End-to-End
+```
+Dokumen PDF (Digital / Scan)
+       ↓
+[1] Ekstraksi Teks Mentah (PyMuPDF Fast-path / Tesseract OCR / OCR Marker File)
+       ↓
+[2] Formulasi Prompt (Zero-Shot / Few-Shot / CoT / Self-Consistency / Iterative)
+       ↓
+[3] Inferensi LLM (Google Gemini / Ollama / Local Backend)
+       ↓
+[4] Validasi & Normalisasi Kanonikal (`validate_tingkat` -> 6 opsi resmi KHP)
+       ↓
+[5] Evaluasi vs Ground Truth & Safety Net Review (`needs_review`)
+```
+
+### 7.2 Metrik Spesifik Evaluasi Prompting
+1. **Akurasi Klasifikasi Tingkat**:
+   $$\text{Akurasi} = \frac{\sum (\text{pred\_tingkat} == \text{gt\_tingkat})}{N_{\text{sampel}}} \times 100\%$$
+2. **Matriks Kesalahan Skala (Hierarchical Confusion)**:
+   - **Bias `Nasional -> Fakultas`** (False Negative Nasional): Mengukur frekuensi lomba skala nasional salah dipetakan ke tingkat fakultas hanya karena penyelenggaranya adalah BEM/HIMA.
+   - **Bias `Fakultas -> Nasional`** (False Positive Nasional): Mengukur frekuensi acara internal fakultas salah dipetakan menjadi skala nasional.
+3. **Tingkat Pemicu Peninjauan (Review Trigger Rate)**:
+   $$\text{Review Rate} = \frac{\sum (\text{needs\_review} == \text{True})}{N_{\text{sampel}}} \times 100\%$$
+   Pemicu wajib: $\text{Confidence} < 0.85$, hasil tie pada sampling voting, atau prediksi bernilai `Lainnya`/`None`.
+4. **Akuntansi Token Granular & Biaya Finansial (USD & IDR)**:
+   - Input prompt tokens, output candidates tokens, cached tokens, dan reasoning/thoughts tokens dicatat per pemanggilan.
+   - Konversi biaya dihitung berdasarkan tarif resmi per model (misal $0.25 / 1M prompt & $1.50 / 1M output untuk `gemini-3.1-flash-lite`) dan kurs resmi acuan IDR/USD.
+5. **Wajib Pencatatan Registry Prompt**:
+   - Setiap eksperimen prompting wajib menyimpan salinan seluruh template prompt yang digunakan secara terisolasi dalam format Markdown atau teks (`PROMPT_REGISTRY.md` atau `.txt`) untuk menjamin reproduktibilitas tanpa hardcoding.
