@@ -44,12 +44,16 @@ Biner $\{0, 1\}$. Mengukur kesetaraan karakter absolut pasca-normalisasi:
 $$\text{exact} = (\text{normalize}(\text{expected}) == \text{normalize}(\text{actual}))$$
 *Pengecualian khusus organisasi*: Jika nilai prediksi merupakan akronim/singkatan resmi yang terdaftar dari expected (`abbreviation_match == True`), matcher menetapkan `exact = True` (misalnya `UNAIR` terhadap `Universitas Airlangga`).
 
-### 2.3 Fuzzy Match
-Biner $\{0, 1\}$. Menilai kesesuaian parsial dan semantik:
-- **Field Organisasi & Kegiatan** (`penyelenggara_kegiatan`, `nama_kegiatan_sertifikasi`):
+### 2.3 Perilaku Fuzzy Match per Tipe Field (`match_field`)
+Biner $\{0, 1\}$. Implementasi `match_field()` pada `tests/matchers.py` menerapkan aturan pencocokan berbeda sesuai karakteristik field:
+- **Field Tanggal & Nomor** (`waktu_mulai_pelaksanaan`, `waktu_selesai_pelaksanaan`, `nomor_bukti_fisik_nomor_sertifikasi`):
+  $$\text{fuzzy} \equiv \text{exact}$$
+  Pada field terstruktur ini tidak ada toleransi parsial; nilai `fuzzy` selalu sama dengan nilai `exact`.
+- **Field Organisasi & Nama Kegiatan** (`penyelenggara_kegiatan`, `nama_kegiatan_sertifikasi`):
   $$\text{fuzzy} = \text{contains} \lor \text{abbreviation\_match} \lor (\text{token\_overlap} \ge 0.75)$$
-  *Catatan Desain*: Threshold token overlap dinaikkan dari 0.50 menjadi **0.75** untuk mencegah false positive pada organisasi yang mirip (mis. `BEM FEB UNAIR` vs `BEM FKM UNAIR` yang memiliki overlap 0.67 namun berbeda entitas).
-- **Field Lain**:
+  *Threshold Khusus*: Threshold token overlap ditetapkan **$\ge 0.75$** (dinaikkan dari 0.50 guna mengeliminasi false positive antar-organisasi mirip, seperti `BEM FEB UNAIR` vs `BEM FKM UNAIR` yang ber-overlap 0.67).
+  *Akronim Mengangkat Exact*: Jika nilai terdeteksi sebagai akronim resmi yang valid (`abbreviation_match == True`), matcher secara otomatis menetapkan `exact = True` dan `fuzzy = True`.
+- **Field Lainnya** (misalnya `tingkat`):
   $$\text{fuzzy} = \text{contains} \lor (\text{token\_overlap} \ge 0.50)$$
 
 Sub-komponen logika fuzzy:
@@ -57,7 +61,7 @@ Sub-komponen logika fuzzy:
    $$\text{contains} = (\text{norm}(\text{expected}) \in \text{norm}(\text{actual})) \lor (\text{norm}(\text{actual}) \in \text{norm}(\text{expected}))$$
 2. **Token Overlap Score $[0.0, 1.0]$**:
    $$\text{token\_overlap} = \frac{|T_{\text{expected}} \cap T_{\text{actual}}|}{\min(|T_{\text{expected}}|, |T_{\text{actual}}|)}$$
-   dengan $T$ adalah himpunan token kata unik setelah pembersihan stopword organisasi.
+   dengan $T$ adalah himpunan token kata unik dari pemisahan spasi hasil normalisasi (`set(normalize_value(s).split())`). *Catatan*: `token_overlap_score()` tidak melakukan pemfilteran stopword; pemfilteran stopword (`ABBR_STOPWORDS`) hanya berlaku secara eksklusif pada fungsi pengenalan akronim (`is_initialism_of`, `is_portmanteau_of`, `is_abbreviation_of`).
 3. **Abbreviation & Portmanteau Match**:
    Pencocokan akronim berbasis huruf depan kata (`is_initialism_of`) dan kamus portmanteau terdaftar (`KNOWN_PORTMANTEAUS` seperti `UNAIR`, `ITS`, `KEMENDIKBUD`, `HIMASADA`, dsb.).
 
@@ -71,25 +75,29 @@ Sub-komponen logika fuzzy:
 
 ## 3. Arsitektur Agregasi & Klarifikasi Denominator
 
-### 3.1 Penanganan Denominator Dinamis
-Evaluator wajib mengabaikan sel yang pada Ground Truth bernilai kosong atau tanda strip (`-`):
-```python
-if not expected or expected == "-":
-    continue
-```
-Oleh karena itu, denominator per-field ($N_{\text{field}}$) adalah jumlah dokumen yang memiliki label ground truth valid, bukan konstanta mutlak 74.
+### 3.1 Penanganan Denominator Dinamis vs Fixed
+- **Jalur Legacy (`tests/evaluation_framework.py`)**:
+  Evaluator mengabaikan baris yang pada Ground Truth bernilai kosong atau tanda strip (`-`):
+  ```python
+  if not expected or expected == "-":
+      continue
+  ```
+  Denominator per field ($N_{\text{field}}$) bersifat dinamis mengikuti total sel yang memiliki label GT valid.
+- **Jalur Modern All-Cells (`tests/benchmark_production_input_matrix.py`)**:
+  Denominator total sel ditetapkan secara fixed:
+  $$\text{total\_all\_cells} = N_{\text{docs}} \times |\text{ALL\_EVAL\_FIELDS}| = 74 \times 6 = 444\text{ sel}$$
 
 ### 3.2 Dua Jalur Evaluator Resmi di Repositori
 
 | Parameter | Jalur A: Legacy Framework (`tests/evaluation_framework.py`) | Jalur B: Modern All-Cells (`tests/stat_validation.py` / Input Matrix Runner) |
 |---|---|---|
 | **Cakupan Field** | 5 Field dasar (tanpa `tingkat`) | 6 Field lengkap (termasuk `tingkat`) |
-| **Denominator Ideal** | $\approx 370$ sel ($5 \times 74$ minus missing GT) | $\approx 444$ sel ($6 \times 74$ minus missing GT) |
-| **Sifat Agregasi "Macro"** | **Micro-average pooled over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **All-Cells Exact Ratio** & True Macro Mean per-field |
+| **Denominator** | Dinamis ($\approx 370$ sel, minus missing/empty GT) | Fixed $N_{\text{docs}} \times 6 = 444$ sel (pada korpus 74 dokumen) |
+| **Sifat Agregasi "Macro"** | **Micro-average pooled over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **All-Cells pooled ratio**: $\frac{\sum \text{exact\_all\_cells}}{\text{total\_all\_cells}} \times 100\%$ |
+| **Metrik Per-Field** | Dihitung terhadap $N_{\text{field}}$ sel valid | Dihitung terhadap $N_{\text{docs}}$ (74 sampel); macro mean hanya dilaporkan jika runner menghitung rata-rata antar-field eksplisit |
 | **Tujuan Penggunaan** | Komparasi historis pipeline ekstraktor regex/NER | Benchmark end-to-end produksi dan model bahasa (LLM) |
 
 *Aturan Pelaporan*: Setiap laporan benchmark wajib mencantumkan secara tegas apakah metrik yang disajikan berbasis **Framework 5-Field** atau **All-Cells 6-Field**. Dilarang mencampuradukkan kedua denominator tersebut.
-
 ### 3.3 Pelaporan Subgroup Wajib (`Emb-25` vs `Scan-49`)
 Evaluasi wajib menyajikan rincian akurasi terpisah untuk:
 1. Subset dokumen teks digital (`Emb-25`).
