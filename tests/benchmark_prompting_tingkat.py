@@ -504,16 +504,20 @@ def run_benchmark(
             writer.writerow([
                 "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
                 "Is Match", "Needs Review", "Confidence", "Latency (s)",
-                "Prompt Tokens", "Candidates Tokens", "Total Tokens",
-                "Cost (IDR)", "Web Search Queries", "Raw Response"
+                "Model", "Status",
+                "Prompt Tokens", "Candidates Tokens", "Cached Tokens", "Thoughts Tokens", "Total Tokens",
+                "Cost (USD)", "Cost (IDR)", "Web Search Queries", "Call Metrics JSON", "Raw Response"
             ])
             for tech, evals in results_by_tech.items():
                 for e in evals:
                     writer.writerow([
                         e.filename, e.technique, e.gt_tingkat, e.pred_tingkat,
                         e.is_match, e.needs_review, e.confidence, f"{e.latency_s:.3f}",
-                        e.prompt_tokens, e.candidates_tokens, e.total_tokens,
-                        f"{e.cost_idr:.2f}", "; ".join(e.web_queries), e.raw_response[:100]
+                        gemini_model if backend == "gemini" else backend,
+                        "success" if e.pred_tingkat else "unparsed",
+                        e.prompt_tokens, e.candidates_tokens, e.cached_tokens, e.thoughts_tokens, e.total_tokens,
+                        f"{e.cost_usd:.6f}", f"{e.cost_idr:.2f}", "; ".join(e.web_queries),
+                        json.dumps(e.metadata.get("call_metrics", [])), e.raw_response[:100]
                     ])
 
         # 3. Markdown Report
@@ -524,13 +528,16 @@ def run_benchmark(
             f"Sumber Teks OCR: `{texts_path.name}`  ",
             f"Tanggal Eksekusi: {time.strftime('%Y-%m-%d %H:%M:%S')}\n",
             "## Ringkasan Perbandingan Teknik Prompting\n",
-            "| Teknik | Akurasi | Review Rate | Nas->Fak | Fak->Nas | Avg Latency |",
-            "|---|:---:|:---:|:---:|:---:|:---:|",
+            "| Teknik | Akurasi | Review Rate | Prompt Tok | Cand Tok | Cached | Thoughts | Total Tok | Cost (IDR) | Cost (USD) | Web Queries | Nas->Fak | Fak->Nas | Avg Latency |",
+            "|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
         ]
         for tech, stats in summary.items():
             md_lines.append(
                 f"| {tech} | {stats['accuracy']:.2f}% | {stats['review_rate']:.2f}% | "
-                f"{stats['nasional_misclassified_as_fakultas']} | {stats['fakultas_misclassified_as_nasional']} | {stats['avg_latency_s']:.3f}s |"
+                f"{stats['total_prompt_tokens']} | {stats['total_candidates_tokens']} | "
+                f"{stats.get('total_cached_tokens', 0)} | {stats.get('total_thoughts_tokens', 0)} | "
+                f"{stats['total_tokens']} | Rp{stats['total_cost_idr']:.2f} | ${stats['total_cost_usd']:.5f} | "
+                f"{stats['total_web_queries']} | {stats['nasional_misclassified_as_fakultas']} | {stats['fakultas_misclassified_as_nasional']} | {stats['avg_latency_s']:.3f}s |"
             )
         md_file.write_text("\n".join(md_lines), encoding="utf-8")
 
@@ -540,20 +547,41 @@ def run_benchmark(
             wb = openpyxl.Workbook()
             ws_summary = wb.active
             ws_summary.title = "Summary"
-            ws_summary.append(["Teknik", "Akurasi (%)", "Review Rate (%)", "Nasional -> Fakultas", "Fakultas -> Nasional", "Avg Latency (s)"])
+            ws_summary.append([
+                "Teknik", "Akurasi (%)", "Review Rate (%)",
+                "Prompt Tokens", "Candidates Tokens", "Cached Tokens", "Thoughts Tokens", "Total Tokens",
+                "Cost (IDR)", "Cost (USD)", "Web Queries",
+                "Nasional -> Fakultas", "Fakultas -> Nasional", "Avg Latency (s)"
+            ])
             for tech, stats in summary.items():
                 ws_summary.append([
                     tech, stats["accuracy"], stats["review_rate"],
-                    stats["nasional_misclassified_as_fakultas"], stats["fakultas_misclassified_as_nasional"], stats["avg_latency_s"]
+                    stats["total_prompt_tokens"], stats["total_candidates_tokens"],
+                    stats.get("total_cached_tokens", 0), stats.get("total_thoughts_tokens", 0),
+                    stats["total_tokens"], stats["total_cost_idr"], stats["total_cost_usd"],
+                    stats["total_web_queries"],
+                    stats["nasional_misclassified_as_fakultas"], stats["fakultas_misclassified_as_nasional"],
+                    stats["avg_latency_s"]
                 ])
 
             ws_details = wb.create_sheet(title="Details")
-            ws_details.append(["Nama File", "Teknik", "GT Tingkat", "Pred Tingkat", "Match", "Needs Review", "Confidence", "Latency (s)"])
+            ws_details.append([
+                "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
+                "Match", "Needs Review", "Confidence", "Latency (s)",
+                "Model", "Status",
+                "Prompt Tokens", "Candidates Tokens", "Cached Tokens", "Thoughts Tokens", "Total Tokens",
+                "Cost (IDR)", "Cost (USD)", "Web Queries", "Call Metrics JSON"
+            ])
             for tech, evals in results_by_tech.items():
                 for e in evals:
                     ws_details.append([
                         e.filename, e.technique, e.gt_tingkat, e.pred_tingkat,
-                        1 if e.is_match else 0, 1 if e.needs_review else 0, e.confidence, round(e.latency_s, 3)
+                        1 if e.is_match else 0, 1 if e.needs_review else 0, e.confidence, round(e.latency_s, 3),
+                        gemini_model if backend == "gemini" else backend,
+                        "success" if e.pred_tingkat else "unparsed",
+                        e.prompt_tokens, e.candidates_tokens, e.cached_tokens, e.thoughts_tokens, e.total_tokens,
+                        e.cost_idr, e.cost_usd, "; ".join(e.web_queries),
+                        json.dumps(e.metadata.get("call_metrics", []))
                     ])
             xlsx_file = output_dir / "results.xlsx"
             wb.save(xlsx_file)
