@@ -329,7 +329,8 @@ def run_benchmark(
     techniques: list[str] | None = None,
     limit: int | None = None,
     output_dir: Path | None = None,
-    gemini_model: str = "gemini-2.5-flash",
+    gemini_model: str = "gemini-3.1-flash-lite",
+    enable_grounding: bool = False,
 ) -> dict[str, Any]:
     """Menjalankan benchmark lengkap untuk teknik prompting."""
     records = load_gt(gt_path)
@@ -351,7 +352,7 @@ def run_benchmark(
         "iterative",
     ]
 
-    llm_func = make_llm_runner(backend, gemini_model=gemini_model)
+    llm_func = make_llm_runner(backend, gemini_model=gemini_model, enable_grounding=enable_grounding)
     results_by_tech: dict[str, list[EvalRecord]] = {tech: [] for tech in selected_techniques}
     print(f"=== Menjalankan Benchmark Prompting Tingkat ===")
     print(f"Dataset: {gt_path.name} ({len(records)} baris)")
@@ -592,8 +593,13 @@ def main() -> None:
     parser.add_argument(
         "--gemini-model",
         type=str,
-        default=os.environ.get("GOOGLE_GEMINI_MODEL", "gemini-2.5-flash"),
-        help="Model Gemini yang digunakan (default: gemini-2.5-flash atau dari env)",
+        default=os.environ.get("GOOGLE_GEMINI_MODEL", "gemini-3.1-flash-lite"),
+        help="Model Gemini yang digunakan (default: gemini-3.1-flash-lite atau dari env)",
+    )
+    parser.add_argument(
+        "--enable-search",
+        action="store_true",
+        help="Aktifkan Google Search Grounding tool untuk pencarian web live via API",
     )
     parser.add_argument(
         "--technique",
@@ -632,6 +638,7 @@ def main() -> None:
         limit=args.limit,
         output_dir=out_dir,
         gemini_model=args.gemini_model,
+        enable_grounding=args.enable_search,
     )
 
 
