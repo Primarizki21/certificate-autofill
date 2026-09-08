@@ -85,5 +85,9 @@ tests/benchmark_runs/
 Sertifikat_Ground_Truth/
 certs_test/
 
-# Private experiment reports
+# Private experiment reports & documentation
 docs/report
+docs/experiments/
+
+# Agents Instructions and internal notes
+AGENTS.md
