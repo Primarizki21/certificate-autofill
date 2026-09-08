@@ -54,7 +54,7 @@ class GeminiCallResult:
     model: str = ""
     status: str = "success"  # "success" | "rate_limited" | "error"
     error_message: str | None = None
-
+    web_search_queries: list[str] = field(default_factory=list)
     def to_dict(self) -> dict[str, Any]:
         return {
             "response_text": self.response_text,
@@ -151,7 +151,7 @@ class GeminiClient:
     def __init__(
         self,
         api_key: str | None = None,
-        default_model: str = "gemini-2.5-flash",
+        default_model: str = "gemini-3.1-flash-lite",
         request_delay: float = 1.2,
         max_retries: int = 3,
         timeout_s: float = 60.0,
@@ -191,6 +191,7 @@ class GeminiClient:
         system_instruction: str | None = None,
         model: str | None = None,
         temperature: float = 0.0,
+        enable_grounding: bool = False,
     ) -> GeminiCallResult:
         """Panggil Gemini generateContent dengan ekspektasi JSON terstruktur."""
         target_model = model or self.default_model
@@ -211,11 +212,13 @@ class GeminiClient:
             },
         }
 
+        if enable_grounding:
+            payload["tools"] = [{"google_search": {}}]
+
         if system_instruction:
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
             }
-
         encoded_payload = json.dumps(payload).encode("utf-8")
 
         headers = {
@@ -272,6 +275,11 @@ class GeminiClient:
                         exchange_rate=self.exchange_rate,
                     )
 
+                    grounding = {}
+                    if candidates:
+                        grounding = candidates[0].get("groundingMetadata") or {}
+                    web_queries = list(grounding.get("webSearchQueries") or [])
+
                     return GeminiCallResult(
                         response_text=clean_text,
                         parsed_json=parsed,
@@ -286,8 +294,8 @@ class GeminiClient:
                         model=target_model,
                         status="success" if parsed is not None else "error",
                         error_message=None if parsed is not None else "JSON parse error from model response",
+                        web_search_queries=web_queries,
                     )
-
             except urllib.error.HTTPError as he:
                 latency = time.perf_counter() - t_start
                 status_code = he.code
@@ -356,6 +364,7 @@ class GeminiClient:
         system_instruction: str | None = None,
         model: str | None = None,
         temperature: float = 0.0,
+        enable_grounding: bool = False,
     ) -> GeminiCallResult:
         """Panggil Gemini generateContent untuk menghasilkan teks biasa (non-JSON)."""
         target_model = model or self.default_model
@@ -375,11 +384,13 @@ class GeminiClient:
             },
         }
 
+        if enable_grounding:
+            payload["tools"] = [{"google_search": {}}]
+
         if system_instruction:
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
             }
-
         encoded_payload = json.dumps(payload).encode("utf-8")
         headers = {
             "Content-Type": "application/json",
@@ -425,6 +436,11 @@ class GeminiClient:
                         exchange_rate=self.exchange_rate,
                     )
 
+                    grounding = {}
+                    if candidates:
+                        grounding = candidates[0].get("groundingMetadata") or {}
+                    web_queries = list(grounding.get("webSearchQueries") or [])
+
                     return GeminiCallResult(
                         response_text=cand_text.strip(),
                         parsed_json=None,
@@ -439,6 +455,7 @@ class GeminiClient:
                         model=target_model,
                         status="success",
                         error_message=None,
+                        web_search_queries=web_queries,
                     )
 
             except urllib.error.HTTPError as he:
@@ -451,6 +468,7 @@ class GeminiClient:
                     pass
                 clean_err = self._sanitize_error(f"HTTP {status_code}: {error_body[:300]}")
 
+                # Cek header Retry-After bila ada
                 retry_after_hdr = he.headers.get("Retry-After")
                 sleep_time = backoff_delay
                 if retry_after_hdr:
@@ -459,6 +477,7 @@ class GeminiClient:
                     except ValueError:
                         pass
 
+                # Handle Rate Limit (429) & Service Unavailable (503)
                 if status_code in (429, 503) and retries < self.max_retries:
                     retries += 1
                     sleep_time = max(sleep_time, 5.0 * retries)

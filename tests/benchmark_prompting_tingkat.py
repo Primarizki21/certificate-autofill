@@ -35,10 +35,11 @@ from typing import Any, Callable
 # Tambahkan root directory ke sys.path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO_ROOT))
-
 from tests.prompting_tingkat import (
     TINGKAT_OPTIONS,
+    LLMCallMeta,
     PromptingResult,
+    _extract_meta,
     build_zero_shot_prompt,
     build_few_shot_prompt,
     build_cot_prompt,
@@ -58,9 +59,16 @@ class EvalRecord:
     confidence: float
     technique: str
     latency_s: float
-    raw_response: str
+    prompt_tokens: int = 0
+    candidates_tokens: int = 0
+    cached_tokens: int = 0
+    thoughts_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_idr: float = 0.0
+    web_queries: list[str] = field(default_factory=list)
+    raw_response: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
-
 
 def load_gt(csv_path: Path) -> list[dict[str, str]]:
     """Membaca file ground truth CSV secara fail-closed."""
@@ -110,31 +118,37 @@ def make_llm_runner(
     backend: str,
     ollama_host: str = "http://localhost:11434",
     ollama_model: str = "llama3.1:8b",
-    gemini_model: str = "gemini-2.5-flash",
-) -> Callable[[str, float], str]:
-    """Factory provider-neutral LLM runner dengan fail-fast check."""
+    gemini_model: str = "gemini-3.1-flash-lite",
+    enable_grounding: bool = False,
+) -> Callable[[str, float], LLMCallMeta]:
+    """Factory provider-neutral LLM runner dengan fail-fast check dan per-call token accounting."""
     if backend == "mock":
-        def mock_runner(prompt: str, temperature: float = 0.0) -> str:
-            # Harness plumbing test only - bukan untuk evaluasi akurasi
+        def mock_runner(prompt: str, temperature: float = 0.0) -> LLMCallMeta:
             lower = prompt.lower()
             if "lomba" in lower or "kompetisi" in lower or "contest" in lower:
-                return "TINGKAT: Nasional\nLangkah 4: Nasional"
-            if "dekan cup" in lower or "fakultas" in lower:
-                return "TINGKAT: Fakultas\nLangkah 4: Fakultas"
-            if "rektor" in lower or "universitas" in lower:
-                return "TINGKAT: Universitas\nLangkah 4: Universitas"
-            if "himpunan" in lower or "departemen" in lower:
-                return "TINGKAT: Departemen/Program Studi\nLangkah 4: Departemen/Program Studi"
-            if "international" in lower or "internasional" in lower:
-                return "TINGKAT: Internasional\nLangkah 4: Internasional"
-            return "TINGKAT: Lainnya"
+                ans = "TINGKAT: Nasional\nLangkah 4: Nasional"
+            elif "dekan cup" in lower or "fakultas" in lower:
+                ans = "TINGKAT: Fakultas\nLangkah 4: Fakultas"
+            elif "rektor" in lower or "universitas" in lower:
+                ans = "TINGKAT: Universitas\nLangkah 4: Universitas"
+            elif "himpunan" in lower or "departemen" in lower:
+                ans = "TINGKAT: Departemen/Program Studi\nLangkah 4: Departemen/Program Studi"
+            elif "international" in lower or "internasional" in lower:
+                ans = "TINGKAT: Internasional\nLangkah 4: Internasional"
+            else:
+                ans = "TINGKAT: Lainnya"
+            return LLMCallMeta(
+                text=ans,
+                prompt_tokens=len(prompt) // 4,
+                candidates_tokens=len(ans) // 4,
+                total_tokens=(len(prompt) + len(ans)) // 4,
+            )
         return mock_runner
 
     elif backend == "ollama":
         import urllib.request
         import urllib.error
 
-        # Pre-check koneksi ke Ollama
         try:
             req = urllib.request.Request(f"{ollama_host}/api/tags")
             with urllib.request.urlopen(req, timeout=3.0) as resp:
@@ -145,7 +159,7 @@ def make_llm_runner(
                 "Jalankan Ollama terlebih dahulu (misal: 'ollama serve' atau 'scripts/start_ollama.sh')."
             )
 
-        def ollama_runner(prompt: str, temperature: float = 0.0) -> str:
+        def ollama_runner(prompt: str, temperature: float = 0.0) -> LLMCallMeta:
             url = f"{ollama_host}/api/generate"
             payload = json.dumps({
                 "model": ollama_model,
@@ -153,7 +167,7 @@ def make_llm_runner(
                 "stream": False,
                 "options": {
                     "temperature": temperature,
-                    "num_predict": 300,
+                    "num_predict": 150,
                 },
             }).encode("utf-8")
             req = urllib.request.Request(
@@ -162,9 +176,16 @@ def make_llm_runner(
             try:
                 with urllib.request.urlopen(req, timeout=45.0) as resp:
                     data = json.loads(resp.read().decode("utf-8"))
-                return data.get("response", "").strip()
+                p_tok = int(data.get("prompt_eval_count") or (len(prompt) // 4))
+                c_tok = int(data.get("eval_count") or 10)
+                return LLMCallMeta(
+                    text=data.get("response", "").strip(),
+                    prompt_tokens=p_tok,
+                    candidates_tokens=c_tok,
+                    total_tokens=p_tok + c_tok,
+                )
             except Exception as e:
-                return f"[OLLAMA_ERROR: {e}]"
+                return LLMCallMeta(text=f"[OLLAMA_ERROR: {e}]")
 
         return ollama_runner
 
@@ -174,16 +195,41 @@ def make_llm_runner(
         api_key = load_google_api_key()
         if not api_key:
             raise ValueError(
-                "GOOGLE_API_KEY tidak ditemukan di environment atau .env.google. "
+                "GOOGLE_API_KEY tidak ditemukan di environment atau .env. "
                 "Set GOOGLE_API_KEY sebelum menjalankan benchmark dengan backend Gemini."
             )
         client = GeminiClient(api_key=api_key, default_model=gemini_model)
 
-        def gemini_runner(prompt: str, temperature: float = 0.0) -> str:
-            res = client.generate_text(prompt, model=gemini_model, temperature=temperature)
+        def gemini_runner(prompt: str, temperature: float = 0.0) -> LLMCallMeta:
+            res = client.generate_text(
+                prompt,
+                model=gemini_model,
+                temperature=temperature,
+                enable_grounding=enable_grounding,
+            )
             if res.status != "success":
-                return f"[GEMINI_ERROR: {res.error_message}]"
-            return res.response_text.strip()
+                return LLMCallMeta(
+                    text=f"[GEMINI_ERROR: {res.error_message}]",
+                    prompt_tokens=res.prompt_tokens,
+                    candidates_tokens=res.candidates_tokens,
+                    cached_tokens=res.cached_tokens,
+                    thoughts_tokens=res.thoughts_tokens,
+                    total_tokens=res.total_tokens,
+                    cost_usd=res.cost_usd,
+                    cost_idr=res.cost_idr,
+                    web_search_queries=res.web_search_queries,
+                )
+            return LLMCallMeta(
+                text=res.response_text.strip(),
+                prompt_tokens=res.prompt_tokens,
+                candidates_tokens=res.candidates_tokens,
+                cached_tokens=res.cached_tokens,
+                thoughts_tokens=res.thoughts_tokens,
+                total_tokens=res.total_tokens,
+                cost_usd=res.cost_usd,
+                cost_idr=res.cost_idr,
+                web_search_queries=res.web_search_queries,
+            )
 
         return gemini_runner
 
@@ -202,43 +248,69 @@ def evaluate_single(
 
     if technique == "zero_shot":
         prompt = build_zero_shot_prompt(raw_text, known_fields)
-        resp = llm_func(prompt, 0.0)
-        tingkat = validate_tingkat(resp)
+        call_res = llm_func(prompt, 0.0)
+        meta = _extract_meta(call_res)
+        tingkat = validate_tingkat(meta.text)
         conf = 0.85 if tingkat else 0.0
         return PromptingResult(
             tingkat=tingkat,
-            raw_response=resp,
+            raw_response=meta.text,
             technique="zero_shot",
             confidence=conf,
             needs_review=bool(conf < 0.85 or tingkat in (None, "Lainnya")),
+            prompt_tokens=meta.prompt_tokens,
+            candidates_tokens=meta.candidates_tokens,
+            cached_tokens=meta.cached_tokens,
+            thoughts_tokens=meta.thoughts_tokens,
+            total_tokens=meta.total_tokens,
+            cost_usd=meta.cost_usd,
+            cost_idr=meta.cost_idr,
+            web_search_queries=meta.web_search_queries,
         )
 
     elif technique == "few_shot":
         prompt = build_few_shot_prompt(raw_text, known_fields)
-        resp = llm_func(prompt, 0.0)
-        tingkat = validate_tingkat(resp)
+        call_res = llm_func(prompt, 0.0)
+        meta = _extract_meta(call_res)
+        tingkat = validate_tingkat(meta.text)
         conf = 0.85 if tingkat else 0.0
         return PromptingResult(
             tingkat=tingkat,
-            raw_response=resp,
+            raw_response=meta.text,
             technique="few_shot",
             confidence=conf,
             needs_review=bool(conf < 0.85 or tingkat in (None, "Lainnya")),
+            prompt_tokens=meta.prompt_tokens,
+            candidates_tokens=meta.candidates_tokens,
+            cached_tokens=meta.cached_tokens,
+            thoughts_tokens=meta.thoughts_tokens,
+            total_tokens=meta.total_tokens,
+            cost_usd=meta.cost_usd,
+            cost_idr=meta.cost_idr,
+            web_search_queries=meta.web_search_queries,
         )
 
     elif technique == "cot":
         prompt = build_cot_prompt(raw_text, known_fields)
-        resp = llm_func(prompt, 0.0)
-        tingkat = validate_tingkat(resp)
+        call_res = llm_func(prompt, 0.0)
+        meta = _extract_meta(call_res)
+        tingkat = validate_tingkat(meta.text)
         conf = 0.85 if tingkat else 0.0
         return PromptingResult(
             tingkat=tingkat,
-            raw_response=resp,
+            raw_response=meta.text,
             technique="cot",
             confidence=conf,
             needs_review=bool(conf < 0.85 or tingkat in (None, "Lainnya")),
+            prompt_tokens=meta.prompt_tokens,
+            candidates_tokens=meta.candidates_tokens,
+            cached_tokens=meta.cached_tokens,
+            thoughts_tokens=meta.thoughts_tokens,
+            total_tokens=meta.total_tokens,
+            cost_usd=meta.cost_usd,
+            cost_idr=meta.cost_idr,
+            web_search_queries=meta.web_search_queries,
         )
-
     elif technique == "self_consistency":
         return run_self_consistency(raw_text, known_fields, llm_func, n_samples=3, temperature=0.5)
 
@@ -323,8 +395,16 @@ def run_benchmark(
                 confidence=res.confidence,
                 technique=tech,
                 latency_s=lat,
+                prompt_tokens=res.prompt_tokens,
+                candidates_tokens=res.candidates_tokens,
+                cached_tokens=res.cached_tokens,
+                thoughts_tokens=res.thoughts_tokens,
+                total_tokens=res.total_tokens,
+                cost_usd=res.cost_usd,
+                cost_idr=res.cost_idr,
+                web_queries=res.web_search_queries,
                 raw_response=res.raw_response,
-                metadata=res.metadata,
+                metadata={**res.metadata, "call_metrics": res.call_metrics},
             )
             results_by_tech[tech].append(eval_rec)
 
@@ -342,6 +422,14 @@ def run_benchmark(
                         "needs_review": res.needs_review,
                         "confidence": res.confidence,
                         "latency_s": round(lat, 3),
+                        "prompt_tokens": res.prompt_tokens,
+                        "candidates_tokens": res.candidates_tokens,
+                        "cached_tokens": res.cached_tokens,
+                        "thoughts_tokens": res.thoughts_tokens,
+                        "total_tokens": res.total_tokens,
+                        "cost_usd": res.cost_usd,
+                        "cost_idr": res.cost_idr,
+                        "web_queries": res.web_search_queries,
                     }) + "\n")
 
     # Hitung metrik per teknik
@@ -362,26 +450,45 @@ def run_benchmark(
             1 for e in evals if e.gt_tingkat == "Fakultas" and e.pred_tingkat == "Nasional"
         )
 
+        tot_p_tokens = sum(e.prompt_tokens for e in evals)
+        tot_c_tokens = sum(e.candidates_tokens for e in evals)
+        tot_cached_tokens = sum(e.cached_tokens for e in evals)
+        tot_thoughts_tokens = sum(e.thoughts_tokens for e in evals)
+        tot_tokens = sum(e.total_tokens for e in evals)
+        tot_cost_usd = sum(e.cost_usd for e in evals)
+        tot_cost_idr = sum(e.cost_idr for e in evals)
+        tot_web_queries = sum(len(e.web_queries) for e in evals)
+
         summary[tech] = {
             "total": total,
             "correct": correct,
             "accuracy": round(accuracy * 100, 2),
             "review_rate": round(review_rate * 100, 2),
             "avg_latency_s": round(avg_lat, 3),
+            "total_prompt_tokens": tot_p_tokens,
+            "total_candidates_tokens": tot_c_tokens,
+            "total_cached_tokens": tot_cached_tokens,
+            "total_thoughts_tokens": tot_thoughts_tokens,
+            "total_tokens": tot_tokens,
+            "avg_tokens_per_doc": round(tot_tokens / total, 1) if total > 0 else 0,
+            "total_cost_usd": round(tot_cost_usd, 5),
+            "total_cost_idr": round(tot_cost_idr, 2),
+            "total_web_queries": tot_web_queries,
             "nasional_misclassified_as_fakultas": nasional_as_fakultas,
             "fakultas_misclassified_as_nasional": fakultas_as_nasional,
         }
 
     # Cetak tabel ringkasan
     print("\n=== RINGKASAN HASIL BENCHMARK PROMPTING TINGKAT ===")
-    print(f"{'Teknik':<18} | {'Accuracy':<10} | {'Review Rate':<12} | {'Nas->Fak':<10} | {'Fak->Nas':<10} | {'Avg Latency'}")
-    print("-" * 80)
+    print(f"{'Teknik':<18} | {'Accuracy':<9} | {'Review Rate':<11} | {'Tokens (In/Out)':<18} | {'Cost (IDR)':<10} | {'Avg Latency'}")
+    print("-" * 88)
     for tech, stats in summary.items():
+        tokens_str = f"{stats['total_prompt_tokens']}/{stats['total_candidates_tokens']}"
         print(
-            f"{tech:<18} | {stats['accuracy']:>6.2f}%    | {stats['review_rate']:>8.2f}%    | "
-            f"{stats['nasional_misclassified_as_fakultas']:>8}   | {stats['fakultas_misclassified_as_nasional']:>8}   | {stats['avg_latency_s']:.3f}s"
+            f"{tech:<18} | {stats['accuracy']:>6.2f}%   | {stats['review_rate']:>8.2f}%   | "
+            f"{tokens_str:>16}   | Rp{stats['total_cost_idr']:>7.2f}  | {stats['avg_latency_s']:.3f}s"
         )
-    print("=" * 80)
+    print("=" * 88)
     # Simpan artefak dokumentasi jika output_dir dispesifikasikan
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
@@ -395,13 +502,17 @@ def run_benchmark(
             writer = csv.writer(f)
             writer.writerow([
                 "Nama File", "Teknik", "GT Tingkat", "Pred Tingkat",
-                "Is Match", "Needs Review", "Confidence", "Latency (s)", "Raw Response"
+                "Is Match", "Needs Review", "Confidence", "Latency (s)",
+                "Prompt Tokens", "Candidates Tokens", "Total Tokens",
+                "Cost (IDR)", "Web Search Queries", "Raw Response"
             ])
             for tech, evals in results_by_tech.items():
                 for e in evals:
                     writer.writerow([
                         e.filename, e.technique, e.gt_tingkat, e.pred_tingkat,
-                        e.is_match, e.needs_review, e.confidence, f"{e.latency_s:.3f}", e.raw_response[:100]
+                        e.is_match, e.needs_review, e.confidence, f"{e.latency_s:.3f}",
+                        e.prompt_tokens, e.candidates_tokens, e.total_tokens,
+                        f"{e.cost_idr:.2f}", "; ".join(e.web_queries), e.raw_response[:100]
                     ])
 
         # 3. Markdown Report

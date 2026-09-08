@@ -50,14 +50,37 @@ TINGKAT_CANONICAL_MAP = {
 
 
 @dataclass
+class LLMCallMeta:
+    """Metadata panggilan model bahasa mencakup token rinci, biaya, dan web search."""
+    text: str
+    prompt_tokens: int = 0
+    candidates_tokens: int = 0
+    cached_tokens: int = 0
+    thoughts_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_idr: float = 0.0
+    web_search_queries: list[str] = field(default_factory=list)
+
+
+@dataclass
 class PromptingResult:
-    """Hasil ekstraksi tingkat dari teknik prompting."""
+    """Hasil ekstraksi tingkat dari teknik prompting beserta metrik token rinci & review."""
     tingkat: str | None
     raw_response: str
     technique: str
     reasoning_steps: list[str] = field(default_factory=list)
     confidence: float = 0.0
     needs_review: bool = False
+    prompt_tokens: int = 0
+    candidates_tokens: int = 0
+    cached_tokens: int = 0
+    thoughts_tokens: int = 0
+    total_tokens: int = 0
+    cost_usd: float = 0.0
+    cost_idr: float = 0.0
+    web_search_queries: list[str] = field(default_factory=list)
+    call_metrics: list[dict[str, Any]] = field(default_factory=list)
     samples: list[str] = field(default_factory=list)
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -258,10 +281,16 @@ TINGKAT: [Pilih SATU dari daftar pilihan resmi]"""
 # ==============================================================================
 # 4. Self-Consistency Runner
 # ==============================================================================
+def _extract_meta(res: Any) -> LLMCallMeta:
+    if isinstance(res, LLMCallMeta):
+        return res
+    return LLMCallMeta(text=str(res))
+
+
 def run_self_consistency(
     raw_text: str,
     known_fields: dict[str, str] | None,
-    call_llm_func: Callable[[str, float], str],
+    call_llm_func: Callable[[str, float], str | LLMCallMeta],
     n_samples: int = 3,
     temperature: float = 0.5,
 ) -> PromptingResult:
@@ -273,13 +302,43 @@ def run_self_consistency(
     votes: list[str] = []
     raw_samples: list[str] = []
 
-    for _ in range(n_samples):
-        resp = call_llm_func(prompt, temperature)
-        raw_samples.append(resp)
-        parsed = validate_tingkat(resp)
+    prompt_tokens = 0
+    candidates_tokens = 0
+    cached_tokens = 0
+    thoughts_tokens = 0
+    total_tokens = 0
+    cost_usd = 0.0
+    cost_idr = 0.0
+    web_queries: list[str] = []
+    call_metrics: list[dict[str, Any]] = []
+
+    for idx in range(n_samples):
+        call_res = call_llm_func(prompt, temperature)
+        meta = _extract_meta(call_res)
+        prompt_tokens += meta.prompt_tokens
+        candidates_tokens += meta.candidates_tokens
+        cached_tokens += meta.cached_tokens
+        thoughts_tokens += meta.thoughts_tokens
+        total_tokens += meta.total_tokens
+        cost_usd += meta.cost_usd
+        cost_idr += meta.cost_idr
+        web_queries.extend(meta.web_search_queries)
+        call_metrics.append({
+            "step": f"sample_{idx + 1}",
+            "prompt_tokens": meta.prompt_tokens,
+            "candidates_tokens": meta.candidates_tokens,
+            "cached_tokens": meta.cached_tokens,
+            "thoughts_tokens": meta.thoughts_tokens,
+            "total_tokens": meta.total_tokens,
+            "cost_usd": meta.cost_usd,
+            "cost_idr": meta.cost_idr,
+            "web_queries": meta.web_search_queries,
+        })
+
+        raw_samples.append(meta.text)
+        parsed = validate_tingkat(meta.text)
         if parsed:
             votes.append(parsed)
-
     if not votes:
         return PromptingResult(
             tingkat=None,
@@ -288,6 +347,15 @@ def run_self_consistency(
             samples=raw_samples,
             confidence=0.0,
             needs_review=True,
+            prompt_tokens=prompt_tokens,
+            candidates_tokens=candidates_tokens,
+            cached_tokens=cached_tokens,
+            thoughts_tokens=thoughts_tokens,
+            total_tokens=total_tokens,
+            cost_usd=cost_usd,
+            cost_idr=cost_idr,
+            web_search_queries=web_queries,
+            call_metrics=call_metrics,
             metadata={"error": "no_valid_votes", "n_samples": n_samples},
         )
 
@@ -313,8 +381,16 @@ def run_self_consistency(
         samples=raw_samples,
         confidence=confidence,
         needs_review=needs_review,
+        prompt_tokens=prompt_tokens,
+        candidates_tokens=candidates_tokens,
+        cached_tokens=cached_tokens,
+        thoughts_tokens=thoughts_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        cost_idr=cost_idr,
+        web_search_queries=web_queries,
+        call_metrics=call_metrics,
         metadata={
-            "votes_distribution": dict(counts),
             "total_valid_votes": len(votes),
             "is_tie": is_tie,
         },
@@ -327,10 +403,44 @@ def run_self_consistency(
 def run_iterative_prompting(
     raw_text: str,
     known_fields: dict[str, str] | None,
-    call_llm_func: Callable[[str, float], str],
+    call_llm_func: Callable[[str, float], str | LLMCallMeta],
 ) -> PromptingResult:
     """Menjalankan Iterative Prompting dengan 3 langkah sekuensial interaktif."""
     steps_log: list[str] = []
+    prompt_tokens = 0
+    candidates_tokens = 0
+    cached_tokens = 0
+    thoughts_tokens = 0
+    total_tokens = 0
+    cost_usd = 0.0
+    cost_idr = 0.0
+    web_queries: list[str] = []
+    call_metrics: list[dict[str, Any]] = []
+
+    def _do_step(step_name: str, prompt: str) -> str:
+        nonlocal prompt_tokens, candidates_tokens, cached_tokens, thoughts_tokens, total_tokens, cost_usd, cost_idr
+        call_res = call_llm_func(prompt, 0.0)
+        meta = _extract_meta(call_res)
+        prompt_tokens += meta.prompt_tokens
+        candidates_tokens += meta.candidates_tokens
+        cached_tokens += meta.cached_tokens
+        thoughts_tokens += meta.thoughts_tokens
+        total_tokens += meta.total_tokens
+        cost_usd += meta.cost_usd
+        cost_idr += meta.cost_idr
+        web_queries.extend(meta.web_search_queries)
+        call_metrics.append({
+            "step": step_name,
+            "prompt_tokens": meta.prompt_tokens,
+            "candidates_tokens": meta.candidates_tokens,
+            "cached_tokens": meta.cached_tokens,
+            "thoughts_tokens": meta.thoughts_tokens,
+            "total_tokens": meta.total_tokens,
+            "cost_usd": meta.cost_usd,
+            "cost_idr": meta.cost_idr,
+            "web_queries": meta.web_search_queries,
+        })
+        return meta.text
 
     # Step 1: Identifikasi Penyelenggara & Jenis Kegiatan
     prompt_step1 = f"""Tugas Langkah 1: Identifikasi nama kegiatan, penyelenggara, dan jenis kegiatan dari teks sertifikat berikut.
@@ -343,7 +453,7 @@ Jawab dalam format ringkas:
 - Nama Kegiatan: ...
 - Penyelenggara: ...
 - Jenis Kegiatan: (Lomba/Kompetisi / Seminar / Kepanitiaan / Kepengurusan / Pelatihan / Lainnya)"""
-    resp_step1 = call_llm_func(prompt_step1, 0.0)
+    resp_step1 = _do_step("step_1_extraction", prompt_step1)
     steps_log.append(f"Step 1 Output:\n{resp_step1}")
 
     # Step 2: Analisis Cakupan Sasaran Peserta (Scope Analysis)
@@ -364,7 +474,7 @@ D. Acara tingkat universitas
 E. Melibatkan peserta/institusi internasional
 
 Jelaskan analisis sasaran peserta secara singkat (1-2 kalimat)."""
-    resp_step2 = call_llm_func(prompt_step2, 0.0)
+    resp_step2 = _do_step("step_2_scope_analysis", prompt_step2)
     steps_log.append(f"Step 2 Output:\n{resp_step2}")
 
     # Step 3: Pemetaan Final ke Pilihan Resmi
@@ -388,7 +498,7 @@ Aturan Khusus:
 Jika jenis kegiatan adalah lomba/kompetisi terbuka untuk mahasiswa umum lintas kampus, petakan sebagai 'Nasional' meskipun penyelenggaranya adalah BEM Fakultas atau Himpunan Mahasiswa.
 
 TINGKAT:"""
-    resp_step3 = call_llm_func(prompt_step3, 0.0)
+    resp_step3 = _do_step("step_3_final_mapping", prompt_step3)
     steps_log.append(f"Step 3 Output:\n{resp_step3}")
 
     final_tingkat = validate_tingkat(resp_step3)
@@ -413,7 +523,6 @@ TINGKAT:"""
     elif final_tingkat == "Lainnya":
         confidence = 0.40
     elif semantic_agreement:
-        # Agreement tercapai antar langkah, namun tetap tunduk pada kalibrasi
         confidence = 0.80
     else:
         confidence = 0.50
@@ -427,5 +536,14 @@ TINGKAT:"""
         reasoning_steps=steps_log,
         confidence=confidence,
         needs_review=needs_review,
+        prompt_tokens=prompt_tokens,
+        candidates_tokens=candidates_tokens,
+        cached_tokens=cached_tokens,
+        thoughts_tokens=thoughts_tokens,
+        total_tokens=total_tokens,
+        cost_usd=cost_usd,
+        cost_idr=cost_idr,
+        web_search_queries=web_queries,
+        call_metrics=call_metrics,
         metadata={"step1": resp_step1, "step2": resp_step2, "step3": resp_step3},
     )

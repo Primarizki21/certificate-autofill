@@ -148,6 +148,26 @@ class TestGeminiClientAccounting:
         assert res.candidates_tokens == 10
         assert res.parsed_json is None
 
+    def test_generate_text_http_error_sanitization(self, monkeypatch):
+        """Uji generate_text menangani HTTPError dengan sanitasi API key."""
+        import urllib.error
+        import urllib.request
+        from io import BytesIO
+
+        err_body = b"Secret AIzaSySECRETKEYTEST12345 leaked in body"
+        def mock_err(req, timeout):
+            raise urllib.error.HTTPError(
+                url="http://test", code=400, msg="Bad Request",
+                hdrs={}, fp=BytesIO(err_body)
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_err)
+        client = GeminiClient(api_key="AIzaSySECRETKEYTEST12345", request_delay=0.0, max_retries=0)
+        res = client.generate_text("Test prompt")
+        assert res.status == "error"
+        assert "AIzaSySECRETKEYTEST12345" not in res.error_message
+        assert "[REDACTED_API_KEY]" in res.error_message
+
 
 class TestGeminiFieldExtractor:
     def test_standardize_date_formats(self):
