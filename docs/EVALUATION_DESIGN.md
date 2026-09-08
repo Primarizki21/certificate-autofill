@@ -76,28 +76,32 @@ Sub-komponen logika fuzzy:
 ## 3. Arsitektur Agregasi & Klarifikasi Denominator
 
 ### 3.1 Penanganan Denominator Dinamis vs Fixed
-- **Jalur Legacy (`tests/evaluation_framework.py`)**:
-  Evaluator mengabaikan baris yang pada Ground Truth bernilai kosong atau tanda strip (`-`):
+- **Jalur Dinamis (Legacy `tests/evaluation_framework.py` & `tests/stat_validation.py`)**:
+  Evaluator mengabaikan baris/sel yang pada Ground Truth bernilai kosong atau tanda strip (`-`):
   ```python
   if not expected or expected == "-":
       continue
   ```
-  Denominator per field ($N_{\text{field}}$) bersifat dinamis mengikuti total sel yang memiliki label GT valid.
-- **Jalur Modern All-Cells (`tests/benchmark_production_input_matrix.py`)**:
+  Denominator per field ($N_{\text{field}}$) bersifat dinamis mengikuti total sel yang memiliki label GT valid. Agregasi `macro` pada kedua modul ini dihitung secara **pooled ratio lintas sel valid** ($\sum \text{exact} / \sum \text{total}$), bukan rata-rata dari per-field accuracy.
+- **Jalur Fixed All-Cells (`tests/benchmark_production_input_matrix.py`)**:
   Denominator total sel ditetapkan secara fixed:
   $$\text{total\_all\_cells} = N_{\text{docs}} \times |\text{ALL\_EVAL\_FIELDS}| = 74 \times 6 = 444\text{ sel}$$
+  Agregasi All-Cells 6F dihitung sebagai pooled ratio:
+  $$\text{all\_cells\_exact\_pct} = \frac{\text{exact\_all\_cells}}{\text{total\_all\_cells}} \times 100\%$$
 
-### 3.2 Dua Jalur Evaluator Resmi di Repositori
+### 3.2 Pemetaan Evaluator Resmi di Repositori
 
-| Parameter | Jalur A: Legacy Framework (`tests/evaluation_framework.py`) | Jalur B: Modern All-Cells (`tests/stat_validation.py` / Input Matrix Runner) |
-|---|---|---|
-| **Cakupan Field** | 5 Field dasar (tanpa `tingkat`) | 6 Field lengkap (termasuk `tingkat`) |
-| **Denominator** | Dinamis ($\approx 370$ sel, minus missing/empty GT) | Fixed $N_{\text{docs}} \times 6 = 444$ sel (pada korpus 74 dokumen) |
-| **Sifat Agregasi "Macro"** | **Micro-average pooled over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **All-Cells pooled ratio**: $\frac{\sum \text{exact\_all\_cells}}{\text{total\_all\_cells}} \times 100\%$ |
-| **Metrik Per-Field** | Dihitung terhadap $N_{\text{field}}$ sel valid | Dihitung terhadap $N_{\text{docs}}$ (74 sampel); macro mean hanya dilaporkan jika runner menghitung rata-rata antar-field eksplisit |
-| **Tujuan Penggunaan** | Komparasi historis pipeline ekstraktor regex/NER | Benchmark end-to-end produksi dan model bahasa (LLM) |
+| Parameter | Jalur A: Legacy Framework (`tests/evaluation_framework.py`) | Jalur B1: Stat Validation (`tests/stat_validation.py`) | Jalur B2: Production Matrix Runner (`tests/benchmark_production_input_matrix.py`) |
+|---|---|---|---|
+| **Cakupan Field** | 5 Field dasar (tanpa `tingkat`) | 6 Field lengkap (termasuk `tingkat`) | 6 Field lengkap (termasuk `tingkat`) |
+| **Denominator** | Dinamis ($\approx 370$ sel valid GT) | Dinamis ($\approx 440$ sel valid GT) | Fixed $N_{\text{docs}} \times 6 = 444$ sel |
+| **Sifat Agregasi "Macro"** | **Pooled micro-ratio over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **Pooled micro-ratio over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **All-Cells pooled ratio**: $\frac{\text{exact\_all\_cells}}{444} \times 100\%$ |
+| **Metrik Per-Field** | Terhadap $N_{\text{field}}$ sel valid | Terhadap $N_{\text{field}}$ sel valid | Terhadap $N_{\text{docs}}$ (74 sampel) |
+| **True Macro Mean** | Tidak otomatis (dihitung terpisah jika perlu) | Tidak otomatis (dihitung terpisah jika perlu) | Tidak otomatis (dihitung terpisah jika perlu) |
+| **Tujuan Penggunaan** | Komparasi historis ekstraktor regex/NER | Validasi statistik 5-fold CV & Bootstrap CI | Benchmark end-to-end varian input & model LLM |
 
-*Aturan Pelaporan*: Setiap laporan benchmark wajib mencantumkan secara tegas apakah metrik yang disajikan berbasis **Framework 5-Field** atau **All-Cells 6-Field**. Dilarang mencampuradukkan kedua denominator tersebut.
+*Aturan Pelaporan*: Setiap laporan benchmark wajib mencantumkan secara tegas apakah metrik yang disajikan berbasis **Framework 5-Field** atau **All-Cells 6-Field**, serta apakah denominator yang dipakai berbasis sel GT valid (dinamis) atau fixed 444 sel. Dilarang mencampuradukkan kedua denominasi tersebut.
+
 ### 3.3 Pelaporan Subgroup Wajib (`Emb-25` vs `Scan-49`)
 Evaluasi wajib menyajikan rincian akurasi terpisah untuk:
 1. Subset dokumen teks digital (`Emb-25`).
