@@ -88,6 +88,6 @@ certs_unified/
 # Private experiment reports & documentation
 docs/report
 docs/experiments/
-
+old_docs/
 # Agents Instructions and internal notes
 AGENTS.md
