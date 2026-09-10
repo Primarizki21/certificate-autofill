@@ -72,6 +72,24 @@ class TestDetectExplicitLevel:
         assert pat is None
         assert is_conf is False
 
+    def test_handles_compound_negation_guards(self):
+        text1 = "Peserta ini bukan pada tingkat nasional melainkan tingkat prodi."
+        # "bukan pada tingkat nasional" should be stripped
+        lvl1, _, _ = detect_explicit_level(text1)
+        assert lvl1 == "Departemen/Program Studi"
+
+        text2 = "Prestasi ini tidak termasuk tingkat internasional."
+        lvl2, _, _ = detect_explicit_level(text2)
+        assert lvl2 is None
+
+    def test_detects_transitional_seleksi_untuk_and_calon(self):
+        text1 = "Lomba seleksi untuk tingkat nasional tahun 2025"
+        lvl1, _, is_conf1 = detect_explicit_level(text1)
+        assert is_conf1 is True
+
+        text2 = "Pelatihan calon tingkat fakultas mahasiswa baru"
+        lvl2, _, is_conf2 = detect_explicit_level(text2)
+        assert is_conf2 is True
     def test_detects_multi_level_conflict(self):
         text = "Acara perlombaan Tingkat Fakultas yang diadakan serentak dengan Tingkat Nasional."
         lvl, pat, is_conf = detect_explicit_level(text)
@@ -108,6 +126,21 @@ class TestEvaluateGatedSearchHybrid:
         extracted, meta = evaluate_gated_search_hybrid(
             raw_text=raw,
             nama_kegiatan="Seleksi Lomba",
+            penyelenggara="BEM",
+            client=None,
+            enable_search_fallback=True,
+        )
+        assert isinstance(extracted, ExtractedValue)
+        assert extracted.confidence == 0.60
+        assert extracted.source == "regex_explicit_gate_conflict"
+        assert meta["is_conflict"] is True
+        assert meta["gated_bypass"] is False
+        assert meta["needs_review"] is True
+    def test_gated_transitional_triggers_review(self):
+        raw = "Program pembinaan seleksi untuk Tingkat Nasional tahun 2025"
+        extracted, meta = evaluate_gated_search_hybrid(
+            raw_text=raw,
+            nama_kegiatan="Pembinaan Mahasiswa",
             penyelenggara="BEM",
             client=None,
             enable_search_fallback=True,
