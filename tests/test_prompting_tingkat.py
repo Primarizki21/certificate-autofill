@@ -259,8 +259,7 @@ def test_load_ocr_texts_map_directory_extensions_and_collision(tmp_path):
     # Verifikasi collision detection jika ada file berbeda menghasilkan alias bentrok
     collision_dir = tmp_path / "collision_test"
     collision_dir.mkdir()
-    (collision_dir / "sample.txt").write_text("Konten 1", encoding="utf-8")
-    # Jika ada teks kedua dengan nama berbeda tapi menimpa key
-    # Di sini load_ocr_texts_map berjalan aman
-    res = load_ocr_texts_map(collision_dir)
-    assert res["sample.pdf"] == "Konten 1"
+    (collision_dir / "cert.txt").write_text("Konten Asli", encoding="utf-8")
+    (collision_dir / "cert.pdf.txt").write_text("Konten Berbeda", encoding="utf-8")
+    with pytest.raises(ValueError, match="Deteksi duplikasi/konflik"):
+        load_ocr_texts_map(collision_dir)
