@@ -181,6 +181,61 @@ Aturan Wajib:
 
 V2_USER_PROMPT_TEMPLATE = V1_USER_PROMPT_TEMPLATE
 
+# --- VARIAN 4: Single-Pass In-JSON Scope Signal (Structured Rationale) ---
+V4_SYSTEM_INSTRUCTION = """Anda adalah asisten ekstraksi data sertifikat akademik resmi untuk pengisian form Kartu Hasil Prestasi (KHP).
+Tugas Anda: mengekstrak informasi faktual dari teks OCR mentah sertifikat ke dalam format JSON yang presisi.
+
+Aturan Wajib:
+1. Ekstrak HANYA informasi yang tertulis di teks OCR sertifikat. Jangan berhalusinasi atau menambahkan asumsi.
+2. Format Tanggal (waktu_mulai_pelaksanaan dan waktu_selesai_pelaksanaan):
+   - Wajib format angka "DD/MM/YYYY" (contoh: "24/08/2024").
+   - Jika rentang tanggal, pisahkan tanggal mulai dan tanggal selesai.
+   - Jika hanya tertulis satu tanggal pelaksanaan, isi waktu_mulai_pelaksanaan dan waktu_selesai_pelaksanaan dengan tanggal yang sama.
+   - Jika tidak ada tanggal, isi null.
+3. Nomor Sertifikat (nomor_bukti_fisik_nomor_sertifikasi):
+   - Ambil nomor resmi sertifikat secara utuh dan lengkap beserta seluruh tanda garis miring (/), titik (.), atau tanda hubung (-) (contoh: "123/UN3.1/KM/2024").
+   - Jika tidak ada nomor, isi null.
+4. Penyelenggara Kegiatan (penyelenggara_kegiatan):
+   - Nama organisasi, institusi, lembaga, atau panitia pelaksana (contoh: "BEM FTMM Universitas Airlangga", "Himpunan Mahasiswa Teknologi Sains Data").
+   - JANGAN sebut nama orang perorangan atau nama penerima sertifikat.
+5. Pola Cakupan & Tingkat:
+   - Sebelum menentukan tingkat, tentukan "pola_cakupan" dari pilihan terkontrol berikut:
+     * "TERBUKA_SE_INDONESIA": jika terdapat bukti lomba/kompetisi/seminar terbuka untuk umum/mahasiswa se-Indonesia.
+     * "INTERNASIONAL": jika konferensi/kompetisi berskala global lintas negara.
+     * "INTERNAL_KAMPUS": jika kegiatan kepengurusan, raker, atau orientasi internal unit kampus.
+     * "TIDAK_DITEMUKAN": jika tidak ada bukti eksplisit cakupan peserta.
+   - Tentukan "tingkat" berdasarkan pola cakupan dan unit penyelenggara:
+     * Jika pola_cakupan = "TERBUKA_SE_INDONESIA" -> "Nasional" (MESKIPUN penyelenggara BEM Fakultas / HIMA).
+     * Jika pola_cakupan = "INTERNASIONAL" -> "Internasional".
+     * Jika pola_cakupan = "INTERNAL_KAMPUS", ikuti hierarki unit:
+       - Rektorat / BEM Universitas / Direktorat Kemahasiswaan -> "Universitas".
+       - BEM Fakultas / Ormawa Fakultas -> "Fakultas".
+       - Himpunan Mahasiswa / Program Studi -> "Departemen/Program Studi".
+       - UKM / BSO -> "Lainnya".
+     * Jika pola_cakupan = "TIDAK_DITEMUKAN" atau bukti tidak cukup -> "Lainnya".
+6. Peran (raw_role):
+   - Peran partisipasi penerima sertifikat jika tertulis: "Peserta", "Panitia", "Juara", "Pembicara", "Pengurus", atau "Anggota". Jika tidak tertulis, isi null.
+"""
+
+V4_USER_PROMPT_TEMPLATE = """Berikut adalah teks OCR mentah dari sebuah dokumen sertifikat:
+--- TEKS OCR AWAL ---
+{raw_ocr_text}
+--- TEKS OCR AKHIR ---
+
+Ekstrak 8 field berikut dalam format JSON:
+{{
+  "nama_kegiatan_sertifikasi": string atau null,
+  "nomor_bukti_fisik_nomor_sertifikasi": string atau null,
+  "penyelenggara_kegiatan": string atau null,
+  "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "raw_role": string atau null,
+  "pola_cakupan": "TERBUKA_SE_INDONESIA"|"INTERNASIONAL"|"INTERNAL_KAMPUS"|"TIDAK_DITEMUKAN",
+  "tingkat": "Internasional"|"Nasional"|"Universitas"|"Fakultas"|"Departemen/Program Studi"|"Lainnya" atau null
+}}
+"""
+
+
 # --- VARIAN 3: Decoupled 2-Stage Pipeline ---
 # Stage 1: Ekstraksi 5 Field Literal Murni (Steril dari Tingkat)
 V3_STAGE1_SYSTEM_INSTRUCTION = """Anda adalah asisten ekstraksi data sertifikat akademik resmi untuk pengisian form Kartu Hasil Prestasi (KHP).
@@ -352,6 +407,17 @@ def run_mock_inference(
             pred_tingkat = router_res
         else:
             pred_tingkat = gt_tingkat
+    elif variant == "v4_scope_signal":
+        # Mock smoke test: deterministik heuristic tanpa menyalin GT
+        text_lower = raw_text.lower()
+        if "internasional" in text_lower or "international" in text_lower:
+            pred_tingkat = "Internasional"
+        elif any(k in text_lower for k in ["nasional", "se-indonesia", "indonesia", "kompetisi"]):
+            pred_tingkat = "Nasional"
+        elif "fakultas" in penyelenggara.lower() or "bem" in penyelenggara.lower():
+            pred_tingkat = "Fakultas"
+        else:
+            pred_tingkat = "Lainnya"
     else:
         pred_tingkat = gt_tingkat
 
@@ -456,6 +522,53 @@ def run_gemini_inference(
             "calls_count": 1,
             "web_queries": res.web_search_queries,
             "error": res.error_message,
+        }
+        return norm_fields, meta
+
+    elif variant == "v4_scope_signal":
+        prompt = V4_USER_PROMPT_TEMPLATE.format(raw_ocr_text=raw_text)
+        res = client.generate_json(
+            prompt=prompt,
+            system_instruction=V4_SYSTEM_INSTRUCTION,
+            model=model,
+            temperature=0.0,
+            enable_grounding=enable_grounding,
+        )
+        # Ambil pola_cakupan untuk audit, lalu strip sebelum masuk normalizer evaluator
+        pola_cakupan_audit = None
+        parsed_copy = dict(res.parsed_json) if isinstance(res.parsed_json, dict) else None
+        if parsed_copy is not None:
+            pola_cakupan_audit = parsed_copy.pop("pola_cakupan", None)
+
+        norm_fields = normalize_llm_json(parsed_copy)
+        latency = time.perf_counter() - t0
+
+        # Audit validitas enum pola_cakupan dan deteksi diskordansi dengan field tingkat
+        valid_pola_enums = {"TERBUKA_SE_INDONESIA", "INTERNASIONAL", "INTERNAL_KAMPUS", "TIDAK_DITEMUKAN"}
+        pola_is_valid = pola_cakupan_audit in valid_pola_enums
+        pola_discordance = False
+        tingkat_res = norm_fields.get("tingkat")
+        if pola_cakupan_audit == "TERBUKA_SE_INDONESIA" and tingkat_res != "Nasional":
+            pola_discordance = True
+        elif pola_cakupan_audit == "INTERNASIONAL" and tingkat_res != "Internasional":
+            pola_discordance = True
+
+        meta = {
+            "status": res.status,
+            "prompt_tokens": res.prompt_tokens,
+            "candidates_tokens": res.candidates_tokens,
+            "cached_tokens": res.cached_tokens,
+            "thoughts_tokens": res.thoughts_tokens,
+            "total_tokens": res.total_tokens,
+            "cost_usd": res.cost_usd,
+            "cost_idr": res.cost_idr,
+            "latency_s": latency,
+            "calls_count": 1,
+            "web_queries": res.web_search_queries,
+            "error": res.error_message,
+            "pola_cakupan": pola_cakupan_audit,
+            "pola_is_valid": pola_is_valid,
+            "pola_discordance": pola_discordance,
         }
         return norm_fields, meta
 
@@ -966,13 +1079,19 @@ def write_comparative_summary_md(
     """Menghasilkan laporan eksekutif markdown komprehensif dengan nilai N dinamis."""
     date_str = datetime.now().strftime("%d %B %Y")
     var_dict = summary.get("variants", {})
-    v1_u = var_dict.get("v1_baseline", {}).get("unified_full", {})
-    v2_u = var_dict.get("v2_scope_aware", {}).get("unified_full", {})
-    v3_u = var_dict.get("v3_decoupled", {}).get("unified_full", {})
 
-    n_unified = v1_u.get("n_docs", 0)
-    n_train = var_dict.get("v1_baseline", {}).get("train_v9", {}).get("n_docs", 0)
-    n_test = var_dict.get("v1_baseline", {}).get("test_elzandi", {}).get("n_docs", 0)
+    var_display_map = {
+        "v1_baseline": "Varian 1 (Baseline)",
+        "v2_scope_aware": "Varian 2 (Scope-Aware)",
+        "v3_decoupled": "Varian 3 (Decoupled 2-Stage)",
+        "v4_scope_signal": "Varian 4 (Scope Signal)",
+    }
+    active_vars = [v for v in var_display_map if v in var_dict] or list(var_dict.keys())
+
+    first_var = var_dict.get(active_vars[0], {}) if active_vars else {}
+    n_unified = first_var.get("unified_full", {}).get("n_docs", 0)
+    n_train = first_var.get("train_v9", {}).get("n_docs", 0)
+    n_test = first_var.get("test_elzandi", {}).get("n_docs", 0)
 
     is_complete = summary.get("is_complete", False)
     completed_evals = summary.get("completed_evaluations", 0)
@@ -989,89 +1108,75 @@ def write_comparative_summary_md(
         f"\n**Tanggal Evaluasi**: {date_str}  ",
         f"**Model Diuji**: `{summary.get('model', 'gemini-3.1-flash-lite')}`  ",
         f"**Backend**: `{summary.get('backend', 'gemini')}`  ",
-        f"**Status Kelengkapan**: `{'COMPLETE (312/312 Evaluasi)' if is_complete else f'INCOMPLETE ({completed_evals}/{expected_evals} Evaluasi)'}`  ",
-        f"**Dokumen Selesai Utuh (3 Varian)**: {summary.get('total_docs_fully_evaluated', 0)} / {summary.get('target_universe_documents', 104)} Dokumen  ",
-        f"**Ground Truth Acuan**: `Ground_Truth_Unified.csv` (104 label terverifikasi)  ",
+        f"**Status Kelengkapan**: `{'COMPLETE (' + str(completed_evals) + '/' + str(expected_evals) + ' Evaluasi)' if is_complete else f'INCOMPLETE ({completed_evals}/{expected_evals} Evaluasi)'}`  ",
+        f"**Dokumen Selesai Utuh ({len(active_vars)} Varian)**: {summary.get('total_docs_fully_evaluated', 0)} / {summary.get('target_universe_documents', 104)} Dokumen  ",
+        f"**Ground Truth Acuan**: `{Path(summary.get('gt_path', 'Ground_Truth_Unified.csv')).name}` ({summary.get('target_universe_documents', 104)} label terverifikasi)  ",
         f"**Evaluator**: Matcher v2 frozen (`tests/matchers.py`)  \n",
         "---",
         "\n## 1. Ringkasan Eksekutif & Pertanyaan Penelitian Utama",
         "\nEvaluasi ini dirancang secara empiris untuk menjawab pertanyaan mendasar arsitektur ekstraksi:",
-        "> *Apakah pemfokusan instruksi prompting pada field `tingkat` mendegradasi akurasi 5 field faktual lainnya (`nama_kegiatan`, `nomor`, `penyelenggara`, `tanggal_mulai`, `tanggal_selesai`), dan bagaimana komparasi efisiensi biaya serta akurasi antara Single-Pass Prompting vs Decoupled 2-Stage Pipeline?*",
-        "\n### Tiga Varian Arsitektur yang Dibandingkan:",
-        "1. **Varian 1 (Single-Pass Baseline Produksi)**: Ekstraksi 6 field sekaligus dalam satu prompt dengan aturan hierarki asal (`BEM Fakultas -> Fakultas`).",
-        "2. **Varian 2 (Single-Pass Scope-Aware)**: Ekstraksi 6 field sekaligus dalam satu prompt dengan revisi aturan *Scope > Organizer* (`Lomba Terbuka Mahasiswa Nasional -> Nasional`).",
-        "3. **Varian 3 (Decoupled 2-Stage Pipeline)**: Pemisahan total menjadi dua tahap: Stage 1 ekstraksi 5 field literal steril, disusul Stage 2 penentuan tingkat (Router Deterministik 18 rules $\\to$ Specialized LLM Fallback).",
+        "> *Apakah pemfokusan instruksi prompting pada field `tingkat` mendegradasi akurasi 5 field faktual lainnya (`nama_kegiatan`, `nomor`, `penyelenggara`, `tanggal_mulai`, `tanggal_selesai`), dan bagaimana komparasi efisiensi biaya serta akurasi antar arsitektur prompting?*",
+        "\n### Varian Arsitektur yang Dibandingkan:",
+    ])
+
+    variant_narrative_map = {
+        "v1_baseline": "**Varian 1 (Single-Pass Baseline Produksi)**: Ekstraksi 6 field sekaligus dalam satu prompt dengan aturan hierarki asal (`BEM Fakultas -> Fakultas`).",
+        "v2_scope_aware": "**Varian 2 (Single-Pass Scope-Aware)**: Ekstraksi 6 field sekaligus dalam satu prompt dengan revisi aturan *Scope > Organizer* (`Lomba Terbuka Mahasiswa Nasional -> Nasional`).",
+        "v3_decoupled": "**Varian 3 (Decoupled 2-Stage Pipeline)**: Pemisahan total menjadi dua tahap: Stage 1 ekstraksi 5 field literal steril, disusul Stage 2 penentuan tingkat (Router Deterministik 18 rules $\\to$ Specialized LLM Fallback).",
+        "v4_scope_signal": "**Varian 4 (Single-Pass In-JSON Scope Signal)**: Ekstraksi 6 field single-pass dengan intermediate controlled enum `pola_cakupan` sebelum emisi `tingkat`.",
+    }
+    for idx, v in enumerate(active_vars, 1):
+        lines.append(f"{idx}. {variant_narrative_map.get(v, v)}")
+
+    lines.extend([
         "\n---",
         f"\n## 2. Tabel Komparasi Performa Utama (Unified Dataset, N={n_unified})",
-        "\n| Metrik Evaluasi | Varian 1 (Baseline) | Varian 2 (Scope-Aware) | Varian 3 (Decoupled 2-Stage) | Selisih (V3 vs V1) |",
-        "|---|:---:|:---:|:---:|:---:|",
     ])
+
+    headers_sec2 = ["Metrik Evaluasi"] + [var_display_map.get(v, v) for v in active_vars]
+    lines.append("| " + " | ".join(headers_sec2) + " |")
+    lines.append("| " + " | ".join(["---"] + [":---:"] * len(active_vars)) + " |")
 
     def get_f(d: dict, p1: str, p2: str) -> float:
         return d.get(p1, {}).get(p2, 0.0)
 
+    def get_u(vk: str) -> dict:
+        return var_dict.get(vk, {}).get("unified_full", {})
+
     # All-cells
-    v1_all = get_f(v1_u, "all_cells_6f", "exact_pct")
-    v2_all = get_f(v2_u, "all_cells_6f", "exact_pct")
-    v3_all = get_f(v3_u, "all_cells_6f", "exact_pct")
     lines.append(
-        f"| **All-Cells 6F Exact** | **{v1_all:.2f}%** | **{v2_all:.2f}%** | **{v3_all:.2f}%** | **{v3_all - v1_all:+.2f}pt** |"
+        "| **All-Cells 6F Exact** | " + " | ".join(f"**{get_f(get_u(v), 'all_cells_6f', 'exact_pct'):.2f}%**" for v in active_vars) + " |"
     )
-
     # Fuzzy all-cells
-    v1_all_f = get_f(v1_u, "all_cells_6f", "fuzzy_pct")
-    v2_all_f = get_f(v2_u, "all_cells_6f", "fuzzy_pct")
-    v3_all_f = get_f(v3_u, "all_cells_6f", "fuzzy_pct")
     lines.append(
-        f"| All-Cells 6F Fuzzy | {v1_all_f:.2f}% | {v2_all_f:.2f}% | {v3_all_f:.2f}% | {v3_all_f - v1_all_f:+.2f}pt |"
+        "| All-Cells 6F Fuzzy | " + " | ".join(f"{get_f(get_u(v), 'all_cells_6f', 'fuzzy_pct'):.2f}%" for v in active_vars) + " |"
     )
-
     # Framework 5F
-    v1_fw = get_f(v1_u, "framework_5f", "exact_pct")
-    v2_fw = get_f(v2_u, "framework_5f", "exact_pct")
-    v3_fw = get_f(v3_u, "framework_5f", "exact_pct")
     lines.append(
-        f"| **Framework 5F Exact (Tanpa Tingkat)** | **{v1_fw:.2f}%** | **{v2_fw:.2f}%** | **{v3_fw:.2f}%** | **{v3_fw - v1_fw:+.2f}pt** |"
+        "| **Framework 5F Exact (Tanpa Tingkat)** | " + " | ".join(f"**{get_f(get_u(v), 'framework_5f', 'exact_pct'):.2f}%**" for v in active_vars) + " |"
     )
 
     # Per-field exact
     for f in ALL_6_FIELDS:
         f_title = f.replace("_", " ").title()
-        v1_pf = v1_u.get("per_field", {}).get(f, {}).get("exact_pct", 0.0)
-        v2_pf = v2_u.get("per_field", {}).get(f, {}).get("exact_pct", 0.0)
-        v3_pf = v3_u.get("per_field", {}).get(f, {}).get("exact_pct", 0.0)
         lines.append(
-            f"| - {f_title} | {v1_pf:.2f}% | {v2_pf:.2f}% | {v3_pf:.2f}% | {v3_pf - v1_pf:+.2f}pt |"
+            f"| - {f_title} | " + " | ".join(f"{get_u(v).get('per_field', {}).get(f, {}).get('exact_pct', 0.0):.2f}%" for v in active_vars) + " |"
         )
 
     # Confusion
-    v1_nf = v1_u.get("confusion_tingkat", {}).get("nasional_to_fakultas_count", 0)
-    v2_nf = v2_u.get("confusion_tingkat", {}).get("nasional_to_fakultas_count", 0)
-    v3_nf = v3_u.get("confusion_tingkat", {}).get("nasional_to_fakultas_count", 0)
     lines.append(
-        f"| **Hierarchical Error (Nasional $\\to$ Fakultas)** | {v1_nf} kasus | {v2_nf} kasus | {v3_nf} kasus | {v3_nf - v1_nf:+d} kasus |"
+        "| **Hierarchical Error (Nasional $\\to$ Fakultas)** | " + " | ".join(f"{get_u(v).get('confusion_tingkat', {}).get('nasional_to_fakultas_count', 0)} kasus" for v in active_vars) + " |"
     )
 
     # Tokens & Cost
-    v1_tok = v1_u.get("tokens_and_cost", {}).get("eff_tokens_per_doc", 0.0)
-    v2_tok = v2_u.get("tokens_and_cost", {}).get("eff_tokens_per_doc", 0.0)
-    v3_tok = v3_u.get("tokens_and_cost", {}).get("eff_tokens_per_doc", 0.0)
     lines.append(
-        f"| **Effective Tokens / Doc** | {v1_tok:.1f} tok | {v2_tok:.1f} tok | {v3_tok:.1f} tok | {v3_tok - v1_tok:+.1f} tok |"
+        "| **Effective Tokens / Doc** | " + " | ".join(f"{get_u(v).get('tokens_and_cost', {}).get('eff_tokens_per_doc', 0.0):.1f} tok" for v in active_vars) + " |"
     )
-
-    v1_cost = v1_u.get("tokens_and_cost", {}).get("total_cost_idr", 0.0)
-    v2_cost = v2_u.get("tokens_and_cost", {}).get("total_cost_idr", 0.0)
-    v3_cost = v3_u.get("tokens_and_cost", {}).get("total_cost_idr", 0.0)
     lines.append(
-        f"| **Total Biaya ({n_unified} Dokumen)** | Rp {v1_cost:,.2f} | Rp {v2_cost:,.2f} | Rp {v3_cost:,.2f} | Rp {v3_cost - v1_cost:+,.2f} |"
+        f"| **Total Biaya ({n_unified} Dokumen)** | " + " | ".join(f"Rp {get_u(v).get('tokens_and_cost', {}).get('total_cost_idr', 0.0):,.2f}" for v in active_vars) + " |"
     )
-
-    v1_proj = v1_u.get("tokens_and_cost", {}).get("projection_100k_certs_idr", 0.0)
-    v2_proj = v2_u.get("tokens_and_cost", {}).get("projection_100k_certs_idr", 0.0)
-    v3_proj = v3_u.get("tokens_and_cost", {}).get("projection_100k_certs_idr", 0.0)
     lines.append(
-        f"| **Proyeksi Biaya 100.000 Sertifikat** | Rp {v1_proj:,.0f} | Rp {v2_proj:,.0f} | Rp {v3_proj:,.0f} | Rp {v3_proj - v1_proj:+,.0f} |"
+        "| **Proyeksi Biaya 100.000 Sertifikat** | " + " | ".join(f"Rp {get_u(v).get('tokens_and_cost', {}).get('projection_100k_certs_idr', 0.0):,.0f}" for v in active_vars) + " |"
     )
 
     lines.extend([
@@ -1083,11 +1188,8 @@ def write_comparative_summary_md(
         "|---|:---:|:---:|:---:|:---:|:---:|:---:|",
     ])
 
-    for v_name, v_label in [
-        ("v1_baseline", "V1 Baseline"),
-        ("v2_scope_aware", "V2 Scope-Aware"),
-        ("v3_decoupled", "V3 Decoupled 2-Stage"),
-    ]:
+    for v_name in active_vars:
+        v_label = var_display_map.get(v_name, v_name)
         s1 = var_dict.get(v_name, {}).get("train_v9", {})
         pf = s1.get("per_field", {})
         lines.append(
@@ -1102,11 +1204,8 @@ def write_comparative_summary_md(
         "|---|:---:|:---:|:---:|:---:|:---:|:---:|",
     ])
 
-    for v_name, v_label in [
-        ("v1_baseline", "V1 Baseline"),
-        ("v2_scope_aware", "V2 Scope-Aware"),
-        ("v3_decoupled", "V3 Decoupled 2-Stage"),
-    ]:
+    for v_name in active_vars:
+        v_label = var_display_map.get(v_name, v_name)
         s2 = var_dict.get(v_name, {}).get("test_elzandi", {})
         pf = s2.get("per_field", {})
         lines.append(
@@ -1116,15 +1215,15 @@ def write_comparative_summary_md(
     lines.extend([
         "\n---",
         "\n## 4. Status Pembuktian Empiris & Keterbatasan Pengujian",
-        "\n1. **Cakupan Pengujian**: Eksperimen ini mengevaluasi akurasi All-6-Fields dan dinamika interferensi atensi pada 3 arsitektur prompting menggunakan model Google Gemini pada slice data Train (v9), Test (Elzandi), dan Unified.",
-        "2. **Status 4 Lapis Pembuktian Empiris**: Protokol 4 lapis pembuktian empiris formal (Lapis 1 5-Fold Stratified CV, Lapis 2 OOD Perturbation Mutasi/Noise, Lapis 3 Lexical Audit Bebas Hardcoding, dan Lapis 4 Calibrated Safety Net Review Recall) **TIDAK** dijalankan secara end-to-end dalam harness prompting ini. Catatan: Router deterministik pada Stage 2A Varian 3 telah memiliki bukti Lapis 1 (100% min-fold precision) dari pengujian sebelumnya (ROUTER-005/006), namun pipeline full end-to-end LLM belum diuji OOD.",
+        f"\n1. **Cakupan Pengujian**: Eksperimen ini mengevaluasi akurasi All-6-Fields dan dinamika interferensi atensi pada {len(active_vars)} arsitektur prompting menggunakan model Google Gemini pada slice data Train (v9), Test (Elzandi), dan Unified.",
+        "2. **Status 4 Lapis Pembuktian Empiris**: Protokol 4 lapis pembuktian empiris formal (Lapis 1 5-Fold Stratified CV, Lapis 2 OOD Perturbation Mutasi/Noise, Lapis 3 Lexical Audit Bebas Hardcoding, dan Lapis 4 Calibrated Safety Net Review Recall) **TIDAK** dijalankan secara end-to-end dalam harness prompting ini.",
         "3. **Prasyarat Promosi Produksi**: Sesuai tata kelola AGENTS.md, setiap promosi arsitektur ke tahap produksi WAJIB melalui pengujian 4 lapis lengkap dan persetujuan eksplisit dari pengguna (*user approval*).",
         "\n---",
         "\n## 5. Analisis Temuan Terukur & Rekomendasi Arsitektur",
-        f"\n1. **Temuan All-Cells 6F**: Varian 1={v1_all:.2f}%, Varian 2={v2_all:.2f}%, Varian 3={v3_all:.2f}%.",
-        f"2. **Temuan Framework 5F (Literal Faktual)**: Varian 1={v1_fw:.2f}%, Varian 2={v2_fw:.2f}%, Varian 3={v3_fw:.2f}%.",
-        f"3. **Efisiensi Komputasi & Token**: Varian 1={v1_tok:.1f} tok/doc, Varian 2={v2_tok:.1f} tok/doc, Varian 3={v3_tok:.1f} tok/doc.",
-        f"4. **Biaya Riil Operasional**: Total biaya untuk {n_unified} sertifikat: V1=Rp {v1_cost:,.2f}, V2=Rp {v2_cost:,.2f}, V3=Rp {v3_cost:,.2f}.",
+        "\n1. **Temuan All-Cells 6F**: " + ", ".join(f"{var_display_map.get(v, v)}={get_f(get_u(v), 'all_cells_6f', 'exact_pct'):.2f}%" for v in active_vars) + ".",
+        "2. **Temuan Framework 5F (Literal Faktual)**: " + ", ".join(f"{var_display_map.get(v, v)}={get_f(get_u(v), 'framework_5f', 'exact_pct'):.2f}%" for v in active_vars) + ".",
+        "3. **Efisiensi Komputasi & Token**: " + ", ".join(f"{var_display_map.get(v, v)}={get_u(v).get('tokens_and_cost', {}).get('eff_tokens_per_doc', 0.0):.1f} tok/doc" for v in active_vars) + ".",
+        f"4. **Biaya Riil Operasional**: Total biaya untuk {n_unified} sertifikat: " + ", ".join(f"{var_display_map.get(v, v)}=Rp {get_u(v).get('tokens_and_cost', {}).get('total_cost_idr', 0.0):,.2f}" for v in active_vars) + ".",
         "5. **Pencatatan Eksperimen**: Seluruh artefak tersimpan secara lengkap di folder `docs/experiments/EXP-ALL6F-PROMPT-001/` (`results.xlsx`, `comparative_metrics.json`, `evaluation_details.csv`, `PROMPT_REGISTRY.md`).",
     ])
 
@@ -1370,6 +1469,7 @@ def run_benchmark(
         "run_identity": run_id,
         "backend": backend,
         "model": gemini_model,
+        "gt_path": str(gt_path),
         "completed_evaluations": completed_evals,
         "expected_evaluations": expected_evals,
         "is_complete": is_complete,
@@ -1417,8 +1517,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--gt-path",
-        default=os.path.join(REPO_ROOT, "Ground_Truth_Unified.csv"),
-        help="Path ke Ground_Truth_Unified.csv",
+        default=os.environ.get("GT_CSV_PATH", os.path.join(REPO_ROOT, "Ground_Truth_Sertifikat_v9.csv")),
+        help="Path ke Ground Truth CSV acuan (default: Ground_Truth_Sertifikat_v9.csv per protokol AGENTS.md)",
     )
     parser.add_argument(
         "--backend",
