@@ -106,12 +106,19 @@ def load_ocr_texts_map(texts_source: Path) -> dict[str, str]:
         for p in texts_source.glob("*.txt"):
             txt = p.read_text(encoding="utf-8", errors="replace").strip()
             norm_name = p.name.lower()
+            if norm_name in texts_map and texts_map[norm_name] != txt:
+                raise ValueError(f"Deteksi duplikasi/konflik teks OCR untuk file: '{p.name}'")
             texts_map[norm_name] = txt
             # Izinkan juga pencocokan jika nama file di GT berakhiran .pdf, .png, .jpg, .jpeg tapi di dir berakhiran .txt
             stem = p.stem.lower()
+            if stem in texts_map and texts_map[stem] != txt:
+                raise ValueError(f"Deteksi duplikasi/konflik stem OCR untuk file: '{p.name}'")
             texts_map[stem] = txt
             for ext in (".pdf", ".png", ".jpg", ".jpeg"):
-                texts_map[stem + ext] = txt
+                alias_key = stem + ext
+                if alias_key in texts_map and texts_map[alias_key] != txt:
+                    raise ValueError(f"Deteksi duplikasi/konflik alias OCR '{alias_key}' untuk file: '{p.name}'")
+                texts_map[alias_key] = txt
 
     return texts_map
 

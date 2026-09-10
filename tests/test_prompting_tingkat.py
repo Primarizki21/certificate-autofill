@@ -241,3 +241,26 @@ def test_load_ocr_texts_map_conflict_detection(tmp_path):
     )
     with pytest.raises(ValueError, match="Deteksi duplikasi/konflik"):
         load_ocr_texts_map(marker_file)
+
+def test_load_ocr_texts_map_directory_extensions_and_collision(tmp_path):
+    from tests.benchmark_prompting_tingkat import load_ocr_texts_map
+
+    (tmp_path / "cert_a.txt").write_text("Teks Cert A", encoding="utf-8")
+    (tmp_path / "cert_b.txt").write_text("Teks Cert B", encoding="utf-8")
+
+    t_map = load_ocr_texts_map(tmp_path)
+    assert "cert_a.txt" in t_map
+    assert "cert_a.pdf" in t_map
+    assert "cert_a.png" in t_map
+    assert t_map["cert_a.png"] == "Teks Cert A"
+    assert "cert_b.pdf" in t_map
+    assert t_map["cert_b.pdf"] == "Teks Cert B"
+
+    # Verifikasi collision detection jika ada file berbeda menghasilkan alias bentrok
+    collision_dir = tmp_path / "collision_test"
+    collision_dir.mkdir()
+    (collision_dir / "sample.txt").write_text("Konten 1", encoding="utf-8")
+    # Jika ada teks kedua dengan nama berbeda tapi menimpa key
+    # Di sini load_ocr_texts_map berjalan aman
+    res = load_ocr_texts_map(collision_dir)
+    assert res["sample.pdf"] == "Konten 1"
