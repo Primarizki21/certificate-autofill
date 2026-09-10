@@ -1225,12 +1225,32 @@ def write_comparative_summary_md(
         "2. **Temuan Framework 5F (Literal Faktual)**: " + ", ".join(f"{var_display_map.get(v, v)}={get_f(get_u(v), 'framework_5f', 'exact_pct'):.2f}%" for v in active_vars) + ".",
         "3. **Efisiensi Komputasi & Token**: " + ", ".join(f"{var_display_map.get(v, v)}={get_u(v).get('tokens_and_cost', {}).get('eff_tokens_per_doc', 0.0):.1f} tok/doc" for v in active_vars) + ".",
         f"4. **Biaya Riil Operasional**: Total biaya untuk {n_unified} sertifikat: " + ", ".join(f"{var_display_map.get(v, v)}=Rp {get_u(v).get('tokens_and_cost', {}).get('total_cost_idr', 0.0):,.2f}" for v in active_vars) + ".",
-        "5. **Pencatatan Eksperimen**: Seluruh artefak tersimpan secara lengkap di folder `docs/experiments/EXP-ALL6F-PROMPT-001/` (`results.xlsx`, `comparative_metrics.json`, `evaluation_details.csv`, `PROMPT_REGISTRY.md`).",
+        f"5. **Pencatatan Eksperimen**: Seluruh artefak tersimpan secara lengkap di folder `{out_path.parent}` (`results.xlsx`, `comparative_metrics.json`, `evaluation_details.csv`, `PROMPT_REGISTRY.md`).",
     ])
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text("\n".join(lines), encoding="utf-8")
     logger.info(f"Markdown summary saved: {out_path}")
+
+
+def write_prompt_registry(out_path: Path, active_variants: list[str]) -> None:
+    """Menulis PROMPT_REGISTRY.md berisi salinan prompt untuk setiap varian aktif."""
+    registry = {
+        "v1_baseline": ("V1 Single-Pass Baseline Produksi", V1_SYSTEM_INSTRUCTION, V1_USER_PROMPT_TEMPLATE),
+        "v2_scope_aware": ("V2 Single-Pass Scope-Aware", V2_SYSTEM_INSTRUCTION, V2_USER_PROMPT_TEMPLATE),
+        "v3_decoupled": ("V3 Decoupled 2-Stage Pipeline", V3_STAGE1_SYSTEM_INSTRUCTION + "\n\n---\n\n" + V3_STAGE2B_SYSTEM_INSTRUCTION, V3_STAGE1_USER_PROMPT_TEMPLATE + "\n\n---\n\n" + V3_STAGE2B_USER_PROMPT_TEMPLATE),
+        "v4_scope_signal": ("V4 Single-Pass In-JSON Scope Signal", V4_SYSTEM_INSTRUCTION, V4_USER_PROMPT_TEMPLATE),
+    }
+    lines = ["# Prompt Registry\n"]
+    for vk in active_variants:
+        if vk in registry:
+            title, sys_inst, usr_tmpl = registry[vk]
+            lines.append(f"## {title} (`{vk}`)\n")
+            lines.append("### System Instruction\n```\n" + sys_inst.strip() + "\n```\n")
+            lines.append("### User Prompt Template\n```\n" + usr_tmpl.strip() + "\n```\n")
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text("\n".join(lines), encoding="utf-8")
+    logger.info(f"Prompt registry saved: {out_path}")
 
 
 # ==============================================================================
@@ -1495,6 +1515,9 @@ def run_benchmark(
 
     md_path = out_dir_path / "comparative_summary.md"
     write_comparative_summary_md(md_path, overall_summary)
+
+    prompt_reg_path = out_dir_path / "PROMPT_REGISTRY.md"
+    write_prompt_registry(prompt_reg_path, active_variants)
 
     if is_complete:
         logger.info(
