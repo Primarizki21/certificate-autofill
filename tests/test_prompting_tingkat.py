@@ -256,10 +256,18 @@ def test_load_ocr_texts_map_directory_extensions_and_collision(tmp_path):
     assert "cert_b.pdf" in t_map
     assert t_map["cert_b.pdf"] == "Teks Cert B"
 
-    # Verifikasi collision detection jika ada file berbeda menghasilkan alias bentrok
-    collision_dir = tmp_path / "collision_test"
-    collision_dir.mkdir()
-    (collision_dir / "cert.txt").write_text("Konten Asli", encoding="utf-8")
-    (collision_dir / "cert.pdf.txt").write_text("Konten Berbeda", encoding="utf-8")
-    with pytest.raises(ValueError, match="Deteksi duplikasi/konflik"):
-        load_ocr_texts_map(collision_dir)
+    # 1. Verifikasi collision detection pada alias ekstensi (.txt vs .pdf.txt)
+    collision_dir_alias = tmp_path / "collision_alias"
+    collision_dir_alias.mkdir()
+    (collision_dir_alias / "cert.txt").write_text("Konten Asli", encoding="utf-8")
+    (collision_dir_alias / "cert.pdf.txt").write_text("Konten Berbeda", encoding="utf-8")
+    with pytest.raises(ValueError, match="Deteksi duplikasi/konflik alias OCR"):
+        load_ocr_texts_map(collision_dir_alias)
+
+    # 2. Verifikasi collision detection pada case-collision (Sample.txt vs sample.txt)
+    collision_dir_case = tmp_path / "collision_case"
+    collision_dir_case.mkdir()
+    (collision_dir_case / "Sample.txt").write_text("Konten 1", encoding="utf-8")
+    (collision_dir_case / "sample.txt").write_text("Konten 2", encoding="utf-8")
+    with pytest.raises(ValueError, match="Deteksi duplikasi/konflik teks OCR"):
+        load_ocr_texts_map(collision_dir_case)
