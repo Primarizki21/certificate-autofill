@@ -7,14 +7,20 @@ from pathlib import Path
 _backend_dir = str(Path(__file__).resolve().parent.parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
-
+import csv
 import hashlib
 import json
+import io
+import secrets
 import uuid
+from datetime import datetime
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response
+from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
+import openpyxl
+from openpyxl.utils import get_column_letter
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
 from sqlalchemy.orm import Session
 from app.config import settings
@@ -214,4 +220,137 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtract
         status=document.status,
         needs_review=needs_review,
         fields=field_dict,
+    )
+
+security = HTTPBasic()
+
+
+def verify_admin(credentials: HTTPBasicCredentials = Depends(security)) -> str:
+    correct_username = secrets.compare_digest(credentials.username, settings.admin_username)
+    correct_password = secrets.compare_digest(credentials.password, settings.admin_password)
+    if not (correct_username and correct_password):
+        raise HTTPException(
+            status_code=401,
+            detail="Akses ditolak: Kredensial admin tidak valid.",
+            headers={"WWW-Authenticate": "Basic"},
+        )
+    return credentials.username
+
+
+@app.get("/api/admin/documents/export")
+def export_documents(
+    format: str = "xlsx",
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/documents/export").inc()
+    docs = db.query(Document).order_by(Document.created_at.desc()).all()
+
+    doc_ids = [d.id for d in docs]
+    all_fields = db.query(ExtractedField).filter(ExtractedField.document_id.in_(doc_ids)).all() if doc_ids else []
+    fields_by_doc: dict[str, dict[str, ExtractedField]] = {}
+    for f in all_fields:
+        fields_by_doc.setdefault(str(f.document_id), {})[f.form_field_name] = f
+
+    headers = [
+        ("No", "no"),
+        ("ID Dokumen", "id"),
+        ("Waktu Upload", "created_at"),
+        ("Nama File Asli", "original_file_name"),
+        ("Tahun Akademik", "tahun_akademik"),
+        ("Bukti Fisik", "bukti_fisik"),
+        ("Status", "status"),
+        ("Engine Parser", "parser_engine"),
+        ("Nama Kegiatan", "nama_kegiatan_sertifikasi"),
+        ("Nomor Bukti Fisik / Sertifikat", "nomor_bukti_fisik_nomor_sertifikasi"),
+        ("Penyelenggara Kegiatan", "penyelenggara_kegiatan"),
+        ("Jenis Penyelenggara", "jenis_penyelenggara"),
+        ("Tingkat", "tingkat"),
+        ("Prestasi / Partisipasi / Jabatan", "prestasi_partisipasi_jabatan"),
+        ("Kelompok Kegiatan", "kelompok_kegiatan"),
+        ("Jenis Kegiatan", "jenis_kegiatan"),
+        ("Waktu Mulai", "waktu_mulai_pelaksanaan"),
+        ("Waktu Selesai", "waktu_selesai_pelaksanaan"),
+        ("Avg Confidence", "avg_confidence"),
+        ("Perlu Review", "needs_review"),
+    ]
+    header_labels = [h[0] for h in headers]
+
+    rows = []
+    for idx, doc in enumerate(docs, start=1):
+        fmap = fields_by_doc.get(str(doc.id), {})
+
+        def _val(fname: str) -> str:
+            field = fmap.get(fname)
+            if not field:
+                return ""
+            return field.mapped_value or field.extracted_value or ""
+
+        conf_list = [float(f.confidence) for f in fmap.values() if f.confidence is not None]
+        avg_conf = round(sum(conf_list) / len(conf_list), 4) if conf_list else 0.0
+        has_review = any(bool(f.needs_review) for f in fmap.values()) or doc.status == "needs_review"
+
+        row_data = {
+            "no": idx,
+            "id": str(doc.id),
+            "created_at": doc.created_at.strftime("%Y-%m-%d %H:%M:%S") if doc.created_at else "",
+            "original_file_name": doc.original_file_name,
+            "tahun_akademik": doc.tahun_akademik,
+            "bukti_fisik": doc.bukti_fisik,
+            "status": doc.status,
+            "parser_engine": doc.parser_engine or "-",
+            "nama_kegiatan_sertifikasi": _val("nama_kegiatan_sertifikasi"),
+            "nomor_bukti_fisik_nomor_sertifikasi": _val("nomor_bukti_fisik_nomor_sertifikasi"),
+            "penyelenggara_kegiatan": _val("penyelenggara_kegiatan"),
+            "jenis_penyelenggara": _val("jenis_penyelenggara"),
+            "tingkat": _val("tingkat"),
+            "prestasi_partisipasi_jabatan": _val("prestasi_partisipasi_jabatan"),
+            "kelompok_kegiatan": _val("kelompok_kegiatan"),
+            "jenis_kegiatan": _val("jenis_kegiatan"),
+            "waktu_mulai_pelaksanaan": _val("waktu_mulai_pelaksanaan"),
+            "waktu_selesai_pelaksanaan": _val("waktu_selesai_pelaksanaan"),
+            "avg_confidence": avg_conf,
+            "needs_review": "Ya" if has_review else "Tidak",
+        }
+        rows.append(row_data)
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"riwayat_sertifikat_{timestamp}"
+
+    if format.lower() == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(header_labels)
+        for r in rows:
+            writer.writerow([r[h[1]] for h in headers])
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+        )
+
+    # Default XLSX
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "Riwayat Sertifikat"
+    ws.append(header_labels)
+
+    for cell in ws[1]:
+        cell.font = openpyxl.styles.Font(bold=True)
+
+    for r in rows:
+        ws.append([r[h[1]] for h in headers])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 40)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
     )
