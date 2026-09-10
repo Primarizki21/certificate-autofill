@@ -1271,6 +1271,7 @@ def run_benchmark(
     enable_grounding: bool = False,
     pacing_delay: float = 1.2,
     timeout_s: float = 35.0,
+    force: bool = False,
 ) -> dict[str, Any]:
     """Menjalankan alur benchmark All-6-Fields komprehensif dengan namespaced checkpointing."""
     logger.info("=== Starting All-6-Fields & Prompting Architecture Benchmark ===")
@@ -1329,6 +1330,22 @@ def run_benchmark(
     )
     checkpoint_file = out_dir_path / f"checkpoint_{run_id}.jsonl"
 
+    # Proteksi Immutability (B14 AGENTS.md):
+    # Jika folder output sudah memiliki deliverable eksperimen apa pun, tolak tanpa --force
+    deliverable_files = [
+        out_dir_path / "comparative_summary.md",
+        out_dir_path / "comparative_metrics.json",
+        out_dir_path / "results.xlsx",
+        out_dir_path / "evaluation_details.csv",
+        out_dir_path / "PROMPT_REGISTRY.md",
+    ]
+    existing_deliverables = [f.name for f in deliverable_files if f.exists()]
+    if existing_deliverables and not force:
+        raise FileExistsError(
+            f"Folder output '{output_dir}' sudah berisi deliverable eksperimen ({', '.join(existing_deliverables)}). "
+            "Sesuai aturan B14 AGENTS.md, dilarang keras menimpa eksperimen lama tanpa persetujuan eksplisit. "
+            "Gunakan folder output terisolasi baru (mis. EXP-ALL6F-PROMPT-004) atau sertakan flag --force jika diizinkan."
+        )
     # Load verified checkpoint records
     checkpoint_records: dict[tuple[str, str], dict[str, Any]] = {}
     if checkpoint_file.exists():
@@ -1573,6 +1590,11 @@ def main() -> None:
         help="Indeks awal dokumen",
     )
     parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Izinkan penimpaan deliverable eksperimen pada output-dir yang sudah ada (B14 AGENTS.md)",
+    )
+    parser.add_argument(
         "--timeout-s",
         type=float,
         default=35.0,
@@ -1625,6 +1647,7 @@ def main() -> None:
         enable_grounding=args.enable_grounding,
         pacing_delay=args.pacing_delay,
         timeout_s=args.timeout_s,
+        force=args.force,
     )
 if __name__ == "__main__":
     main()

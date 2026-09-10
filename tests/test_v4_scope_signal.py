@@ -3,6 +3,7 @@
 import json
 from pathlib import Path
 from typing import Any
+import pytest
 
 from tests.benchmark_all6f_prompting import (
     ALL_6_FIELDS,
@@ -217,3 +218,37 @@ class TestV4PromptContract:
                 sep_line = lines[idx + 1]
                 seps = [c.strip() for c in sep_line.split("|")[1:-1]]
                 assert len(seps) == len(headers)
+
+    def test_immutability_guard_refuses_overwrite_without_force(self, tmp_path: Path) -> None:
+        """Memastikan guard B14 menolak penimpaan deliverable yang sudah ada tanpa flag force."""
+        from tests.benchmark_all6f_prompting import run_benchmark
+
+        # Buat deliverable palsu di folder
+        (tmp_path / "comparative_summary.md").write_text("Dummy summary", encoding="utf-8")
+        manifest_file = tmp_path / "manifest.json"
+        manifest_file.write_text("[]", encoding="utf-8")
+        gt_file = tmp_path / "gt.csv"
+        gt_file.write_text("Nama File,Tingkat\n", encoding="utf-8")
+
+        # Tanpa force -> wajib raise FileExistsError
+        with pytest.raises(FileExistsError) as exc_info:
+            run_benchmark(
+                manifest_path=str(manifest_file),
+                gt_path=str(gt_file),
+                backend="mock",
+                output_dir=str(tmp_path),
+                cache_dir=str(tmp_path / "cache"),
+                force=False,
+            )
+        assert "B14 AGENTS.md" in str(exc_info.value)
+
+        # Dengan force -> diizinkan lanjut
+        res = run_benchmark(
+            manifest_path=str(manifest_file),
+            gt_path=str(gt_file),
+            backend="mock",
+            output_dir=str(tmp_path),
+            cache_dir=str(tmp_path / "cache"),
+            force=True,
+        )
+        assert isinstance(res, dict)
