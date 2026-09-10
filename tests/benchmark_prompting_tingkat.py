@@ -107,10 +107,11 @@ def load_ocr_texts_map(texts_source: Path) -> dict[str, str]:
             txt = p.read_text(encoding="utf-8", errors="replace").strip()
             norm_name = p.name.lower()
             texts_map[norm_name] = txt
-            # Izinkan juga pencocokan jika nama file di GT berakhiran .pdf tapi di dir berakhiran .txt
-            if norm_name.endswith(".txt"):
-                pdf_variant = norm_name[:-4] + ".pdf"
-                texts_map[pdf_variant] = txt
+            # Izinkan juga pencocokan jika nama file di GT berakhiran .pdf, .png, .jpg, .jpeg tapi di dir berakhiran .txt
+            stem = p.stem.lower()
+            texts_map[stem] = txt
+            for ext in (".pdf", ".png", ".jpg", ".jpeg"):
+                texts_map[stem + ext] = txt
 
     return texts_map
 
@@ -354,6 +355,45 @@ def run_benchmark(
 
     llm_func = make_llm_runner(backend, gemini_model=gemini_model, enable_grounding=enable_grounding)
     results_by_tech: dict[str, list[EvalRecord]] = {tech: [] for tech in selected_techniques}
+    completed_keys: set[tuple[str, str]] = set()
+    if output_dir:
+        output_dir.mkdir(parents=True, exist_ok=True)
+        ckpt_path = output_dir / "checkpoint_details.jsonl"
+        if ckpt_path.exists():
+            with open(ckpt_path, "r", encoding="utf-8") as f_ckpt:
+                for line in f_ckpt:
+                    line_s = line.strip()
+                    if not line_s:
+                        continue
+                    try:
+                        cdata = json.loads(line_s)
+                        fn = cdata["filename"]
+                        tech = cdata["technique"]
+                        if tech in results_by_tech and (fn, tech) not in completed_keys:
+                            rec = EvalRecord(
+                                filename=fn,
+                                gt_tingkat=cdata.get("gt_tingkat", ""),
+                                pred_tingkat=cdata.get("pred_tingkat"),
+                                is_match=bool(cdata.get("is_match", False)),
+                                needs_review=bool(cdata.get("needs_review", False)),
+                                confidence=float(cdata.get("confidence", 0.0)),
+                                technique=tech,
+                                latency_s=float(cdata.get("latency_s", 0.0)),
+                                prompt_tokens=int(cdata.get("prompt_tokens", 0)),
+                                candidates_tokens=int(cdata.get("candidates_tokens", 0)),
+                                cached_tokens=int(cdata.get("cached_tokens", 0)),
+                                thoughts_tokens=int(cdata.get("thoughts_tokens", 0)),
+                                total_tokens=int(cdata.get("total_tokens", 0)),
+                                cost_usd=float(cdata.get("cost_usd", 0.0)),
+                                cost_idr=float(cdata.get("cost_idr", 0.0)),
+                                web_queries=cdata.get("web_queries", []),
+                            )
+                            results_by_tech[tech].append(rec)
+                            completed_keys.add((fn, tech))
+                    except Exception:
+                        pass
+            if completed_keys:
+                print(f"[Checkpoint Loaded]: {len(completed_keys)} record(s) sudah selesai, melanjutkan sisa...")
     print(f"=== Menjalankan Benchmark Prompting Tingkat ===")
     print(f"Dataset: {gt_path.name} ({len(records)} baris)")
     print(f"Teks OCR Source: {texts_path}")
@@ -381,6 +421,8 @@ def run_benchmark(
         known_fields: dict[str, str] = {}
 
         for tech in selected_techniques:
+            if (orig_filename, tech) in completed_keys:
+                continue
             t0 = time.perf_counter()
             res = evaluate_single(tech, raw_text, known_fields, llm_func)
             lat = time.perf_counter() - t0
