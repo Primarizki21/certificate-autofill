@@ -4,10 +4,14 @@ Eksperimen: EXP-GATED-SEARCH-001
 Tujuan:
 1. Menguji efektivitas filter regex berbasis anchor semantik struktural untuk kata kunci tingkat eksplisit
    (mis. "tingkat nasional", "tingkatan nasional", "tingkat fakultas") sebagai bypass penelusuran web.
-2. Mengevaluasi precision dan bypass rate regex gating pada korpus holdout target.
+2. Mengevaluasi precision dan bypass rate regex gating pada korpus holdout target dan unified universe.
 3. Menangani kasus ambigu melalui fallback Search Stage 2 dengan flag needs_review
    bila kueri web tidak terpicu (Q=0) atau terjadi konflik multi-level.
-4. Menghasilkan output kanonikal ExtractedValue(value, confidence, source) pada seluruh alur inferensi.
+4. Membandingkan 3 arms evaluasi pada shared Stage 1:
+   - control_arm: v3_text_control (tanpa search)
+   - search_arm: v3_search_cot (tanpa gate, search selalu aktif)
+   - gated_arm: v3_gated_search (regex gate -> bypass jika eksplisit; fallback jika ambigu)
+5. Menghasilkan output kanonikal ExtractedValue(value, confidence, source) pada seluruh alur inferensi.
 """
 
 from __future__ import annotations
@@ -103,17 +107,21 @@ def detect_explicit_level(raw_text: str) -> tuple[str | None, str | None, bool]:
     if not raw_text or not raw_text.strip():
         return None, None, False
 
-    # Guard negasi murni (bukan / tidak)
+    # Guard negasi tegas (bukan, tidak, tidak termasuk, bukan pada)
     cleaned_text = re.sub(
-        r"\b(?:bukan|tidak)\s+(?:tingkat|tingkatan|skala)\s+\w+\b",
+        r"\b(?:bukan|tidak|tidak\s+termasuk|bukan\s+pada)\s+(?:tingkat|tingkatan|skala)\s+\w+\b",
         "",
         raw_text,
         flags=re.IGNORECASE,
     )
 
-    # Deteksi konteks transisi ambigu ("menuju tingkat ...", "calon ...")
+    # Deteksi konteks transisi ambigu ("menuju tingkat ...", "calon ...", "seleksi untuk ...")
     has_transitional = bool(
-        re.search(r"\b(?:menuju|calon|persiapan)\s+(?:tingkat|tingkatan|skala)\s+\w+\b", raw_text, re.IGNORECASE)
+        re.search(
+            r"\b(?:menuju|calon|persiapan|seleksi\s+untuk)\s+(?:tingkat|tingkatan|skala)\s+\w+\b",
+            raw_text,
+            re.IGNORECASE,
+        )
     )
 
     detected_levels: list[tuple[str, str]] = []
@@ -317,3 +325,50 @@ def run_gated_search_audit(
         "bypass_rate_pct": round(bypass_rate, 2),
         "records": records,
     }
+
+
+def main() -> None:
+    """CLI runner untuk audit gating regex EXP-GATED-SEARCH-001."""
+    parser = argparse.ArgumentParser(description="Audit Gated Search Explicit Regex")
+    parser.add_argument(
+        "--manifest-path",
+        default="certs_unified/manifest.json",
+        help="Path ke manifest.json",
+    )
+    parser.add_argument(
+        "--gt-path",
+        default="Ground_Truth_Unified.csv",
+        help="Path ke Ground_Truth_Unified.csv",
+    )
+    parser.add_argument(
+        "--dataset-slice",
+        choices=["target_15", "elzandi_30", "v9_74", "unified_104"],
+        default="target_15",
+        help="Slice dataset yang diaudit",
+    )
+    args = parser.parse_args()
+
+    slice_map = {
+        "target_15": list(range(88, 103)),
+        "elzandi_30": list(range(74, 104)),
+        "v9_74": list(range(0, 74)),
+        "unified_104": list(range(0, 104)),
+    }
+    indices = slice_map[args.dataset_slice]
+
+    res = run_gated_search_audit(
+        manifest_path=args.manifest_path,
+        gt_path=args.gt_path,
+        target_indices=indices,
+    )
+    print(f"\n=== Hasil Audit Gated Search: {args.dataset_slice} ===")
+    print(f"Total Dokumen    : {res['total_docs']}")
+    print(f"Safe Bypass      : {res['safe_bypass_count']} ({res['bypass_rate_pct']}%)")
+    print(f"Correct Safe     : {res['correct_safe_bypass']}")
+    print(f"Precision Safe   : {res['precision_pct']}%")
+    print(f"Konflik / Ambigu : {res['conflict_count']}")
+    print(f"Perlu Fallback   : {res['fallback_count']}")
+
+
+if __name__ == "__main__":
+    main()
