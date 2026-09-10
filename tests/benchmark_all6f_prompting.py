@@ -569,6 +569,7 @@ def run_gemini_inference(
             "pola_cakupan": pola_cakupan_audit,
             "pola_is_valid": pola_is_valid,
             "pola_discordance": pola_discordance,
+            "needs_review": (not pola_is_valid) or pola_discordance or (res.status != "success"),
         }
         return norm_fields, meta
 
@@ -1110,7 +1111,7 @@ def write_comparative_summary_md(
         f"**Backend**: `{summary.get('backend', 'gemini')}`  ",
         f"**Status Kelengkapan**: `{'COMPLETE (' + str(completed_evals) + '/' + str(expected_evals) + ' Evaluasi)' if is_complete else f'INCOMPLETE ({completed_evals}/{expected_evals} Evaluasi)'}`  ",
         f"**Dokumen Selesai Utuh ({len(active_vars)} Varian)**: {summary.get('total_docs_fully_evaluated', 0)} / {summary.get('target_universe_documents', 104)} Dokumen  ",
-        f"**Ground Truth Acuan**: `{Path(summary.get('gt_path', 'Ground_Truth_Unified.csv')).name}` ({summary.get('target_universe_documents', 104)} label terverifikasi)  ",
+        f"**Ground Truth Acuan**: `{Path(summary.get('gt_path', 'Ground_Truth_Sertifikat_v9.csv')).name}` ({summary.get('target_universe_documents', 74)} label terverifikasi)  ",
         f"**Evaluator**: Matcher v2 frozen (`tests/matchers.py`)  \n",
         "---",
         "\n## 1. Ringkasan Eksekutif & Pertanyaan Penelitian Utama",
@@ -1137,11 +1138,11 @@ def write_comparative_summary_md(
     lines.append("| " + " | ".join(headers_sec2) + " |")
     lines.append("| " + " | ".join(["---"] + [":---:"] * len(active_vars)) + " |")
 
-    def get_f(d: dict, p1: str, p2: str) -> float:
-        return d.get(p1, {}).get(p2, 0.0)
+    def get_f(d: dict[str, Any], p1: str, p2: str) -> float:
+        return float(d.get(p1, {}).get(p2, 0.0))
 
-    def get_u(vk: str) -> dict:
-        return var_dict.get(vk, {}).get("unified_full", {})
+    def get_u(vk: str) -> dict[str, Any]:
+        return dict(var_dict.get(vk, {}).get("unified_full", {}))
 
     # All-cells
     lines.append(

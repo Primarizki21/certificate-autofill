@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-import pytest
+from typing import Any
 
 from tests.benchmark_all6f_prompting import (
     ALL_6_FIELDS,
@@ -17,7 +17,7 @@ from tests.gemini_client import GeminiCallResult
 
 
 class TestV4PromptContract:
-    def test_v4_prompt_templates_exist_and_format(self):
+    def test_v4_prompt_templates_exist_and_format(self) -> None:
         """Memastikan prompt instruction dan user template V4 terdefinisi dan dapat di-format."""
         assert "pola_cakupan" in V4_SYSTEM_INSTRUCTION
         assert "TERBUKA_SE_INDONESIA" in V4_SYSTEM_INSTRUCTION
@@ -30,7 +30,7 @@ class TestV4PromptContract:
         assert "pola_cakupan" in formatted
         assert "tingkat" in formatted
 
-    def test_in_json_signal_extraction_and_stripping(self):
+    def test_in_json_signal_extraction_and_stripping(self) -> None:
         """Memastikan pola_cakupan dapat diekstrak untuk audit lalu di-strip sebelum evaluasi 6F."""
         raw_response = {
             "nama_kegiatan_sertifikasi": "Lomba Hackathon Nasional 2025",
@@ -60,12 +60,13 @@ class TestV4PromptContract:
         assert norm["tingkat"] == "Nasional"
         assert norm["nama_kegiatan_sertifikasi"] == "Lomba Hackathon Nasional 2025"
 
-    def test_pola_cakupan_validity_and_discordance(self):
-        """Memastikan audit validitas enum dan deteksi diskordansi antara pola_cakupan vs tingkat."""
+    def test_pola_cakupan_validity_and_discordance(self) -> None:
+        """Memastikan audit validitas enum, needs_review, dan deteksi diskordansi."""
         class MockClientSuccess:
-            def __init__(self, payload):
+            def __init__(self, payload: dict[str, Any]) -> None:
                 self.payload = payload
-            def generate_json(self, **kwargs):
+
+            def generate_json(self, **kwargs: Any) -> GeminiCallResult:
                 return GeminiCallResult(
                     response_text=json.dumps(self.payload),
                     parsed_json=self.payload,
@@ -87,24 +88,27 @@ class TestV4PromptContract:
         assert meta1["pola_cakupan"] == "TERBUKA_SE_INDONESIA"
         assert meta1["pola_is_valid"] is True
         assert meta1["pola_discordance"] is False
+        assert meta1["needs_review"] is False
 
-        # Kasus 2: Diskordan (TERBUKA_SE_INDONESIA -> Fakultas)
+        # Kasus 2: Diskordan (TERBUKA_SE_INDONESIA -> Fakultas) -> picu needs_review
         payload2 = {"pola_cakupan": "TERBUKA_SE_INDONESIA", "tingkat": "Fakultas"}
         _, meta2 = run_gemini_inference("v4_scope_signal", "sample", MockClientSuccess(payload2), "gemini-3.1-flash-lite")
         assert meta2["pola_cakupan"] == "TERBUKA_SE_INDONESIA"
         assert meta2["pola_is_valid"] is True
         assert meta2["pola_discordance"] is True
+        assert meta2["needs_review"] is True
 
-        # Kasus 3: Invalid enum
+        # Kasus 3: Invalid enum -> picu needs_review
         payload3 = {"pola_cakupan": "ASUMSI_SENDIRI", "tingkat": "Nasional"}
         _, meta3 = run_gemini_inference("v4_scope_signal", "sample", MockClientSuccess(payload3), "gemini-3.1-flash-lite")
         assert meta3["pola_cakupan"] == "ASUMSI_SENDIRI"
         assert meta3["pola_is_valid"] is False
+        assert meta3["needs_review"] is True
 
-    def test_fail_closed_on_none_or_malformed(self):
+    def test_fail_closed_on_none_or_malformed(self) -> None:
         """Memastikan respons kosong/malformed ditangani secara fail-closed pada run_gemini_inference."""
         class MockGeminiClientFail:
-            def generate_json(self, **kwargs):
+            def generate_json(self, **kwargs: Any) -> GeminiCallResult:
                 return GeminiCallResult(
                     response_text="",
                     parsed_json=None,
@@ -130,10 +134,11 @@ class TestV4PromptContract:
         assert meta["status"] == "error"
         assert meta["error"] == "JSON parse error"
         assert meta["pola_cakupan"] is None
+        assert meta["needs_review"] is True
         for f in ALL_6_FIELDS:
             assert norm_fields.get(f) is None
 
-    def test_run_mock_inference_v4_heuristics(self):
+    def test_run_mock_inference_v4_heuristics(self) -> None:
         """Memastikan mock inference V4 dapat dieksekusi tanpa menyalin ground truth secara naif."""
         doc_info = {
             "Nama Kegiatan Sertifikasi": "Seminar Nasional AI",
@@ -154,7 +159,7 @@ class TestV4PromptContract:
         for f in ALL_6_FIELDS:
             assert f in fields
 
-    def test_write_comparative_summary_dynamic_paired_v2_v4(self, tmp_path: Path):
+    def test_write_comparative_summary_dynamic_paired_v2_v4(self, tmp_path: Path) -> None:
         """Memastikan summary markdown dinamis berjalan mulus pada paired run V2 vs V4 tanpa V1."""
         dummy_slice = {
             "n_docs": 10,
@@ -176,6 +181,7 @@ class TestV4PromptContract:
             "target_universe_documents": 10,
             "model": "gemini-3.1-flash-lite",
             "backend": "gemini",
+            "gt_path": "Ground_Truth_Sertifikat_v9.csv",
             "variants": {
                 "v2_scope_aware": {
                     "unified_full": dummy_slice,
@@ -199,6 +205,7 @@ class TestV4PromptContract:
         assert "Varian 1 (Baseline)" not in content
         assert "Varian 3 (Decoupled 2-Stage)" not in content
         assert "N=10" in content
+        assert "Ground_Truth_Sertifikat_v9.csv" in content
 
         # Cek konsistensi kolom tabel markdown: jumlah header sama dengan separator
         lines = content.splitlines()
