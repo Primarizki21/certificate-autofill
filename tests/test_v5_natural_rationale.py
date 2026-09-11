@@ -2,7 +2,6 @@
 
 import json
 from typing import Any
-import pytest
 
 from tests.benchmark_all6f_prompting import (
     ALL_6_FIELDS,
