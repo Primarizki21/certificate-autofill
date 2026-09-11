@@ -235,6 +235,62 @@ Ekstrak 8 field berikut dalam format JSON:
 }}
 """
 
+# --- VARIAN 5: Single-Pass V2 + Natural Rationale (In-JSON Observable Thinking) ---
+V5_SYSTEM_INSTRUCTION = """Anda adalah asisten ekstraksi data sertifikat akademik resmi untuk pengisian form Kartu Hasil Prestasi (KHP).
+Tugas Anda: mengekstrak informasi faktual dari teks OCR mentah sertifikat ke dalam format JSON yang presisi.
+
+Aturan Wajib:
+1. Ekstrak HANYA informasi yang tertulis di teks OCR sertifikat. Jangan berhalusinasi atau menambahkan asumsi.
+2. Format Tanggal (waktu_mulai_pelaksanaan dan waktu_selesai_pelaksanaan):
+   - Wajib format angka "DD/MM/YYYY" (contoh: "24/08/2024").
+   - Jika rentang tanggal, pisahkan tanggal mulai dan tanggal selesai.
+   - Jika hanya tertulis satu tanggal pelaksanaan, isi waktu_mulai_pelaksanaan dan waktu_selesai_pelaksanaan dengan tanggal yang sama.
+   - Jika tidak ada tanggal, isi null.
+3. Nomor Sertifikat (nomor_bukti_fisik_nomor_sertifikasi):
+   - Ambil nomor resmi sertifikat secara utuh dan lengkap beserta seluruh tanda garis miring (/), titik (.), atau tanda hubung (-) (contoh: "123/UN3.1/KM/2024").
+   - Jika tidak ada nomor, isi null.
+4. Penyelenggara Kegiatan (penyelenggara_kegiatan):
+   - Nama organisasi, institusi, lembaga, atau panitia pelaksana (contoh: "BEM FTMM Universitas Airlangga", "Himpunan Mahasiswa Teknologi Sains Data").
+   - JANGAN sebut nama orang perorangan atau nama penerima sertifikat.
+5. Pertimbangan Tingkat & Tingkat (Chain-of-Thought Rationale):
+   - Sebelum menentukan tingkat, tuliskan "pertimbangan_tingkat" dalam 1-3 kalimat ringkas dengan urutan penalaran:
+     1) Siapa unit penyelenggara acara (Universitas, BEM Fakultas, Himpunan Mahasiswa, atau Lembaga Luar)?
+     2) Apakah kegiatan merupakan lomba/kompetisi terbuka se-Indonesia/internasional, atau kegiatan internal kampus?
+     3) Terapkan prinsip: Cakupan Sasaran Peserta (Skala Nasional/Internasional) LEBIH UTAMA daripada Jenjang Penyelenggara.
+   - Berdasarkan pertimbangan tersebut, tentukan "tingkat" dari salah satu nilai enum berikut persis:
+     ["Internasional", "Nasional", "Universitas", "Fakultas", "Departemen/Program Studi", "Lainnya"]
+   - Pedoman:
+     * Lomba, kompetisi, hackathon, seminar, call for papers, atau event terbuka untuk mahasiswa umum lintas perguruan tinggi/nasional -> "Nasional" (MESKIPUN diselenggarakan oleh BEM Fakultas atau Himpunan Mahasiswa Departemen).
+     * Konferensi, symposium, atau event berskala global/lintas negara -> "Internasional".
+     * Kegiatan internal kemahasiswaan/organisasi kampus non-lomba terbuka, tentukan berdasarkan hierarki unit:
+       - Rektorat / BEM Universitas / Direktorat Kemahasiswaan Universitas -> "Universitas".
+       - Kepengurusan, raker, atau kepanitiaan BEM Fakultas / ormawa fakultas -> "Fakultas".
+       - Kepengurusan, raker, atau kepanitiaan Himpunan Mahasiswa / Program Studi -> "Departemen/Program Studi".
+       - UKM / Unit Kegiatan Mahasiswa / BSO -> "Lainnya".
+     * Jika tidak diketahui atau bukti tidak cukup untuk memastikan cakupan -> "Lainnya".
+6. Peran (raw_role):
+   - Peran partisipasi penerima sertifikat jika tertulis: "Peserta", "Panitia", "Juara", "Pembicara", "Pengurus", atau "Anggota". Jika tidak tertulis, isi null.
+"""
+
+V5_USER_PROMPT_TEMPLATE = """Berikut adalah teks OCR mentah dari sebuah dokumen sertifikat:
+--- TEKS OCR AWAL ---
+{raw_ocr_text}
+--- TEKS OCR AKHIR ---
+
+Ekstrak 8 field berikut dalam format JSON:
+{{
+  "nama_kegiatan_sertifikasi": string atau null,
+  "nomor_bukti_fisik_nomor_sertifikasi": string atau null,
+  "penyelenggara_kegiatan": string atau null,
+  "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "raw_role": string atau null,
+  "pertimbangan_tingkat": "Ringkasan penalaran 1-3 kalimat (Penyelenggara -> Sifat acara -> Penilaian cakupan)",
+  "tingkat": "Internasional"|"Nasional"|"Universitas"|"Fakultas"|"Departemen/Program Studi"|"Lainnya" atau null
+}}
+"""
+
+
 
 # --- VARIAN 3: Decoupled 2-Stage Pipeline ---
 # Stage 1: Ekstraksi 5 Field Literal Murni (Steril dari Tingkat)
@@ -418,6 +474,18 @@ def run_mock_inference(
             pred_tingkat = "Fakultas"
         else:
             pred_tingkat = "Lainnya"
+    elif variant == "v5_natural_rationale":
+        # Mock smoke test: deterministik heuristic dengan natural rationale
+        text_lower = raw_text.lower()
+        if "internasional" in text_lower or "international" in text_lower:
+            pred_tingkat = "Internasional"
+        elif any(k in text_lower for k in ["nasional", "se-indonesia", "indonesia", "kompetisi"]):
+            pred_tingkat = "Nasional"
+        elif "fakultas" in penyelenggara.lower() or "bem" in penyelenggara.lower():
+            pred_tingkat = "Fakultas"
+        else:
+            pred_tingkat = "Lainnya"
+
     else:
         pred_tingkat = gt_tingkat
 
@@ -572,6 +640,52 @@ def run_gemini_inference(
             "needs_review": (not pola_is_valid) or pola_discordance or (res.status != "success"),
         }
         return norm_fields, meta
+
+    elif variant == "v5_natural_rationale":
+        prompt = V5_USER_PROMPT_TEMPLATE.format(raw_ocr_text=raw_text)
+        res = client.generate_json(
+            prompt=prompt,
+            system_instruction=V5_SYSTEM_INSTRUCTION,
+            model=model,
+            temperature=0.0,
+            enable_grounding=enable_grounding,
+        )
+        # Ambil pertimbangan_tingkat untuk observasi/audit, lalu strip sebelum masuk normalizer evaluator
+        rationale_audit = None
+        parsed_copy = dict(res.parsed_json) if isinstance(res.parsed_json, dict) else None
+        if parsed_copy is not None:
+            rationale_audit = parsed_copy.pop("pertimbangan_tingkat", None)
+            if rationale_audit is None:
+                # Fallback alias penamaan bila model menamainya analisis_tingkat / penalaran
+                rationale_audit = parsed_copy.pop("analisis_tingkat", None) or parsed_copy.pop("penalaran", None)
+
+        norm_fields = normalize_llm_json(parsed_copy)
+        latency = time.perf_counter() - t0
+
+        # Audit kelengkapan rationale dan needs_review
+        has_rationale = bool(rationale_audit and str(rationale_audit).strip())
+        tingkat_res = norm_fields.get("tingkat")
+        needs_rev = (res.status != "success") or (not tingkat_res) or (tingkat_res == "Lainnya")
+
+        meta = {
+            "status": res.status,
+            "prompt_tokens": res.prompt_tokens,
+            "candidates_tokens": res.candidates_tokens,
+            "cached_tokens": res.cached_tokens,
+            "thoughts_tokens": res.thoughts_tokens,
+            "total_tokens": res.total_tokens,
+            "cost_usd": res.cost_usd,
+            "cost_idr": res.cost_idr,
+            "latency_s": latency,
+            "calls_count": 1,
+            "web_queries": res.web_search_queries,
+            "error": res.error_message,
+            "pertimbangan_tingkat": rationale_audit,
+            "has_rationale": has_rationale,
+            "needs_review": needs_rev,
+        }
+        return norm_fields, meta
+
 
     elif variant == "v3_decoupled":
         # Stage 1: Ekstraksi 5 Field Literal Murni (Steril dari Tingkat)
@@ -1086,6 +1200,8 @@ def write_comparative_summary_md(
         "v2_scope_aware": "Varian 2 (Scope-Aware)",
         "v3_decoupled": "Varian 3 (Decoupled 2-Stage)",
         "v4_scope_signal": "Varian 4 (Scope Signal)",
+        "v5_natural_rationale": "Varian 5 (Natural Rationale)",
+
     }
     active_vars = [v for v in var_display_map if v in var_dict] or list(var_dict.keys())
 
@@ -1125,6 +1241,8 @@ def write_comparative_summary_md(
         "v2_scope_aware": "**Varian 2 (Single-Pass Scope-Aware)**: Ekstraksi 6 field sekaligus dalam satu prompt dengan revisi aturan *Scope > Organizer* (`Lomba Terbuka Mahasiswa Nasional -> Nasional`).",
         "v3_decoupled": "**Varian 3 (Decoupled 2-Stage Pipeline)**: Pemisahan total menjadi dua tahap: Stage 1 ekstraksi 5 field literal steril, disusul Stage 2 penentuan tingkat (Router Deterministik 18 rules $\\to$ Specialized LLM Fallback).",
         "v4_scope_signal": "**Varian 4 (Single-Pass In-JSON Scope Signal)**: Ekstraksi 6 field single-pass dengan intermediate controlled enum `pola_cakupan` sebelum emisi `tingkat`.",
+        "v5_natural_rationale": "**Varian 5 (Single-Pass V2 + Natural Rationale)**: Ekstraksi 6 field single-pass dengan buffer penalaran teks bebas `pertimbangan_tingkat` (Penyelenggara -> Sifat -> Cakupan) sebelum emisi `tingkat`.",
+
     }
     for idx, v in enumerate(active_vars, 1):
         lines.append(f"{idx}. {variant_narrative_map.get(v, v)}")
@@ -1240,6 +1358,8 @@ def write_prompt_registry(out_path: Path, active_variants: list[str]) -> None:
         "v2_scope_aware": ("V2 Single-Pass Scope-Aware", V2_SYSTEM_INSTRUCTION, V2_USER_PROMPT_TEMPLATE),
         "v3_decoupled": ("V3 Decoupled 2-Stage Pipeline", V3_STAGE1_SYSTEM_INSTRUCTION + "\n\n---\n\n" + V3_STAGE2B_SYSTEM_INSTRUCTION, V3_STAGE1_USER_PROMPT_TEMPLATE + "\n\n---\n\n" + V3_STAGE2B_USER_PROMPT_TEMPLATE),
         "v4_scope_signal": ("V4 Single-Pass In-JSON Scope Signal", V4_SYSTEM_INSTRUCTION, V4_USER_PROMPT_TEMPLATE),
+        "v5_natural_rationale": ("V5 Single-Pass V2 + Natural Rationale", V5_SYSTEM_INSTRUCTION, V5_USER_PROMPT_TEMPLATE),
+
     }
     lines = ["# Prompt Registry\n"]
     for vk in active_variants:
