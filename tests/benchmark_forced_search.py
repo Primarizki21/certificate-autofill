@@ -453,11 +453,9 @@ def run_gemini_forced_inference(
         ],
     }
 
-
 def write_prompt_registry(out_path: Path, model: str) -> None:
+    """Tulis arsip template prompt resmi EXP-SEARCH-GROUNDING-002 dengan pembungkus 4-backtick."""
     content = f"""# PROMPT REGISTRY: EXP-SEARCH-GROUNDING-002
-
-Dokumentasi resmi prompt, system instruction, dan tool configuration untuk evaluasi Forced Google Search Grounding.
 Model Target: `{model}` | Tanggal: {datetime.now().strftime("%Y-%m-%d")}
 
 ---
@@ -500,6 +498,8 @@ def run_benchmark(
     backend: str = "gemini",
     max_cumulative_queries: int = 188,
     max_cumulative_cost_idr: float = 65000.0,
+    pacing_delay: float = 1.2,
+    timeout_s: float = 30.0,
     limit: int | None = None,
     offset: int = 0,
     mock: bool = False,
@@ -515,7 +515,7 @@ def run_benchmark(
     # B14 Immutability Guard: Tolak menimpa deliverable final jika sudah ada
     deliverables = [out_dir_path / "comparative_metrics.json", out_dir_path / "evaluation_details.csv"]
     existing_delivs = [f.name for f in deliverables if f.exists()]
-    if existing_delivs and not force and not mock:
+    if existing_delivs and not force:
         raise FileExistsError(
             f"B14 Immutability Guard: Deliverable final {existing_delivs} sudah ada di {out_dir_path}. "
             "Gunakan folder output baru atau tentukan --force untuk menimpa secara eksplisit."
@@ -542,7 +542,7 @@ def run_benchmark(
     # 3. Inisialisasi Klien API (jika non-mock)
     client: GeminiClient | None = None
     if not mock:
-        client = GeminiClient(default_model=model)
+        client = GeminiClient(default_model=model, request_delay=pacing_delay, timeout_s=timeout_s)
 
     checkpoint_file = out_dir_path / "checkpoint_forced_search.jsonl"
     existing_records: dict[str, dict[str, Any]] = {}
@@ -707,8 +707,13 @@ def run_benchmark(
             "attempts_count",
             "total_web_queries",
             "search_fee_idr",
+            "stage1_tokens",
+            "stage1_cost_idr",
+            "stage2_tokens",
+            "stage2_cost_idr",
             "total_tokens",
             "total_effective_cost_idr",
+            "calls_details_json",
         ]
         writer = csv.DictWriter(f, fieldnames=fieldnames)
         writer.writeheader()
@@ -727,8 +732,13 @@ def run_benchmark(
                 "attempts_count": r["attempts_count"],
                 "total_web_queries": r["total_web_queries"],
                 "search_fee_idr": r["search_fee_idr"],
+                "stage1_tokens": r.get("stage1_tokens", 0),
+                "stage1_cost_idr": r.get("stage1_cost_idr", 0.0),
+                "stage2_tokens": r.get("stage2_tokens", 0),
+                "stage2_cost_idr": r.get("stage2_cost_idr", 0.0),
                 "total_tokens": r["total_tokens"],
                 "total_effective_cost_idr": r["total_effective_cost_idr"],
+                "calls_details_json": json.dumps(r.get("calls_details", []), ensure_ascii=False),
             })
 
     logger.info(f"Benchmark selesai. Ringkasan metrik tersimpan di {metrics_path}")
@@ -740,16 +750,25 @@ if __name__ == "__main__":
     parser.add_argument("--manifest-path", default="docs/experiments/EXP-SEARCH-GROUNDING-002/manifest_94_fallback.csv")
     parser.add_argument("--output-dir", default="docs/experiments/EXP-SEARCH-GROUNDING-002")
     parser.add_argument("--model", default="gemini-3.1-flash-lite")
-    parser.add_argument("--mock", action="store_true", help="Jalankan simulasi mock plumbing")
+    parser.add_argument("--live", action="store_true", help="Wajib disertakan untuk eksekusi API live nyata. Jika tidak disertakan, default mode adalah mock dry-run.")
+    parser.add_argument("--force", action="store_true", help="Paksa menimpa output directory yang sudah ada.")
+    parser.add_argument("--pacing-delay", type=float, default=1.2, help="Jeda pacing antar request (detik).")
+    parser.add_argument("--timeout-s", type=float, default=30.0, help="Timeout HTTP per request (detik).")
     parser.add_argument("--limit", type=int, default=None)
     parser.add_argument("--offset", type=int, default=0)
     args = parser.parse_args()
+
+    # Fail-safe default: mock aktif jika flag --live TIDAK diberikan
+    is_mock = not args.live
 
     run_benchmark(
         manifest_path=args.manifest_path,
         output_dir=args.output_dir,
         model=args.model,
-        mock=args.mock,
+        mock=is_mock,
+        force=args.force,
+        pacing_delay=args.pacing_delay,
+        timeout_s=args.timeout_s,
         limit=args.limit,
         offset=args.offset,
     )

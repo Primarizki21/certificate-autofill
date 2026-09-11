@@ -2,8 +2,9 @@
 
 import csv
 import json
-import pytest
 from pathlib import Path
+
+import pytest
 
 from tests.benchmark_forced_search import (
     determine_outcome_category,
