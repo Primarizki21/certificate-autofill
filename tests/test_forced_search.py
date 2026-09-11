@@ -99,6 +99,16 @@ def test_mock_benchmark_execution(tmp_path: Path) -> None:
         assert r["outcome_category"] in valid_categories, f"Unexpected category: {r['outcome_category']}"
         assert r["grounding_status"] in ["grounded_first_attempt", "grounded_on_retry", "ungrounded_fallback"]
         assert int(r["attempts_count"]) in (1, 2)
+        assert int(r["stage1_tokens"]) > 0
+        assert float(r["stage1_cost_idr"]) > 0.0
+        assert int(r["stage2_tokens"]) > 0
+        assert float(r["stage2_cost_idr"]) > 0.0
+
+        calls = json.loads(r["calls_details_json"])
+        assert len(calls) >= 2
+        assert calls[0]["stage"] == "stage1_literal"
+        assert int(calls[0]["total_tokens"]) == int(r["stage1_tokens"])
+        assert sum(int(c["total_tokens"]) for c in calls[1:]) == int(r["stage2_tokens"])
 
     # Verify checkpoint JSONL has calls_details for all calls (Stage 1 + Stage 2 attempts)
     checkpoint_jsonl = out_dir / "checkpoint_forced_search.jsonl"

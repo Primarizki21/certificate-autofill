@@ -155,7 +155,7 @@ def run_mock_forced_inference(
     val_int = int(h, 16)
 
     # Simulasikan Stage 1
-    s1_tokens = 1150
+    s1_tokens = 1220
     s1_cost_idr = 9.5
 
     # Simulasikan apakah Attempt 1 memicu web search (~35% mock chance)
