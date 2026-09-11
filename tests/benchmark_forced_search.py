@@ -261,12 +261,33 @@ def run_mock_forced_inference(
         "stage2_cost_idr": round(s2_tok_cost, 2),
         "total_tokens": s1_tokens + sum(a.total_tokens for a in attempts),
         "total_effective_cost_idr": total_effective_cost,
-        "attempts_details": [
+        "calls_details": [
             {
+                "stage": "stage1_literal",
+                "attempt": 1,
+                "prompt_tokens": 1150,
+                "candidates_tokens": 70,
+                "cached_tokens": 0,
+                "thoughts_tokens": 0,
+                "total_tokens": 1220,
+                "cost_usd": 0.0003,
+                "cost_idr": s1_cost_idr,
+                "latency_s": 0.8,
+                "queries": [],
+            }
+        ] + [
+            {
+                "stage": "stage2_forced_search",
                 "attempt": a.attempt_index,
-                "queries": a.web_queries,
+                "prompt_tokens": a.prompt_tokens,
+                "candidates_tokens": a.candidates_tokens,
+                "cached_tokens": a.cached_tokens,
+                "thoughts_tokens": a.thoughts_tokens,
+                "total_tokens": a.total_tokens,
+                "cost_usd": a.cost_usd,
                 "cost_idr": a.cost_idr,
                 "latency_s": a.latency_s,
+                "queries": a.web_queries,
             }
             for a in attempts
         ],
@@ -400,12 +421,33 @@ def run_gemini_forced_inference(
         "total_tokens": res1.total_tokens + sum(a.total_tokens for a in attempts),
         "total_effective_cost_idr": total_effective_cost,
         "latency_s": time.perf_counter() - t0,
-        "attempts_details": [
+        "calls_details": [
             {
+                "stage": "stage1_literal",
+                "attempt": 1,
+                "prompt_tokens": res1.prompt_tokens,
+                "candidates_tokens": res1.candidates_tokens,
+                "cached_tokens": res1.cached_tokens,
+                "thoughts_tokens": res1.thoughts_tokens,
+                "total_tokens": res1.total_tokens,
+                "cost_usd": res1.cost_usd,
+                "cost_idr": round(s1_tok_cost, 2),
+                "latency_s": round(time.perf_counter() - t0, 3),
+                "queries": res1.web_search_queries or [],
+            }
+        ] + [
+            {
+                "stage": "stage2_forced_search",
                 "attempt": a.attempt_index,
-                "queries": a.web_queries,
+                "prompt_tokens": a.prompt_tokens,
+                "candidates_tokens": a.candidates_tokens,
+                "cached_tokens": a.cached_tokens,
+                "thoughts_tokens": a.thoughts_tokens,
+                "total_tokens": a.total_tokens,
+                "cost_usd": a.cost_usd,
                 "cost_idr": a.cost_idr,
                 "latency_s": a.latency_s,
+                "queries": a.web_queries,
             }
             for a in attempts
         ],
@@ -413,7 +455,6 @@ def run_gemini_forced_inference(
 
 
 def write_prompt_registry(out_path: Path, model: str) -> None:
-    """Tulis arsip template prompt resmi EXP-SEARCH-GROUNDING-002 dengan pembungkus 4-backtick."""
     content = f"""# PROMPT REGISTRY: EXP-SEARCH-GROUNDING-002
 
 Dokumentasi resmi prompt, system instruction, dan tool configuration untuk evaluasi Forced Google Search Grounding.
@@ -573,7 +614,7 @@ def run_benchmark(
                 "total_effective_cost_idr": res_meta["total_effective_cost_idr"],
                 "fields": res_meta["fields"],
                 "eval": eval_dict,
-                "attempts_details": res_meta["attempts_details"],
+                "calls_details": res_meta["calls_details"],
             }
 
             cp_writer.write(json.dumps(record, ensure_ascii=False) + "\n")

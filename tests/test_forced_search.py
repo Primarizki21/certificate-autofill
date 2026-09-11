@@ -98,3 +98,17 @@ def test_mock_benchmark_execution(tmp_path: Path) -> None:
         assert r["outcome_category"] in valid_categories, f"Unexpected category: {r['outcome_category']}"
         assert r["grounding_status"] in ["grounded_first_attempt", "grounded_on_retry", "ungrounded_fallback"]
         assert int(r["attempts_count"]) in (1, 2)
+
+    # Verify checkpoint JSONL has calls_details for all calls (Stage 1 + Stage 2 attempts)
+    checkpoint_jsonl = out_dir / "checkpoint_forced_search.jsonl"
+    assert checkpoint_jsonl.exists()
+    with open(checkpoint_jsonl, encoding="utf-8") as f:
+        cp_records = [json.loads(line) for line in f if line.strip()]
+    assert len(cp_records) == 5
+    for cp in cp_records:
+        assert "calls_details" in cp
+        assert len(cp["calls_details"]) >= 2
+        assert cp["calls_details"][0]["stage"] == "stage1_literal"
+        assert "prompt_tokens" in cp["calls_details"][0]
+        assert "candidates_tokens" in cp["calls_details"][0]
+        assert "cost_idr" in cp["calls_details"][0]
