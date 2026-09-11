@@ -1000,32 +1000,43 @@ Digunakan secara identik oleh:
 - `v2_search` (Google Search ON)
 
 ### System Instruction (V2 Pure)
-```text
+````text
 {V2_PURE_SYSTEM_INSTRUCTION}
-```
+````
 
 ### System Instruction (V2 Search Guided - Eksplorasi)
-```text
+````text
 {V2_SEARCH_GUIDED_SYSTEM_INSTRUCTION}
-```
+````
 
-### User Prompt Template
-```text
+### User Prompt Template (V2)
+````text
 {V2_USER_PROMPT_TEMPLATE}
-```
+````
 
 ---
 
 ## 2. Varian V3 Search CoT (Decoupled Stage 2 + Search)
-### Stage 1 (5 Field Literal Faktual)
-```text
-{STAGE1_SYSTEM_INSTRUCTION}
-```
 
-### Stage 2 (Penalaran Tingkat Scope-Aware CoT + Search)
-```text
+### Stage 1: System Instruction (5 Field Literal Faktual)
+````text
+{STAGE1_SYSTEM_INSTRUCTION}
+````
+
+### Stage 1: User Prompt Template
+````text
+{STAGE1_USER_PROMPT_TEMPLATE}
+````
+
+### Stage 2: System Instruction (Penalaran Tingkat Scope-Aware CoT + Search)
+````text
 {STAGE2_SEARCH_COT_SYSTEM_INSTRUCTION}
-```
+````
+
+### Stage 2: User Prompt Template
+````text
+{STAGE2_SEARCH_COT_USER_PROMPT_TEMPLATE}
+````
 """
     out_path.write_text(content, encoding="utf-8")
 
