@@ -14,6 +14,7 @@ from tests.validate_v2_production_equivalent import (
     MUTATION_DIAGNOSTIC_FIELDS,
     MUTATION_GATE_FIELDS,
     _accuracy,
+    _token_rollup,
 )
 
 
@@ -51,3 +52,30 @@ def test_noise_injection_is_reproducible_for_same_seed() -> None:
 def test_noise_injection_preserves_clean_text_at_zero_rate() -> None:
     text = "Teks sertifikat tanpa gangguan"
     assert inject_noise(text, 0.0, random.Random(42)) == text
+
+def test_token_rollup_persists_required_per_call_accounting() -> None:
+    rows = [
+        {
+            "call_meta": {
+                "status": "success",
+                "prompt_tokens": 10,
+                "candidates_tokens": 4,
+                "cached_tokens": 1,
+                "thoughts_tokens": 2,
+                "total_tokens": 16,
+                "cost_usd": 0.001,
+                "cost_idr": 18.0,
+                "calls_count": 1,
+                "latency_s": 0.4,
+                "web_search_queries": [],
+            }
+        }
+    ]
+
+    rollup = _token_rollup(rows)
+
+    assert rollup["total_calls"] == 1
+    assert rollup["total_tokens"] == 16
+    assert rollup["total_cost_idr"] == 18.0
+    assert rollup["calls_details"][0]["prompt_tokens"] == 10
+    assert rollup["calls_details"][0]["thoughts_tokens"] == 2
