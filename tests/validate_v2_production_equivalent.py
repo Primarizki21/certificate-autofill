@@ -59,6 +59,61 @@ def _accuracy(rows: list[dict[str, Any]], fields: tuple[str, ...]) -> float:
     exact = sum(1 for row in rows for field_name in fields if row["evaluation"][field_name]["exact"])
     return round(exact / total * 100.0, 2) if total else 0.0
 
+TOKEN_FIELDS = (
+    "prompt_tokens",
+    "candidates_tokens",
+    "cached_tokens",
+    "thoughts_tokens",
+    "total_tokens",
+    "cost_usd",
+    "cost_idr",
+    "calls_count",
+    "latency_s",
+)
+
+
+def _token_rollup(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Persist aggregate and per-call accounting without document text."""
+    totals = {field_name: 0.0 for field_name in TOKEN_FIELDS}
+    calls_details: list[dict[str, Any]] = []
+    web_search_queries: list[str] = []
+    for document_index, row in enumerate(rows, start=1):
+        meta = row["call_meta"]
+        for field_name in TOKEN_FIELDS:
+            totals[field_name] += float(meta.get(field_name, 0) or 0)
+        queries = list(meta.get("web_search_queries", []))
+        web_search_queries.extend(queries)
+        calls_details.append(
+            {
+                "document_index": document_index,
+                "status": meta.get("status"),
+                "prompt_tokens": int(meta.get("prompt_tokens", 0) or 0),
+                "candidates_tokens": int(meta.get("candidates_tokens", 0) or 0),
+                "cached_tokens": int(meta.get("cached_tokens", 0) or 0),
+                "thoughts_tokens": int(meta.get("thoughts_tokens", 0) or 0),
+                "total_tokens": int(meta.get("total_tokens", 0) or 0),
+                "cost_usd": float(meta.get("cost_usd", 0) or 0),
+                "cost_idr": float(meta.get("cost_idr", 0) or 0),
+                "latency_s": float(meta.get("latency_s", 0) or 0),
+                "web_search_queries": queries,
+            }
+        )
+    return {
+        "total_calls": int(totals["calls_count"]),
+        "prompt_tokens": int(totals["prompt_tokens"]),
+        "candidates_tokens": int(totals["candidates_tokens"]),
+        "cached_tokens": int(totals["cached_tokens"]),
+        "thoughts_tokens": int(totals["thoughts_tokens"]),
+        "total_tokens": int(totals["total_tokens"]),
+        "total_cost_usd": round(totals["cost_usd"], 6),
+        "total_cost_idr": round(totals["cost_idr"], 2),
+        "avg_latency_s": round(
+            totals["latency_s"] / totals["calls_count"], 4
+        ) if totals["calls_count"] else 0.0,
+        "web_search_queries": web_search_queries,
+        "calls_details": calls_details,
+    }
+
 
 def _evaluate_v2_text(
     raw_text: str,
@@ -134,6 +189,7 @@ def _run_ood(
             "web_search_queries": sum(
                 len(row["call_meta"].get("web_search_queries", [])) for row in noisy_rows
             ),
+            "token_rollup": _token_rollup(noisy_rows),
         }
 
     return {
@@ -146,6 +202,7 @@ def _run_ood(
             "drop_pct": gate_drop,
             "gate_threshold_drop_pct": 2.0,
             "gate_pass": gate_drop <= 2.0,
+            "token_rollup": _token_rollup(mutated_rows),
             "diagnostic_all_free_fields_baseline_pct": baseline_diag_accuracy,
             "diagnostic_all_free_fields_mutated_pct": mutation_diag_accuracy,
             "diagnostic_drop_pct": diagnostic_drop,
@@ -318,6 +375,26 @@ def _write_markdown(path: Path, proof: dict[str, Any]) -> None:
             f"| OCR noise {level} | {ood['noise']['clean_all_cells_exact_pct']}% | "
             f"{result['all_cells_exact_pct']}% | {result['drop_from_clean_all_cells_pct']}pt | recorded |"
         )
+    mutation_rollup = ood["mutation"]["token_rollup"]
+    lines.extend(
+        [
+            "",
+            f"- Mutation token rollup: {mutation_rollup['total_calls']} calls; "
+            f"prompt={mutation_rollup['prompt_tokens']}, candidates={mutation_rollup['candidates_tokens']}, "
+            f"cached={mutation_rollup['cached_tokens']}, thoughts={mutation_rollup['thoughts_tokens']}, "
+            f"total={mutation_rollup['total_tokens']}, cost=Rp{mutation_rollup['total_cost_idr']}",
+            *[
+                f"- OCR noise {level} token rollup: {result['token_rollup']['total_calls']} calls; "
+                f"prompt={result['token_rollup']['prompt_tokens']}, "
+                f"candidates={result['token_rollup']['candidates_tokens']}, "
+                f"cached={result['token_rollup']['cached_tokens']}, "
+                f"thoughts={result['token_rollup']['thoughts_tokens']}, "
+                f"total={result['token_rollup']['total_tokens']}, "
+                f"cost=Rp{result['token_rollup']['total_cost_idr']}"
+                for level, result in ood["noise"]["levels"].items()
+            ],
+        ]
+    )
     lines.extend(
         [
             "",
