@@ -51,8 +51,7 @@ from app.services.organizer_v2 import extract_organizer_v2
 from app.services.pdf_fast_path import extract_text_with_pymupdf
 from tests.evaluation_framework import EVAL_FIELDS as LEGACY_5_FIELDS, load_csv, resolve_pdf_path
 from tests.gemini_client import (
-    DEFAULT_EXCHANGE_RATE_IDR,
-    PRICING_TABLE,
+    calculate_cost,
     get_exchange_rate,
     load_google_api_key,
 )
@@ -105,6 +104,167 @@ def sha256_text(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8", errors="replace")).hexdigest()
 
 
+def complete_telemetry_meta(
+    meta: dict[str, Any] | None,
+    *,
+    model: str,
+) -> dict[str, Any]:
+    """Lengkapi accounting produksi tanpa menyimpan teks OCR ke metadata."""
+    completed = {
+        "status": "unknown",
+        "gemini_status": "unknown",
+        "model": model,
+        "fallback_reason": None,
+        "error_fallback": False,
+        "latency_s": 0.0,
+        "prompt_tokens": 0,
+        "candidates_tokens": 0,
+        "cached_tokens": 0,
+        "thoughts_tokens": 0,
+        "total_tokens": 0,
+        "cost_usd": 0.0,
+        "cost_idr": 0.0,
+        "calls_count": 0,
+        "web_search_queries": [],
+        "calls_details": [],
+    }
+    completed.update(meta or {})
+    status = str(completed.get("status") or "unknown")
+    completed["status"] = status
+    completed["gemini_status"] = status
+    completed["model"] = completed.get("model") or model
+    if "calls_count" not in (meta or {}):
+        completed["calls_count"] = 1 if status in {"success", "error", "rate_limited"} else 0
+    for field_name in (
+        "prompt_tokens",
+        "candidates_tokens",
+        "cached_tokens",
+        "thoughts_tokens",
+        "total_tokens",
+        "calls_count",
+    ):
+        try:
+            completed[field_name] = max(0, int(completed.get(field_name) or 0))
+        except (TypeError, ValueError):
+            completed[field_name] = 0
+    if not completed["total_tokens"]:
+        completed["total_tokens"] = sum(
+            completed[field_name]
+            for field_name in ("prompt_tokens", "candidates_tokens", "thoughts_tokens")
+        )
+    cost_usd, cost_idr = calculate_cost(
+        model=str(completed["model"]),
+        prompt_tokens=completed["prompt_tokens"],
+        candidates_tokens=completed["candidates_tokens"],
+        cached_tokens=completed["cached_tokens"],
+        thoughts_tokens=completed["thoughts_tokens"],
+        exchange_rate=get_exchange_rate(),
+    )
+    completed["cost_usd"] = round(cost_usd, 6)
+    completed["cost_idr"] = round(cost_idr, 2)
+    completed["error_fallback"] = bool(
+        completed.get("error_fallback", status != "success")
+    )
+    if not isinstance(completed.get("web_search_queries"), list):
+        completed["web_search_queries"] = []
+    details = completed.get("calls_details")
+    if not isinstance(details, list):
+        details = []
+    if not details and completed["calls_count"]:
+        details = [
+            {
+                "stage": "production_pipeline",
+                "status": status,
+                "model": completed["model"],
+                "prompt_tokens": completed["prompt_tokens"],
+                "candidates_tokens": completed["candidates_tokens"],
+                "cached_tokens": completed["cached_tokens"],
+                "thoughts_tokens": completed["thoughts_tokens"],
+                "total_tokens": completed["total_tokens"],
+                "cost_usd": completed["cost_usd"],
+                "cost_idr": completed["cost_idr"],
+                "latency_s": completed["latency_s"],
+                "web_search_queries": list(completed["web_search_queries"]),
+                "error": completed.get("error"),
+            }
+        ]
+    completed["calls_details"] = details
+    return completed
+
+
+def aggregate_retry_telemetry(
+    metas: list[dict[str, Any]],
+    *,
+    model: str,
+) -> dict[str, Any]:
+    """Gabungkan seluruh percobaan retry menjadi satu accounting run."""
+    normalized = [
+        complete_telemetry_meta(meta, model=model)
+        for meta in metas
+    ]
+    if not normalized:
+        return complete_telemetry_meta({}, model=model)
+    latest = normalized[-1]
+    sum_fields = (
+        "prompt_tokens",
+        "candidates_tokens",
+        "cached_tokens",
+        "thoughts_tokens",
+        "total_tokens",
+        "cost_usd",
+        "cost_idr",
+        "latency_s",
+    )
+    totals = {
+        field_name: sum(float(meta.get(field_name, 0) or 0) for meta in normalized)
+        for field_name in sum_fields
+    }
+    details: list[dict[str, Any]] = []
+    queries: list[str] = []
+    for attempt, meta in enumerate(normalized, 1):
+        detail = {
+            "stage": f"retry_{attempt}",
+            "status": meta["status"],
+            "fallback_reason": meta.get("fallback_reason"),
+            "model": meta["model"],
+            "prompt_tokens": meta["prompt_tokens"],
+            "candidates_tokens": meta["candidates_tokens"],
+            "cached_tokens": meta["cached_tokens"],
+            "thoughts_tokens": meta["thoughts_tokens"],
+            "total_tokens": meta["total_tokens"],
+            "cost_usd": meta["cost_usd"],
+            "cost_idr": meta["cost_idr"],
+            "latency_s": meta["latency_s"],
+            "web_search_queries": list(meta["web_search_queries"]),
+            "error_type": meta.get("error_type"),
+        }
+        details.append(detail)
+        queries.extend(meta["web_search_queries"])
+    unique_queries = list(dict.fromkeys(queries))
+    final_status = latest["status"]
+    return {
+        "status": final_status,
+        "gemini_status": final_status,
+        "model": latest["model"],
+        "fallback_reason": latest.get("fallback_reason"),
+        "error": latest.get("error"),
+        "error_type": latest.get("error_type"),
+        "error_fallback": final_status != "success",
+        "retry_count": max(0, len(normalized) - 1),
+        "latency_s": round(totals["latency_s"], 4),
+        "prompt_tokens": int(totals["prompt_tokens"]),
+        "candidates_tokens": int(totals["candidates_tokens"]),
+        "cached_tokens": int(totals["cached_tokens"]),
+        "thoughts_tokens": int(totals["thoughts_tokens"]),
+        "total_tokens": int(totals["total_tokens"]),
+        "cost_usd": round(totals["cost_usd"], 6),
+        "cost_idr": round(totals["cost_idr"], 2),
+        "calls_count": len(normalized),
+        "web_search_queries": unique_queries,
+        "calls_details": details,
+    }
+
+
 def load_manifest(manifest_path: str = DEFAULT_MANIFEST_PATH) -> dict[str, str]:
     if os.path.exists(manifest_path):
         with open(manifest_path, "r", encoding="utf-8") as f:
@@ -145,41 +305,49 @@ def call_gemini_with_retry(
     initial_backoff: float = 2.0,
     pacing_delay: float = 1.2,
 ) -> tuple[dict[str, ExtractedValue] | None, dict[str, Any]]:
-    """Panggil Gemini REST API dengan pacing delay dan exponential backoff retry."""
+    """Panggil Gemini REST API dengan pacing dan accounting semua retry."""
+    effective_model = model or settings.google_gemini_model or "gemini-3.1-flash-lite"
     if not raw_ocr_text.strip():
-        return None, {
-            "status": "skipped_empty",
-            "latency_s": 0.0,
-            "total_tokens": 0,
-            "prompt_tokens": 0,
-            "candidates_tokens": 0,
-            "cost_usd": 0.0,
-            "cost_idr": 0.0,
-        }
+        return None, complete_telemetry_meta(
+            {
+                "status": "skipped_empty",
+                "fallback_reason": "empty_text",
+            },
+            model=effective_model,
+        )
 
     if pacing_delay > 0:
         time.sleep(pacing_delay)
 
     backoff = initial_backoff
-    last_meta: dict[str, Any] = {}
-
+    attempt_metas: list[dict[str, Any]] = []
     for attempt in range(1, max_retries + 1):
         extracted, meta = extract_fields_with_gemini(
             raw_ocr_text, api_key=api_key, model=model
         )
+        attempt_metas.append(meta)
         if extracted is not None and meta.get("status") == "success":
-            return extracted, meta
+            return extracted, aggregate_retry_telemetry(
+                attempt_metas,
+                model=effective_model,
+            )
 
-        last_meta = meta
-        err_msg = meta.get("error", "unknown error")
         logger.warning(
-            f"Gemini call attempt {attempt}/{max_retries} failed: {err_msg}. Retrying in {backoff:.1f}s..."
+            "Gemini call attempt %s/%s failed status=%s error_type=%s retry_in_s=%.1f",
+            attempt,
+            max_retries,
+            meta.get("status", "unknown"),
+            meta.get("error_type", "unknown"),
+            backoff,
         )
         if attempt < max_retries:
             time.sleep(backoff)
             backoff *= 2.0
 
-    return None, last_meta
+    return None, aggregate_retry_telemetry(
+        attempt_metas,
+        model=effective_model,
+    )
 
 
 def fallback_offline_extraction(raw_text: str) -> dict[str, ExtractedValue]:
@@ -304,6 +472,81 @@ def compute_variant_aggregate(
         "missing_values": missing_values_count,
         "per_field": per_field_stats,
     }
+
+
+def compute_telemetry_aggregate(rows: list[dict[str, Any]]) -> dict[str, Any]:
+    """Agregasikan token, biaya, latensi, dan fallback per varian."""
+    n_documents = len(rows)
+    totals = {
+        field_name: 0.0
+        for field_name in (
+            "prompt_tokens",
+            "candidates_tokens",
+            "cached_tokens",
+            "thoughts_tokens",
+            "total_tokens",
+            "cost_usd",
+            "cost_idr",
+            "latency_s",
+            "calls_count",
+        )
+    }
+    status_counts: dict[str, int] = {}
+    fallback_reason_counts: dict[str, int] = {}
+    semantic_review_fields = 0
+    for row in rows:
+        meta = row.get("call_meta") or {}
+        for field_name in totals:
+            try:
+                totals[field_name] += float(meta.get(field_name, 0) or 0)
+            except (TypeError, ValueError):
+                continue
+        status = str(meta.get("status") or "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+        reason = meta.get("fallback_reason")
+        if reason:
+            reason_text = str(reason)
+            fallback_reason_counts[reason_text] = (
+                fallback_reason_counts.get(reason_text, 0) + 1
+            )
+        semantic_review_fields += sum(
+            1 for reasons in (row.get("semantic_review") or {}).values() if reasons
+        )
+    calls = int(totals["calls_count"])
+    return {
+        "n_documents": n_documents,
+        "total_calls": calls,
+        "prompt_tokens": int(totals["prompt_tokens"]),
+        "candidates_tokens": int(totals["candidates_tokens"]),
+        "cached_tokens": int(totals["cached_tokens"]),
+        "thoughts_tokens": int(totals["thoughts_tokens"]),
+        "total_tokens": int(totals["total_tokens"]),
+        "tokens_per_document": round(
+            totals["total_tokens"] / n_documents, 1
+        )
+        if n_documents
+        else 0.0,
+        "total_cost_usd": round(totals["cost_usd"], 6),
+        "total_cost_idr": round(totals["cost_idr"], 2),
+        "cost_per_document_idr": round(
+            totals["cost_idr"] / n_documents, 2
+        )
+        if n_documents
+        else 0.0,
+        "total_latency_s": round(totals["latency_s"], 4),
+        "average_latency_per_document_s": round(
+            totals["latency_s"] / n_documents, 4
+        )
+        if n_documents
+        else 0.0,
+        "average_latency_per_call_s": round(totals["latency_s"] / calls, 4)
+        if calls
+        else 0.0,
+        "status_counts": status_counts,
+        "fallback_reason_counts": fallback_reason_counts,
+        "semantic_review_fields": semantic_review_fields,
+    }
+
 
 
 def run_stratified_5fold(
@@ -626,8 +869,21 @@ def main() -> int:
         "active_variants": active_variants,
         "gemini_model": effective_model,
         "skip_gemini": args.skip_gemini,
+        "enable_tesseract_gemini": bool(settings.enable_tesseract_gemini),
+        "enable_combined_v4_2": bool(settings.enable_combined_v4_2),
         "pacing_delay": args.delay,
         "ocr_zoom": ZOOM,
+        "token_accounting_fields": [
+            "prompt_tokens",
+            "candidates_tokens",
+            "cached_tokens",
+            "thoughts_tokens",
+            "total_tokens",
+            "cost_usd",
+            "cost_idr",
+            "calls_count",
+            "web_search_queries",
+        ],
         "sources_sha256": {s["stem"]: s["sha256"] for s in sources},
     }
     with open(
@@ -695,10 +951,6 @@ def main() -> int:
 
     # Tahap 2: Eksekusi Per Varian
     print("-> Tahap 2: Menjalankan Ekstraksi & Evaluasi Varian...")
-    exchange_rate = get_exchange_rate()
-    pricing = PRICING_TABLE.get(
-        effective_model, PRICING_TABLE.get("gemini-3.1-flash-lite")
-    )
 
     for v_idx, variant in enumerate(active_variants, 1):
         print(
@@ -714,16 +966,25 @@ def main() -> int:
             raw_text = ""
             parser_engine_tag = variant
             call_meta: dict[str, Any] = {
-                "status": "success",
+                "status": "not_applicable",
+                "gemini_status": "not_applicable",
                 "model": effective_model,
+                "fallback_reason": None,
+                "error_fallback": False,
                 "latency_s": 0.0,
-                "total_tokens": 0,
                 "prompt_tokens": 0,
                 "candidates_tokens": 0,
+                "cached_tokens": 0,
+                "thoughts_tokens": 0,
+                "total_tokens": 0,
                 "cost_usd": 0.0,
                 "cost_idr": 0.0,
+                "calls_count": 0,
+                "web_search_queries": [],
+                "calls_details": [],
             }
             mapped: dict[str, ExtractedValue] = {}
+            semantic_review: dict[str, list[str]] = {}
             route_reason = "direct"
             if variant == "production_conditional":
                 # Jalur produksi aktual: PyMuPDF -> OCR jika teks pendek/missing dates -> Gemini
@@ -793,18 +1054,6 @@ def main() -> int:
                         )
                         call_meta.update(g_meta)
 
-                        # Hitung biaya jika tersedia token usage
-                        p_tok = g_meta.get("prompt_tokens", 0)
-                        c_tok = g_meta.get("candidates_tokens", 0)
-                        if pricing and (p_tok or c_tok):
-                            usd = (
-                                (p_tok * pricing.input_rate)
-                                + (c_tok * pricing.output_rate)
-                            ) / 1_000_000.0
-                            idr = usd * exchange_rate
-                            call_meta["cost_usd"] = round(usd, 6)
-                            call_meta["cost_idr"] = round(idr, 2)
-
                         if gemini_extracted is not None:
                             mapped = map_fields_to_form(
                                 gemini_extracted,
@@ -821,6 +1070,28 @@ def main() -> int:
                                 tahun_akademik="2024/2025",
                                 bukti_fisik="Sertifikat",
                             )
+
+            call_meta = complete_telemetry_meta(
+                call_meta,
+                model=effective_model,
+            )
+            if variant == "production_conditional":
+                semantic_review = {
+                    field_name: list(annotation.reasons)
+                    for field_name, annotation in pipe_res.review_annotations.items()
+                    if annotation.needs_review
+                }
+                status = call_meta.get("status")
+                fallback_reason = call_meta.get("fallback_reason")
+                if status == "success":
+                    route_reason = "gemini_success"
+                elif fallback_reason:
+                    fallback_engine = call_meta.get("fallback_engine", "offline_rules")
+                    route_reason = f"{fallback_reason}:{fallback_engine}"
+                elif "ocr" in parser_engine_tag:
+                    route_reason = "ocr_triggered"
+                else:
+                    route_reason = "pymupdf_sufficient"
 
             # Simpan hash teks mentah
             raw_texts_hashes[variant][stem] = sha256_text(raw_text)
@@ -842,6 +1113,7 @@ def main() -> int:
                 "route_reason": route_reason,
                 "parser_engine": parser_engine_tag,
                 "call_meta": call_meta,
+                "semantic_review": semantic_review,
                 "evaluation": evaluation,
                 "summary": {
                     "exact_fields": exact_count,
@@ -877,6 +1149,7 @@ def main() -> int:
         agg_overall = compute_variant_aggregate(v_res)
         agg_scan = compute_variant_aggregate(scan_res)
         agg_emb = compute_variant_aggregate(emb_res)
+        telemetry = compute_telemetry_aggregate(v_res)
 
         # Statistical validation
         boot = run_bootstrap_ci(v_res, n_bootstraps=1000, seed=42)
@@ -893,11 +1166,11 @@ def main() -> int:
             paired_deltas_all[v] = {
                 "overall": {"wins": 0, "ties": len(v_res), "losses": 0}
             }
-
         summary_variants[v] = {
             "overall": agg_overall,
             "scan": agg_scan,
             "embedded": agg_emb,
+            "telemetry": telemetry,
             "bootstrap_ci": boot,
             "stratified_5fold_cv": cv5,
             "paired_vs_production": paired_deltas_all.get(v, {}),
@@ -960,9 +1233,18 @@ def main() -> int:
             "route_reason",
             "parser_engine",
             "gemini_status",
+            "fallback_reason",
+            "calls_count",
             "latency_s",
+            "prompt_tokens",
+            "candidates_tokens",
+            "cached_tokens",
+            "thoughts_tokens",
             "total_tokens",
+            "cost_usd",
             "cost_idr",
+            "semantic_review_fields",
+            "semantic_review_reasons",
             "kegiatan_pred",
             "kegiatan_gt",
             "kegiatan_match",
@@ -987,6 +1269,7 @@ def main() -> int:
         for v in active_variants:
             for r in all_results[v]:
                 ev = r["evaluation"]
+                meta = r["call_meta"]
                 writer.writerow([
                     r["stem"],
                     r["filename"],
@@ -994,10 +1277,23 @@ def main() -> int:
                     r["variant"],
                     r["route_reason"],
                     r["parser_engine"],
-                    r["call_meta"].get("status", "ok"),
-                    r["call_meta"].get("latency_s", 0.0),
-                    r["call_meta"].get("total_tokens", 0),
-                    r["call_meta"].get("cost_idr", 0.0),
+                    meta.get("status", "ok"),
+                    meta.get("fallback_reason"),
+                    meta.get("calls_count", 0),
+                    meta.get("latency_s", 0.0),
+                    meta.get("prompt_tokens", 0),
+                    meta.get("candidates_tokens", 0),
+                    meta.get("cached_tokens", 0),
+                    meta.get("thoughts_tokens", 0),
+                    meta.get("total_tokens", 0),
+                    meta.get("cost_usd", 0.0),
+                    meta.get("cost_idr", 0.0),
+                    len(r.get("semantic_review") or {}),
+                    json.dumps(
+                        r.get("semantic_review") or {},
+                        ensure_ascii=False,
+                        sort_keys=True,
+                    ),
                     ev["nama_kegiatan_sertifikasi"]["pred"],
                     ev["nama_kegiatan_sertifikasi"]["gt"],
                     "EXACT"
@@ -1117,8 +1413,37 @@ def main() -> int:
                 f"{scan_str} | {emb_str} | "
                 f"{s_all['missing_values']} | [{ci[0]}%, {ci[1]}%] |\n"
             )
+        f.write("\n## 2. Token, Biaya, Latensi, dan Safety Review\n\n")
+        f.write(
+            "| Varian | Calls | Prompt | Candidates | Cached | Thoughts | Total | Tok/doc | Cost USD | Cost IDR | Latency total (s) | Latency/doc (s) | Status | Fallback | Review fields |\n"
+        )
+        f.write(
+            "|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|---|---|:---:|\n"
+        )
+        for v in sorted_by_accuracy:
+            telemetry = summary_variants[v]["telemetry"]
+            statuses = ", ".join(
+                f"{status}:{count}"
+                for status, count in sorted(telemetry["status_counts"].items())
+            )
+            fallbacks = ", ".join(
+                f"{reason}:{count}"
+                for reason, count in sorted(
+                    telemetry["fallback_reason_counts"].items()
+                )
+            ) or "none"
+            f.write(
+                f"| **{v}** | {telemetry['total_calls']} | "
+                f"{telemetry['prompt_tokens']} | {telemetry['candidates_tokens']} | "
+                f"{telemetry['cached_tokens']} | {telemetry['thoughts_tokens']} | "
+                f"{telemetry['total_tokens']} | {telemetry['tokens_per_document']} | "
+                f"{telemetry['total_cost_usd']:.6f} | {telemetry['total_cost_idr']:.2f} | "
+                f"{telemetry['total_latency_s']:.4f} | "
+                f"{telemetry['average_latency_per_document_s']:.4f} | "
+                f"{statuses} | {fallbacks} | {telemetry['semantic_review_fields']} |\n"
+            )
 
-        f.write("\n## 2. Akurasi Per Field (All-Cells 6-Field)\n\n")
+        f.write("\n## 3. Akurasi Per Field (All-Cells 6-Field)\n\n")
         f.write(
             "| Varian | Kegiatan | Nomor | Penyelenggara | Tgl Mulai | Tgl Selesai | Tingkat |\n"
         )
@@ -1136,7 +1461,7 @@ def main() -> int:
                 f"{pf['tingkat']['exact_pct']}% |\n"
             )
 
-        f.write("\n## 3. Paired Delta vs Production Conditional\n\n")
+        f.write("\n## 4. Paired Delta vs Production Conditional\n\n")
         f.write("| Varian | Wins | Ties | Losses | Embedded Impact |\n")
         f.write("|---|:---:|:---:|:---:|:---:|\n")
         for v in sorted_by_accuracy:

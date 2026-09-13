@@ -49,8 +49,8 @@ class Settings:
     # Combined v4.1 Staging (EXP-V4-002: Minor Staging Refinement, 0 LLM):
     # DEFAULT FALSE (gated) — aktifkan via ENABLE_COMBINED_V4_1=true untuk aktivasi staging pipeline.
     enable_combined_v4_1: bool = os.getenv("ENABLE_COMBINED_V4_1", "false").lower() == "true"
-    # Combined v4.2 Staging (EXP-V4-003: 3 Pillars & High-DPI Robustness, 0 LLM):
-    # DEFAULT FALSE (gated) — aktifkan via ENABLE_COMBINED_V4_2=true untuk aktivasi staging pipeline.
+    # Combined v4.2 menjadi fallback offline. Default kode tetap false; template
+    # deployment menetapkan ENABLE_COMBINED_V4_2=true saat Gemini gagal.
     enable_combined_v4_2: bool = os.getenv("ENABLE_COMBINED_V4_2", "false").lower() == "true"
     max_job_retries: int = int(os.getenv("MAX_JOB_RETRIES", "3"))
     processing_mode: str = os.getenv("PROCESSING_MODE", "background").lower()

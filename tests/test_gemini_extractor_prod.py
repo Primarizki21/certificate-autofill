@@ -250,9 +250,9 @@ class TestGeminiExtractorProduction:
         }
         try:
             object.__setattr__(settings, "enable_ocr_fallback", False)
-            object.__setattr__(settings, "enable_tesseract_gemini", True)
             for name in original_flags:
                 object.__setattr__(settings, name, False)
+            object.__setattr__(settings, "enable_tesseract_gemini", True)
             object.__setattr__(settings, "enable_combined_v4_2", True)
             result = run_extraction_pipeline(
                 b"not-a-real-pdf",
@@ -264,7 +264,9 @@ class TestGeminiExtractorProduction:
                 object.__setattr__(settings, name, value)
 
         assert len(combined_calls) == 1
-        assert result.raw_json is None
+        assert result.raw_json is not None
+        assert result.raw_json["fallback_engine"] == "combined_v4_2"
+        assert result.raw_json["fallback_reason"] == "gemini_error"
         assert result.parser_engine.endswith("+combined_v4_2")
 
 
