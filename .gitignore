@@ -86,6 +86,7 @@ tests/benchmark_runs/
 Sertifikat_Ground_Truth/
 certs_test/
 certs_unified/
+data/
 # Private experiment reports & documentation
 docs/report
 docs/experiments/
