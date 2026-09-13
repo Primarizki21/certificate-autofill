@@ -60,8 +60,9 @@ class Settings:
     enable_llm_tingkat: bool = os.getenv("ENABLE_LLM_TINGKAT", "false").lower() == "true"
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
-    # Tesseract-to-Gemini Direct Extraction Pipeline (EXP-LLM-002: Option A Direct Replacement):
-    # Default true per user request, dapat dimatikan via ENABLE_TESSERACT_GEMINI=false.
+    # Production Tesseract-to-Gemini path: V2 scope-aware prompt plus
+    # structural title/organizer boundaries. Default true; disable to route
+    # documents directly through offline extraction.
     enable_tesseract_gemini: bool = os.getenv("ENABLE_TESSERACT_GEMINI", "true").lower() == "true"
     google_api_key: str | None = os.getenv("GOOGLE_API_KEY")
     google_gemini_model: str = os.getenv("GOOGLE_GEMINI_MODEL", "gemini-3.1-flash-lite")

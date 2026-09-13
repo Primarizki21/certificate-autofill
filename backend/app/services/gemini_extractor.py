@@ -1,8 +1,8 @@
-"""Production service for Tesseract-to-Gemini Direct Extraction (Option A).
+"""Production service for Tesseract-to-Gemini Scope-Aware extraction.
 
 Extracts structured certificate metadata directly from raw OCR text using Google Gemini
-with strict JSON generationConfig, deterministic temperature 0.0, date standardization,
-and mandatory full_text injection for form_mapper compatibility.
+with the promoted V2 scope rules, strict JSON generationConfig, deterministic temperature
+0.0, date standardization, and mandatory full_text injection for form_mapper compatibility.
 """
 
 from __future__ import annotations
@@ -41,14 +41,16 @@ Aturan Wajib:
 5. Tingkat (tingkat):
    - Wajib salah satu nilai enum berikut persis:
      ["Internasional", "Nasional", "Universitas", "Fakultas", "Departemen/Program Studi", "Lainnya"]
+   - Prinsip Utama: Cakupan Sasaran Peserta (Skala Nasional/Internasional) LEBIH UTAMA daripada Jenjang Penyelenggara.
    - Pedoman:
-     * Acara/organisasi tingkat BEM Fakultas (FEB/FKM/FTMM/FST/dsb) -> "Fakultas".
-     * HIMA / Himpunan Mahasiswa Departemen / Program Studi -> "Departemen/Program Studi".
-     * UKM / Ormawa universitas / BSO -> "Lainnya".
-     * Rektorat / BEM Universitas / Direktorat Kemahasiswaan Universitas -> "Universitas".
-     * Lomba / kompetisi / seminar tingkat nasional -> "Nasional".
-     * Konferensi / seminar / event internasional -> "Internasional".
-     * Jika tidak diketahui atau di luar kategori di atas -> "Lainnya".
+     * Lomba, kompetisi, hackathon, seminar, call for papers, atau event terbuka untuk mahasiswa umum lintas perguruan tinggi/nasional -> "Nasional" (MESKIPUN diselenggarakan oleh BEM Fakultas atau Himpunan Mahasiswa Departemen).
+     * Konferensi, symposium, atau event berskala global/lintas negara -> "Internasional".
+     * Kegiatan internal kemahasiswaan/organisasi kampus non-lomba terbuka, tentukan berdasarkan hierarki unit:
+       - Rektorat / BEM Universitas / Direktorat Kemahasiswaan Universitas -> "Universitas".
+       - Kepengurusan, raker, atau kepanitiaan BEM Fakultas / ormawa fakultas -> "Fakultas".
+       - Kepengurusan, raker, atau kepanitiaan Himpunan Mahasiswa / Program Studi -> "Departemen/Program Studi".
+       - UKM / Unit Kegiatan Mahasiswa / BSO -> "Lainnya".
+     * Jika tidak diketahui atau bukti tidak cukup untuk memastikan cakupan -> "Lainnya".
 6. Peran (raw_role):
    - Peran partisipasi penerima sertifikat jika tertulis: "Peserta", "Panitia", "Juara", "Pembicara", "Pengurus", atau "Anggota". Jika tidak tertulis, isi null.
 """

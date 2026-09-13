@@ -1,8 +1,8 @@
-"""Production-equivalent paired benchmark for V1 versus V2 Scope-Aware.
+"""Production-equivalent paired benchmark for the V2 Scope-Aware prompt.
 
 The runner reuses the production PDF -> PyMuPDF -> conditional OCR input path,
-then evaluates the current V1 prompt and test-only V2 prompt against the same
-raw text. Production code remains unchanged until an explicit promotion.
+then compares the current production prompt with the test-only V2 prompt. After
+promotion, prompt parity is expected; historical deliverables remain immutable.
 
 Outputs are immutable per B14: pass a new output directory for every run.
 """
@@ -81,16 +81,19 @@ def sha256_bytes(value: bytes) -> str:
 
 
 def _assert_prompt_parity() -> None:
-    """Ensure V1 benchmark request matches the current production prompt."""
+    """Ensure the current production prompt matches the promoted V2 baseline."""
+    if PRODUCTION_V1_SYSTEM_INSTRUCTION != V2_BASELINE_SYSTEM_INSTRUCTION:
+        raise AssertionError(
+            "Production system prompt differs from the promoted V2 baseline."
+        )
     if PRODUCTION_USER_PROMPT_TEMPLATE != V2_BASELINE_USER_PROMPT_TEMPLATE:
         raise AssertionError(
-            "Production V1 user template differs from benchmark baseline template."
+            "Production user template differs from the promoted V2 baseline."
         )
-    if "Cakupan Sasaran Peserta" not in V2_BASELINE_SYSTEM_INSTRUCTION:
-        raise AssertionError("V2 Scope-Aware prompt kehilangan aturan scope utama.")
-    if "Jenjang Penyelenggara" not in V2_BASELINE_SYSTEM_INSTRUCTION:
-        raise AssertionError("V2 Scope-Aware prompt kehilangan pembanding organizer.")
-
+    if "Cakupan Sasaran Peserta" not in PRODUCTION_V1_SYSTEM_INSTRUCTION:
+        raise AssertionError("Production prompt kehilangan aturan scope utama.")
+    if "Jenjang Penyelenggara" not in PRODUCTION_V1_SYSTEM_INSTRUCTION:
+        raise AssertionError("Production prompt kehilangan pembanding organizer.")
 
 def _ensure_fresh_output(output_dir: Path) -> None:
     """Reject existing deliverables or non-empty output directories."""
