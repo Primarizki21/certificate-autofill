@@ -171,17 +171,17 @@ Evaluasi pembentukan teks input terhadap 74 dokumen sertifikat (49 pindaian/scan
 | PyMuPDF murni (Tanpa OCR) | 27.70% | 33.23% | 9.18% (collapse) | 64.00% | Gagal membaca dokumen scan tanpa layer teks |
 | Engine Lain (DocTR, LFM2.5-VL, Docling, PaddleOCR) | Gagal Gate | Gagal Gate | — | — | **Closed** di *ledger* (faktor kegagalan nomor, latensi ekstrem >70s, atau memory overhead) |
 
-### 4. Perbandingan Model Named Entity Recognition (NER)
+### 4. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
 |---|:---:|:---:|:---:|---|
-| **GLiNER v2.1 Multilingual Fine-Tuned** (`NER-GLINER-002`) | **54.52%** | **63.23%** | **0.00pt drop (Kebal)** | Model encoder/span terbaik; ekstraksi tanggal (63.6%) dan nomor (55.8%) tinggi |
 | IndoBERT-ner-gold Fine-Tuned (`NER-ENCODER-002`) | 44.52% | 57.10% | -4.2pt drop | Monolingual Indonesia 334M, 5-Fold Stratified OOF |
 | XLM-RoBERTa Large Fine-Tuned (`NER-ENCODER-001`) | 43.55% | 55.48% | -5.8pt drop | Multilingual 560M, kebutuhan VRAM tinggi (7.1 GB) |
 | mDeBERTa-v3-base Fine-Tuned (`NER-ENCODER-001`) | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
 | IndoBERT Pre-trained v1 (Zero-Shot) | 12.80% | 24.50% | — | Baseline tanpa penyesuaian domain sertifikat |
 
+> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Tesseract sebagai sumber OCR dan extractor produksi; GLiNER serta model NER tidak dipanggil.
 ---
 
 ### Penjelasan Metrik & Formula Evaluasi
