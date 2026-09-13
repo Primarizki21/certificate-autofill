@@ -661,25 +661,8 @@ def generate_technical_report_docx():
         "membuktikan bahwa performa pipeline teruji secara general dan tidak mengalami overfitting pada dataset 74 sertifikat:"
     )
 
-    _add_styled_p(doc, "Lapis 1: Validasi Statistik Stratified 5-Fold Cross-Validation:", bold=True)
-    _add_styled_p(
-        doc,
-        "Aturan router tingkat (B4) dievaluasi melalui stratified 5-fold cross-validation. "
-        "Seluruh aturan mencapai Min-Fold Precision 100.0% (tidak ditemukan satu pun false positive pada data uji fold yang tidak pernah dilihat saat perancangan aturan)."
-    )
 
-    cv_headers = ["Fold Evaluasi", "Ukuran Data Uji Holdout", "Presisi Router Tingkat", "False Positive", "Status Validasi"]
-    cv_rows = [
-        ["Fold 1", "15 Sertifikat", "100.0%", "0 Kasus Salah", "PASS"],
-        ["Fold 2", "15 Sertifikat", "100.0%", "0 Kasus Salah", "PASS"],
-        ["Fold 3", "15 Sertifikat", "100.0%", "0 Kasus Salah", "PASS"],
-        ["Fold 4", "15 Sertifikat", "100.0%", "0 Kasus Salah", "PASS"],
-        ["Fold 5", "14 Sertifikat", "100.0%", "0 Kasus Salah", "PASS"],
-        ["RATA-RATA", "74 Sertifikat", "100.0%", "0 Kasus Salah", "PASS (Min-Fold: 100%)"],
-    ]
-    _build_docx_table(doc, cv_headers, cv_rows, [1.2, 1.6, 1.4, 1.2, 1.4])
-
-    _add_styled_p(doc, "Lapis 2: Uji Ketahanan Out-of-Distribution (OOD Stress Testing):", bold=True)
+    _add_styled_p(doc, "Lapis 1: Uji Ketahanan Out-of-Distribution (OOD Stress Testing):", bold=True)
     _add_styled_p(
         doc,
         "1. Uji Mutasi Entitas: Mengganti nama instansi UNAIR -> UNS dan FTMM -> FST secara masif. "
@@ -696,21 +679,22 @@ def generate_technical_report_docx():
     ]
     _build_docx_table(doc, ood_headers, ood_rows, [1.4, 1.4, 1.6, 2.4])
 
-    _add_styled_p(doc, "Lapis 3: Ekstraksi Berbasis Jangkar Semantik Struktural (Anti-Hardcoding):", bold=True)
+    _add_styled_p(doc, "Lapis 2: Ekstraksi Berbasis Jangkar Semantik Struktural (Anti-Hardcoding):", bold=True)
     _add_styled_p(
         doc,
         "Ekstraktor kegiatan v9 tidak mengandalkan daftar judul kegiatan yang di-hardcode, melainkan pola gramatikal formal: "
         "'sebagai [Peran] dalam kegiatan [Nama Acara] yang diselenggarakan oleh [Penyelenggara]'. "
-        "Hasil audit de-corpusing (B7) membuktikan bahwa pelepasan kata kunci literal nomor menghasilkan assist 0.0pt (lepas bebas tanpa regresi)."
+        "Audit penghapusan kata kunci literal nomor menghasilkan assist 0.0pt, sehingga pola tetap bekerja tanpa ketergantungan pada judul event tertentu."
     )
 
-    _add_styled_p(doc, "Lapis 4: Arsitektur Safety Net & Calibrated Confidence (Zero Silent Error):", bold=True)
+    _add_styled_p(doc, "Lapis 3: Arsitektur Safety Net & Calibrated Confidence (Zero Silent Error):", bold=True)
     _add_styled_p(
         doc,
         "Seluruh field hasil ekstraksi dibungkus objek ExtractedValue(value, confidence, source). "
         "Nilai yang mengalami perbaikan karakter darurat secara otomatis diberi confidence terkalibrasi 0.78 "
         "(di bawah ambang batas form 0.80), sehingga otomatis memicu flag 'needs_review = True'. "
-        "Sistem memastikan tidak ada kesalahan pembacaan yang tersimpan ke database tanpa verifikasi pengguna."
+        "Tanggal yang memang tidak tersedia boleh tetap null tanpa review; jika raw OCR memuat anchor tanggal tetapi hasil tanggal kosong, safety net menandainya. "
+        "Field wajib lain yang kosong tetap memicu verifikasi pengguna."
     )
 
     # -----------------------------------------------------------------------

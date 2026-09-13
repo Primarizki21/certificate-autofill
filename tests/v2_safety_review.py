@@ -17,6 +17,28 @@ VALID_TINGKAT = {
     "Departemen/Program Studi",
     "Lainnya",
 }
+OPTIONAL_EMPTY_FIELDS = frozenset(
+    {
+        "waktu_mulai_pelaksanaan",
+        "waktu_selesai_pelaksanaan",
+    }
+)
+_EMPTY_MARKERS = frozenset({"", "-", "null"})
+
+
+def is_optional_absence(
+    field_name: str,
+    expected: str | None,
+    predicted: str | None,
+) -> bool:
+    """True bila field opsional kosong di sumber dan hasil ekstraksi."""
+    if field_name not in OPTIONAL_EMPTY_FIELDS:
+        return False
+    expected_text = str(expected or "").strip().lower()
+    predicted_text = str(predicted or "").strip().lower()
+    return expected_text in _EMPTY_MARKERS and predicted_text in _EMPTY_MARKERS
+
+
 _DATE_ANCHOR_RE = re.compile(
     r"(?:\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|"
     r"\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|"
@@ -111,7 +133,12 @@ def build_review_annotations(
             annotations[field]["reasons"].append(reason)
 
     for field, value in fields.items():
-        if not (value or "").strip():
+        value_text = str(value or "").strip().lower()
+        if field in OPTIONAL_EMPTY_FIELDS and value_text in _EMPTY_MARKERS:
+            if _DATE_ANCHOR_RE.search(raw_text or ""):
+                add(field, "date_value_missing_despite_raw_anchor")
+            continue
+        if not value_text:
             add(field, "missing_value")
         if value and confidence < 0.85:
             add(field, "low_confidence")

@@ -1,4 +1,4 @@
-"""Unit tests for V2 Scope-Aware four-layer proof assembly."""
+"""Unit tests for V2 Scope-Aware three-layer proof assembly."""
 
 from __future__ import annotations
 

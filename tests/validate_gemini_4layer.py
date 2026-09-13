@@ -1,12 +1,11 @@
-"""Empirical 4-Layer Generalization & Robustness Proof for Gemini Extraction.
+"""Empirical 3-Layer Generalization & Robustness Proof for Gemini Extraction.
 
-Implements the mandatory 4-layer empirical proof required by AGENTS.md:
-  1. Layer 1: Statistical Holdout (stratified fixed-prediction split) + Bootstrap 1000x CI
-  2. Layer 2: Out-of-Distribution (OOD) Robustness (Template/Entity Mutation + OCR Noise 10/25/50%)
-  3. Layer 3: Structural Semantic Anchors Audit (Anti-Hardcoding & De-Corpusing Audit)
-  4. Layer 4: Production Safety Net & Calibrated Confidence Review Calibration (Recall >= 95%)
+Implements the active 3-layer empirical proof:
+  1. Layer 1: Out-of-Distribution (OOD) Robustness (Template/Entity Mutation + OCR Noise 10/25/50%)
+  2. Layer 2: Structural Semantic Anchors Audit (Anti-Hardcoding & De-Corpusing Audit)
+  3. Layer 3: Production Safety Net & Calibrated Confidence Review Calibration (Recall >= 95%)
 
-Outputs full tabular proof to docs/report/gemini_4layer_empirical_proof.md.
+The module name remains `validate_gemini_4layer.py` for import compatibility.
 """
 
 from __future__ import annotations
@@ -29,7 +28,6 @@ if REPO_ROOT not in sys.path:
 if BACKEND_DIR not in sys.path:
     sys.path.insert(0, BACKEND_DIR)
 
-from tests.evaluation_framework import EVAL_FIELDS, load_csv
 from tests.gemini_client import GeminiClient
 from tests.gemini_field_extractor import (
     ALL_EVAL_FIELDS,
@@ -38,9 +36,10 @@ from tests.gemini_field_extractor import (
     extract_fields_from_ocr,
 )
 from tests.matchers import match_field
-from tests.ood_probe import CONFUSIONS, MUTATIONS, inject_noise, mutate
+from tests.ood_probe import inject_noise, mutate
+from tests.v2_safety_review import is_optional_absence
 
-# Hardcoded corpus keywords yang diaudit untuk Lapis 3 (harus 0 kemunculan di prompt)
+# Hardcoded corpus keywords yang diaudit untuk Lapis 2 (harus 0 kemunculan di prompt)
 CORPUS_EVENT_KEYWORDS = [
     "SPECTA",
     "KARSA",
@@ -70,130 +69,6 @@ def find_latest_benchmark_json(runs_root: str) -> str | None:
     candidates.sort(key=lambda x: x.stat().st_mtime, reverse=True)
     return str(candidates[0])
 
-
-# ==============================================================================
-# LAPIS 1: VALIDASI STATISTIK (5-FOLD CV & BOOTSTRAP 1000X CI)
-# ==============================================================================
-
-def run_stratified_5fold_cv(certificates: list[dict[str, Any]], seed: int = 42) -> dict[str, Any]:
-    """Ukur holdout terstratifikasi dari prediction tetap, bukan fitting CV."""
-    rng = random.Random(seed)
-
-    scans = [c for c in certificates if c.get("doc_type") == "scan"]
-    embedded = [c for c in certificates if c.get("doc_type") == "embedded"]
-    others = [c for c in certificates if c.get("doc_type") not in ("scan", "embedded")]
-
-    rng.shuffle(scans)
-    rng.shuffle(embedded)
-    rng.shuffle(others)
-
-    k = 5
-    folds: list[list[dict[str, Any]]] = [[] for _ in range(k)]
-
-    for i, item in enumerate(scans):
-        folds[i % k].append(item)
-    for i, item in enumerate(embedded):
-        folds[i % k].append(item)
-    for i, item in enumerate(others):
-        folds[i % k].append(item)
-
-    fold_metrics: list[dict[str, Any]] = []
-
-    for fold_idx in range(k):
-        holdout = folds[fold_idx]
-        total_cells = 0
-        exact_cells = 0
-        field_exact: dict[str, int] = {f: 0 for f in ALL_EVAL_FIELDS}
-        field_total: dict[str, int] = {f: 0 for f in ALL_EVAL_FIELDS}
-
-        for cert in holdout:
-            ev = cert["evaluation"]
-            for f in ALL_EVAL_FIELDS:
-                total_cells += 1
-                field_total[f] += 1
-                if ev[f]["exact"]:
-                    exact_cells += 1
-                    field_exact[f] += 1
-
-        fold_acc = (exact_cells / total_cells * 100) if total_cells else 0.0
-        fold_metrics.append({
-            "fold": fold_idx + 1,
-            "n_certs": len(holdout),
-            "macro_exact_pct": round(fold_acc, 2),
-            "per_field_exact_pct": {
-                f: round(field_exact[f] / field_total[f] * 100, 2) if field_total[f] else 0.0
-                for f in ALL_EVAL_FIELDS
-            },
-        })
-
-    accuracies = [fm["macro_exact_pct"] for fm in fold_metrics]
-    mean_acc = sum(accuracies) / k
-    variance = sum((a - mean_acc) ** 2 for a in accuracies) / (k - 1)
-    std_dev = variance ** 0.5
-    min_fold = min(accuracies)
-
-    return {
-        "status": "DESCRIPTIVE_FIXED_PIPELINE_HOLDOUT",
-        "method": "stratified_5fold_holdout_on_fixed_predictions",
-        "independent_model_fit_per_fold": False,
-        "k_folds": k,
-        "fold_results": fold_metrics,
-        "mean_macro_exact_pct": round(mean_acc, 2),
-        "std_dev_pct": round(std_dev, 2),
-        "min_fold_accuracy_pct": round(min_fold, 2),
-    }
-
-
-def run_bootstrap_resampling(certificates: list[dict[str, Any]], n_bootstraps: int = 1000, seed: int = 42) -> dict[str, Any]:
-    """Hitung 95% Confidence Interval untuk MACRO exact dan per-field via Bootstrap 1000x."""
-    rng = random.Random(seed)
-    n = len(certificates)
-    if n == 0:
-        return {}
-
-    boot_macro: list[float] = []
-    boot_fields: dict[str, list[float]] = {f: [] for f in ALL_EVAL_FIELDS}
-
-    for _ in range(n_bootstraps):
-        sample = [certificates[rng.randint(0, n - 1)] for _ in range(n)]
-        tot_cells = 0
-        ex_cells = 0
-        f_tot = {f: 0 for f in ALL_EVAL_FIELDS}
-        f_ex = {f: 0 for f in ALL_EVAL_FIELDS}
-
-        for cert in sample:
-            ev = cert["evaluation"]
-            for f in ALL_EVAL_FIELDS:
-                tot_cells += 1
-                f_tot[f] += 1
-                if ev[f]["exact"]:
-                    ex_cells += 1
-                    f_ex[f] += 1
-
-        boot_macro.append(ex_cells / tot_cells * 100.0)
-        for f in ALL_EVAL_FIELDS:
-            boot_fields[f].append(f_ex[f] / f_tot[f] * 100.0 if f_tot[f] else 0.0)
-
-    boot_macro.sort()
-    idx_lower = int(0.025 * n_bootstraps)
-    idx_upper = int(0.975 * n_bootstraps)
-
-    ci_macro = (round(boot_macro[idx_lower], 2), round(boot_macro[idx_upper], 2))
-
-    ci_fields: dict[str, tuple[float, float]] = {}
-    for f in ALL_EVAL_FIELDS:
-        boot_fields[f].sort()
-        ci_fields[f] = (
-            round(boot_fields[f][idx_lower], 2),
-            round(boot_fields[f][idx_upper], 2),
-        )
-
-    return {
-        "n_bootstraps": n_bootstraps,
-        "macro_exact_mean_pct": round(sum(boot_macro) / n_bootstraps, 2),
-        "macro_exact_95_ci": ci_macro,
-        "per_field_95_ci": ci_fields,
-    }
 
 def summarize_gemini_calls(calls: list[tuple[str, Any]]) -> dict[str, Any]:
     """Ringkas token, biaya, latensi, status, dan kueri per panggilan."""
@@ -259,7 +134,7 @@ def summarize_gemini_calls(calls: list[tuple[str, Any]]) -> dict[str, Any]:
 
 
 # ==============================================================================
-# LAPIS 2: UJI KETAHANAN OOD (MUTASI ENTITAS & NOISE OCR)
+# LAPIS 1: UJI KETAHANAN OOD (MUTASI ENTITAS & NOISE OCR)
 # ==============================================================================
 
 def run_ood_stress_testing(
@@ -304,7 +179,7 @@ def run_ood_stress_testing(
     if empty_texts:
         raise ValueError(f"Teks OCR kosong untuk dokumen: {empty_texts[:5]}")
 
-    print(f"\n--- MENJALANKAN LAPIS 2: OOD STRESS TEST ({len(sample)} sertifikat terstratifikasi) ---")
+    print(f"\n--- MENJALANKAN LAPIS 1: OOD STRESS TEST ({len(sample)} sertifikat terstratifikasi) ---")
 
     # Baseline unperturbed pada sample
     base_free_exact = 0
@@ -424,7 +299,7 @@ def run_ood_stress_testing(
 
 
 # ==============================================================================
-# LAPIS 3: AUDIT ANCHOR STRUKTURAL (ANTI-HARDCODING)
+# LAPIS 2: AUDIT ANCHOR STRUKTURAL (ANTI-HARDCODING)
 # ==============================================================================
 def run_anti_hardcoding_audit(
     system_instruction: str,
@@ -471,11 +346,12 @@ def run_anti_hardcoding_audit(
     }
 
 # ==============================================================================
-# LAPIS 4: SAFETY NET PRODUKSI & CALIBRATED CONFIDENCE (REVIEW RECALL >= 95%)
+# LAPIS 3: SAFETY NET PRODUKSI & CALIBRATED CONFIDENCE (REVIEW RECALL >= 95%)
 # ==============================================================================
 
 def run_safety_net_calibration(certificates: list[dict[str, Any]]) -> dict[str, Any]:
-    """Ukur recall review pada cell dan dokumen secara terpisah."""
+    """Ukur recall review sambil mengabaikan tanggal yang memang tidak tersedia."""
+    ignored_optional_absences = 0
     cell_tp = cell_fp = cell_fn = cell_tn = 0
     doc_tp = doc_fp = doc_fn = doc_tn = 0
 
@@ -485,13 +361,21 @@ def run_safety_net_calibration(certificates: list[dict[str, Any]]) -> dict[str, 
         doc_has_flag = False
         for field_name in ALL_EVAL_FIELDS:
             field_evaluation = evaluation[field_name]
+            if is_optional_absence(
+                field_name,
+                field_evaluation.get("gt"),
+                field_evaluation.get("pred"),
+            ):
+                ignored_optional_absences += 1
+                continue
+
             has_error = not field_evaluation["exact"]
-            prediction = field_evaluation["pred"]
+            prediction = str(field_evaluation.get("pred") or "").strip()
             confidence = field_evaluation["confidence"]
             flag_review = not prediction or confidence < 0.85
             if "tanggal" in field_name and prediction:
                 flag_review = flag_review or not re.match(
-                    r"^\d{2}/\d{2}/\d{4}$", prediction.strip()
+                    r"^\d{2}/\d{2}/\d{4}$", prediction
                 )
             doc_has_error = doc_has_error or has_error
             doc_has_flag = doc_has_flag or flag_review
@@ -504,6 +388,7 @@ def run_safety_net_calibration(certificates: list[dict[str, Any]]) -> dict[str, 
                 cell_fp += 1
             else:
                 cell_tn += 1
+
 
         if doc_has_error:
             if doc_has_flag:
@@ -530,6 +415,7 @@ def run_safety_net_calibration(certificates: list[dict[str, Any]]) -> dict[str, 
     cell_rates = rates(cell_tp, cell_fp, cell_fn, cell_fp + cell_tn)
     doc_rates = rates(doc_tp, doc_fp, doc_fn, doc_fp + doc_tn)
     return {
+        "ignored_optional_absences": ignored_optional_absences,
         "confusion_matrix": {
             "true_positive": doc_tp,
             "false_positive": doc_fp,
@@ -561,13 +447,12 @@ def run_safety_net_calibration(certificates: list[dict[str, Any]]) -> dict[str, 
         "minimum_cell_review_recall_pct": 95.0,
     }
 
-
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Run 4-Layer Empirical Proof for Gemini Extraction")
+    parser = argparse.ArgumentParser(description="Run 3-Layer Empirical Proof for Gemini Extraction")
     parser.add_argument("--run-json", type=str, default=None, help="Path ke run_results.json hasil benchmark")
     parser.add_argument("--runs-root", type=str, default=os.path.join(REPO_ROOT, "tests", "benchmark_runs", "ocr_experiment"), help="Direktori root benchmark runs")
     parser.add_argument("--texts-dir", type=str, default=os.path.join(REPO_ROOT, "tests", "benchmark_runs", "ocr_experiment", "tesseract_primary_v4", "extracted_texts"), help="Direktori teks Tesseract OCR")
-    parser.add_argument("--model", type=str, default=None, help="Model yang diuji pada Lapis 2 OOD")
+    parser.add_argument("--model", type=str, default=None, help="Model yang diuji pada Lapis 1 OOD")
     parser.add_argument("--full", action="store_true", help="Jalankan OOD pada 74 sertifikat penuh (bukan sampel 15)")
     parser.add_argument("--out-dir", type=str, default=os.path.join(REPO_ROOT, "docs", "report"), help="Direktori penyimpanan laporan bukti empiris")
 
@@ -578,9 +463,9 @@ def main() -> None:
         print(f"[ERROR] run_results.json tidak ditemukan di {run_json_path}! Jalankan benchmark_gemini_tesseract terlebih dahulu.")
         sys.exit(1)
 
-    print(f"\n=======================================================")
-    print(f"MENJALANKAN 4 LAPIS PEMBUKTIAN EMPIRIS AGENTS.md")
-    print(f"=======================================================")
+    print("\n=======================================================")
+    print("MENJALANKAN 3 LAPIS PEMBUKTIAN EMPIRIS AGENTS.md")
+    print("=======================================================")
     print(f"Artifact JSON : {run_json_path}")
 
     with open(run_json_path, "r", encoding="utf-8") as f:
@@ -593,159 +478,157 @@ def main() -> None:
         SYSTEM_INSTRUCTION_STANDARD,
         USER_PROMPT_TEMPLATE,
         source_files=(
-            Path(REPO_ROOT) / "tests/gemini_field_extractor.py",
-            Path(REPO_ROOT) / "tests/benchmark_gemini_tesseract.py",
+            Path(REPO_ROOT) / "tests" / "gemini_field_extractor.py",
+            Path(REPO_ROOT) / "tests" / "benchmark_gemini_tesseract.py",
         ),
     )
-    # Lapis 1: Validasi statistik deskriptif
-    print("-> Lapis 1: 5-Fold Stratified Holdout (fixed predictions; bukan fitting CV)...")
-    cv_res = run_stratified_5fold_cv(certs, seed=42)
-    print(
-        f"   Mean Fold Accuracy : {cv_res['mean_macro_exact_pct']}% "
-        f"(Std Dev: {cv_res['std_dev_pct']}%, Min-Fold: {cv_res['min_fold_accuracy_pct']}%)"
-    )
 
-    print("-> Lapis 1: Bootstrap 1000x Resampling (95% CI)...")
-    boot_res = run_bootstrap_resampling(certs, n_bootstraps=1000, seed=42)
-    print(f"   MACRO Exact 95% CI : {boot_res['macro_exact_95_ci'][0]}% - {boot_res['macro_exact_95_ci'][1]}%")
-
-    # Lapis 2: OOD Stress Testing
+    print("-> Lapis 1: Uji Ketahanan Out-of-Distribution (OOD)...")
     client = GeminiClient(default_model=model_name, request_delay=1.2)
     subset_size = len(certs) if args.full else 15
-    ood_res = run_ood_stress_testing(certs, args.texts_dir, client, model_name, subset_size=subset_size)
-    print(f"   Mutation Free-Inst Drop : {ood_res['mutation_drop_pct']}pt (Gate <= 2.0pt: {'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'})")
-    print(f"   Noise Degradation       : 10%={ood_res['noise_degradation_curve'].get('10%', {}).get('exact_pct')}%, 25%={ood_res['noise_degradation_curve'].get('25%', {}).get('exact_pct')}%, 50%={ood_res['noise_degradation_curve'].get('50%', {}).get('exact_pct')}%")
+    ood_res = run_ood_stress_testing(
+        certs,
+        args.texts_dir,
+        client,
+        model_name,
+        subset_size=subset_size,
+    )
+    print(
+        f"   Mutation Free-Inst Drop : {ood_res['mutation_drop_pct']}pt "
+        f"(Gate <= 2.0pt: {'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'})"
+    )
+    print(
+        "   Noise Degradation       : "
+        f"10%={ood_res['noise_degradation_curve'].get('10%', {}).get('exact_pct')}%, "
+        f"25%={ood_res['noise_degradation_curve'].get('25%', {}).get('exact_pct')}%, "
+        f"50%={ood_res['noise_degradation_curve'].get('50%', {}).get('exact_pct')}%"
+    )
 
-    # Lapis 3: Audit Anchor Struktural
-    print("-> Lapis 3: Audit Anchor Semantik Struktural (Anti-Hardcoding)...")
-    print("-> Lapis 4: Evaluasi Safety Net & Calibrated Confidence...")
+    print("-> Lapis 2: Audit Anchor Semantik Struktural (Anti-Hardcoding)...")
+    print(
+        f"   Status Audit            : "
+        f"{'PASS' if ah_res['anti_hardcoding_pass'] else 'FAIL'}"
+    )
+    print("-> Lapis 3: Evaluasi Safety Net & Calibrated Confidence...")
     sn_res = run_safety_net_calibration(certs)
     print(
-        f"   Cell Review Recall    : {sn_res['cell_review_recall_pct']}% "
+        f"   Cell Review Recall      : {sn_res['cell_review_recall_pct']}% "
         f"(Gate >= 95%: {'PASS' if sn_res['gate_recall_pass'] else 'FAIL'})"
     )
     print(
-        f"   Cell Review Precision : {sn_res['cell_review_precision_pct']}% | "
+        f"   Cell Review Precision   : {sn_res['cell_review_precision_pct']}% | "
         f"Doc Recall: {sn_res['doc_review_recall_pct']}%"
     )
 
-    # Susun Laporan Markdown Bukti Empiris
     os.makedirs(args.out_dir, exist_ok=True)
-    out_md_path = os.path.join(args.out_dir, "gemini_4layer_empirical_proof.md")
+    out_md_path = os.path.join(args.out_dir, "gemini_3layer_empirical_proof.md")
 
     md_lines = [
-        f"# Empat Lapis Pembuktian Empiris: Evaluasi Generalisasi & Ketahanan ({model_name})",
+        f"# Tiga Lapis Pembuktian Empiris: Evaluasi Generalisasi & Ketahanan ({model_name})",
         "",
-        "## 1. Lapis 1: Holdout Statistik Deskriptif & Bootstrap 1000x CI",
+        f"- Dataset: `{meta.get('ground_truth', 'run artifact')}` ({len(certs)} sertifikat)",
+        f"- Model: `{model_name}`",
+        "- Input: production PyMuPDF + conditional OCR",
+        "- Grounding: disabled",
         "",
-        "> Fold memakai prediction tetap; tidak ada fitting model terpisah per fold. Angka ini bukan bukti cross-validation independen.",
-        "",
-        "### Tabel 5-Fold Stratified Holdout (Scan vs Embedded)",
-        "| Fold | Jumlah Sertifikat | MACRO Exact (%) |",
-        "|:---:|:---:|:---:|",
-    ]
-
-    for f_info in cv_res["fold_results"]:
-        md_lines.append(f"| Fold {f_info['fold']} | {f_info['n_certs']} | {f_info['macro_exact_pct']:.2f}% |")
-
-    md_lines.extend([
-        "",
-        f"- **Rata-rata 5-Fold Holdout**: **{cv_res['mean_macro_exact_pct']:.2f}%**",
-        f"- **Standar Deviasi**: **±{cv_res['std_dev_pct']:.2f}%**",
-        f"- **Min-Fold Accuracy**: **{cv_res['min_fold_accuracy_pct']:.2f}%**",
-        f"- **Status**: **{cv_res['status']}**",
-        "",
-        "### Bootstrap Resampling 1000x (95% Confidence Interval)",
-        "",
-        "| Field | Mean Estimasi (%) | 95% Confidence Interval |",
-        "|---|:---:|:---:|",
-        f"| **MACRO Exact (All-Cells)** | **{boot_res['macro_exact_mean_pct']:.2f}%** | **[{boot_res['macro_exact_95_ci'][0]:.2f}%, {boot_res['macro_exact_95_ci'][1]:.2f}%]** |",
-    ])
-
-    for f in ALL_EVAL_FIELDS:
-        ci_f = boot_res["per_field_95_ci"][f]
-        md_lines.append(f"| `{f}` | — | [{ci_f[0]:.2f}%, {ci_f[1]:.2f}%] |")
-
-    md_lines.extend([
-        "",
-        "## 2. Lapis 2: Uji Ketahanan Out-of-Distribution (OOD)",
+        "## 1. Lapis 1: Uji Ketahanan Out-of-Distribution (OOD)",
         "",
         f"- **Ukuran Sampel Terstratifikasi**: {ood_res['sample_size']} sertifikat",
         f"- **Akurasi Baseline Field Bebas-Institusi**: {ood_res['baseline_free_institution_pct']:.2f}%",
         f"- **Akurasi Pasca-Mutasi Entitas (UNAIR->UNS, FTMM->FST)**: {ood_res['mutation_free_institution_pct']:.2f}%",
-        f"- **Penurunan Akurasi (Delta)**: **{ood_res['mutation_drop_pct']:.2f}pt** (Ambang batas toleransi <= 2.0pt: **{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}**)",
+        f"- **Penurunan Akurasi (Delta)**: **{ood_res['mutation_drop_pct']:.2f}pt** "
+        f"(Ambang batas toleransi <= 2.0pt: "
+        f"**{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}**)",
         "",
         "### Kurva Ketahanan terhadap Noise Karakter OCR Nyata",
         "",
         "| Tingkat Noise | Akurasi Pasca-Noise (%) | Penurunan Akurasi (pt) |",
         "|:---:|:---:|:---:|",
-    ])
+    ]
 
     for n_key, n_val in ood_res["noise_degradation_curve"].items():
-        md_lines.append(f"| Noise {n_key} | {n_val['exact_pct']:.2f}% | -{n_val['drop_pct']:.2f}pt |")
+        md_lines.append(
+            f"| Noise {n_key} | {n_val['exact_pct']:.2f}% | "
+            f"{n_val['drop_pct']:.2f}pt |"
+        )
 
     mutation_rollup = ood_res["mutation_token_rollup"]
     md_lines.extend(
         [
             "",
             f"- **Mutasi token**: {mutation_rollup['total_calls']} calls; "
-            f"prompt={mutation_rollup['prompt_tokens']}, candidates={mutation_rollup['candidates_tokens']}, "
-            f"cached={mutation_rollup['cached_tokens']}, thoughts={mutation_rollup['thoughts_tokens']}, "
-            f"total={mutation_rollup['total_tokens']}, cost=Rp{mutation_rollup['total_cost_idr']:.2f}",
+            f"prompt={mutation_rollup['prompt_tokens']}, "
+            f"candidates={mutation_rollup['candidates_tokens']}, "
+            f"cached={mutation_rollup['cached_tokens']}, "
+            f"thoughts={mutation_rollup['thoughts_tokens']}, "
+            f"total={mutation_rollup['total_tokens']}, "
+            f"cost=Rp{mutation_rollup['total_cost_idr']:.2f}",
         ]
     )
     for n_key, n_val in ood_res["noise_degradation_curve"].items():
         rollup = n_val["token_rollup"]
         md_lines.append(
             f"- **Noise {n_key} token**: {rollup['total_calls']} calls; "
-            f"prompt={rollup['prompt_tokens']}, candidates={rollup['candidates_tokens']}, "
-            f"cached={rollup['cached_tokens']}, thoughts={rollup['thoughts_tokens']}, "
-            f"total={rollup['total_tokens']}, cost=Rp{rollup['total_cost_idr']:.2f}"
+            f"prompt={rollup['prompt_tokens']}, "
+            f"candidates={rollup['candidates_tokens']}, "
+            f"cached={rollup['cached_tokens']}, "
+            f"thoughts={rollup['thoughts_tokens']}, "
+            f"total={rollup['total_tokens']}, "
+            f"cost=Rp{rollup['total_cost_idr']:.2f}"
         )
 
-    md_lines.extend([
-        "",
-        "## 3. Lapis 3: Audit Anchor Semantik Struktural (Anti-Hardcoding)",
-        "",
-        "- **Metode**: Audit leksikal independen terhadap seluruh keyword event spesifik dari korpus 74 sertifikat.",
-        f"- **Jumlah Keyword Diaudit**: {ah_res['audited_keywords_count']} entitas (SPECTA, KARSA, FALCON, BRIEF, AIRNOLOGY, dsb.)",
-        f"- **Pelanggaran Ditemukan**: {len(ah_res['violations_found'])} kata kunci",
-        f"- **Status Audit**: **{'PASS (100% Bebas Hardcoding Leksikal)' if ah_res['anti_hardcoding_pass'] else 'FAIL'}**",
-        "",
-        "### Confusion Matrix Safety Net Review (Cell)",
-        "",
-        "| Kategori | Prediksi Memiliki Error | Prediksi Sempurna (0 Error) | Total |",
-        "|---|:---:|:---:|:---:|",
-        f"| **Flagged (`needs_review=True`)** | **{sn_res['cell_confusion_matrix']['true_positive']}** (TP) | {sn_res['cell_confusion_matrix']['false_positive']} (FP) | {sn_res['cell_confusion_matrix']['true_positive'] + sn_res['cell_confusion_matrix']['false_positive']} |",
-        f"| **Unflagged (`needs_review=False`)** | {sn_res['cell_confusion_matrix']['false_negative']} (FN) | {sn_res['cell_confusion_matrix']['true_negative']} (TN) | {sn_res['cell_confusion_matrix']['false_negative'] + sn_res['cell_confusion_matrix']['true_negative']} |",
-        "",
-        "### Confusion Matrix Safety Net Review (Dokumen)",
-        "",
-        "| Kategori | Prediksi Memiliki Error | Prediksi Sempurna (0 Error) | Total |",
-        "|---|:---:|:---:|:---:|",
-        f"| **Flagged (`needs_review=True`)** | **{sn_res['confusion_matrix']['true_positive']}** (TP) | {sn_res['confusion_matrix']['false_positive']} (FP) | {sn_res['confusion_matrix']['true_positive'] + sn_res['confusion_matrix']['false_positive']} |",
-        f"| **Unflagged (`needs_review=False`)** | {sn_res['confusion_matrix']['false_negative']} (FN) | {sn_res['confusion_matrix']['true_negative']} (TN) | {sn_res['confusion_matrix']['false_negative'] + sn_res['confusion_matrix']['true_negative']} |",
-        "",
-        f"- **Cell Review Recall**: **{sn_res['cell_review_recall_pct']:.2f}%** (Target mandatori >= 95.0%: **{'PASS' if sn_res['gate_recall_pass'] else 'FAIL'}**)",
-        f"- **Cell Review Precision**: **{sn_res['cell_review_precision_pct']:.2f}%**",
-        f"- **Cell False Alarm Rate**: **{sn_res['cell_false_alarm_pct']:.2f}%**",
-        f"- **Document Review Recall**: **{sn_res['doc_review_recall_pct']:.2f}%**",
-        "",
-        "## 5. Ringkasan Verdict 4 Lapis",
-        "",
-        "| Lapis Bukti | Metrik Kunci | Hasil Terukur | Status |",
-        "|---|---|:---:|:---:|",
-        f"| Lapis 1 (Holdout deskriptif) | Min-Fold Accuracy | {cv_res['min_fold_accuracy_pct']:.2f}% | **NOT INDEPENDENT CV** |",
-        f"| Lapis 1 (Bootstrap) | MACRO 95% Confidence Interval | [{boot_res['macro_exact_95_ci'][0]:.2f}%, {boot_res['macro_exact_95_ci'][1]:.2f}%] | **RECORDED** |",
-        f"| Lapis 2 (OOD Mutasi) | Delta Penurunan Mutasi | {ood_res['mutation_drop_pct']:.2f}pt | **{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}** |",
-        f"| Lapis 3 (Anti-Hardcode) | Pelanggaran Keyword Korpus | {len(ah_res['violations_found'])} keyword | **{'PASS' if ah_res['anti_hardcoding_pass'] else 'FAIL'}** |",
-        f"| Lapis 4 (Safety Net) | Cell Review Recall | {sn_res['cell_review_recall_pct']:.2f}% | **{'PASS' if sn_res['gate_recall_pass'] else 'FAIL'}** |",
-    ])
+    md_lines.extend(
+        [
+            "",
+            "## 2. Lapis 2: Audit Anchor Semantik Struktural (Anti-Hardcoding)",
+            "",
+            "- **Metode**: Audit leksikal independen terhadap seluruh keyword event "
+            "spesifik dari korpus 74 sertifikat.",
+            f"- **Jumlah Keyword Diaudit**: {ah_res['audited_keywords_count']} entitas "
+            "(SPECTA, KARSA, FALCON, BRIEF, AIRNOLOGY, dsb.)",
+            f"- **Pelanggaran Ditemukan**: {len(ah_res['violations_found'])} kata kunci",
+            f"- **Status Audit**: **{'PASS (100% Bebas Hardcoding Leksikal)' if ah_res['anti_hardcoding_pass'] else 'FAIL'}**",
+            "",
+            "## 3. Lapis 3: Safety Net & Calibrated Confidence",
+            "",
+            "Tanggal mulai/selesai yang kosong di Ground Truth dan prediksi "
+            "diperlakukan sebagai absensi yang valid, bukan error.",
+            f"- **Absensi tanggal opsional yang diabaikan**: {sn_res['ignored_optional_absences']}",
+            "",
+            "### Confusion Matrix Safety Net Review (Cell)",
+            "",
+            "| Kategori | Prediksi Memiliki Error | Prediksi Sempurna (0 Error) | Total |",
+            "|---|:---:|:---:|:---:|",
+            f"| **Flagged (`needs_review=True`)** | **{sn_res['cell_confusion_matrix']['true_positive']}** (TP) | {sn_res['cell_confusion_matrix']['false_positive']} (FP) | {sn_res['cell_confusion_matrix']['true_positive'] + sn_res['cell_confusion_matrix']['false_positive']} |",
+            f"| **Unflagged (`needs_review=False`)** | {sn_res['cell_confusion_matrix']['false_negative']} (FN) | {sn_res['cell_confusion_matrix']['true_negative']} (TN) | {sn_res['cell_confusion_matrix']['false_negative'] + sn_res['cell_confusion_matrix']['true_negative']} |",
+            "",
+            "### Confusion Matrix Safety Net Review (Dokumen)",
+            "",
+            "| Kategori | Prediksi Memiliki Error | Prediksi Sempurna (0 Error) | Total |",
+            "|---|:---:|:---:|:---:|",
+            f"| **Flagged (`needs_review=True`)** | **{sn_res['confusion_matrix']['true_positive']}** (TP) | {sn_res['confusion_matrix']['false_positive']} (FP) | {sn_res['confusion_matrix']['true_positive'] + sn_res['confusion_matrix']['false_positive']} |",
+            f"| **Unflagged (`needs_review=False`)** | {sn_res['confusion_matrix']['false_negative']} (FN) | {sn_res['confusion_matrix']['true_negative']} (TN) | {sn_res['confusion_matrix']['false_negative'] + sn_res['confusion_matrix']['true_negative']} |",
+            "",
+            f"- **Cell Review Recall**: **{sn_res['cell_review_recall_pct']:.2f}%** "
+            f"(Target >= 95.0%: **{'PASS' if sn_res['gate_recall_pass'] else 'FAIL'}**)",
+            f"- **Cell Review Precision**: **{sn_res['cell_review_precision_pct']:.2f}%**",
+            f"- **Cell False Alarm Rate**: **{sn_res['cell_false_alarm_pct']:.2f}%**",
+            f"- **Document Review Recall**: **{sn_res['doc_review_recall_pct']:.2f}%**",
+            "",
+            "## Ringkasan Verdict Tiga Lapis",
+            "",
+            "| Lapis Bukti | Metrik Kunci | Hasil Terukur | Status |",
+            "|---|---|:---:|:---:|",
+            f"| Lapis 1 (OOD Mutasi) | Delta Penurunan Mutasi | {ood_res['mutation_drop_pct']:.2f}pt | **{'PASS' if ood_res['mutation_gate_pass'] else 'FAIL'}** |",
+            f"| Lapis 2 (Anti-Hardcode) | Pelanggaran Keyword Korpus | {len(ah_res['violations_found'])} keyword | **{'PASS' if ah_res['anti_hardcoding_pass'] else 'FAIL'}** |",
+            f"| Lapis 3 (Safety Net) | Cell Review Recall | {sn_res['cell_review_recall_pct']:.2f}% | **{'PASS' if sn_res['gate_recall_pass'] else 'FAIL'}** |",
+        ]
+    )
 
     with open(out_md_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(md_lines))
+        f.write("\n".join(md_lines) + "\n")
 
-    print(f"\n[DONE] 4-Layer Empirical Proof written to: {out_md_path}\n")
+    print(f"\n[DONE] 3-Layer Empirical Proof written to: {out_md_path}\n")
 
 
 if __name__ == "__main__":

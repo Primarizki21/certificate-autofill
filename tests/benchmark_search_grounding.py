@@ -312,8 +312,9 @@ def compute_field_confidence_and_review(
     value: str | None,
     source: str,
 ) -> tuple[float, bool]:
-    """Hitung calibrated confidence dan review flag."""
     if value is None or str(value).strip() in ("", "-", "None", "null"):
+        if field_name in ("waktu_mulai_pelaksanaan", "waktu_selesai_pelaksanaan"):
+            return 0.0, False
         return 0.50, True
 
     v_str = str(value).strip()

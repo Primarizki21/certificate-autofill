@@ -3,6 +3,12 @@ import re
 from app.config import settings
 from app.master_data import BUMN_KEYWORDS, FOREIGN_UNIVERSITY_HINTS, FORM_OPTIONS, PTN_KEYWORDS, PTS_KEYWORDS
 from app.services.field_extractor import ExtractedValue
+OPTIONAL_EMPTY_FIELDS = frozenset(
+    {
+        "waktu_mulai_pelaksanaan",
+        "waktu_selesai_pelaksanaan",
+    }
+)
 
 
 def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str, bukti_fisik: str) -> dict[str, ExtractedValue]:
@@ -278,6 +284,10 @@ def validate_with_needs_review(fields: dict[str, ExtractedValue]) -> dict[str, E
 
 def field_needs_review(field_name: str, value: str | None, confidence: float) -> bool:
     if field_name in {"tahun_akademik", "bukti_fisik"}:
+        return False
+    if field_name in OPTIONAL_EMPTY_FIELDS and (
+        not value or str(value).strip().lower() in {"-", "null"}
+    ):
         return False
     if not value:
         return True

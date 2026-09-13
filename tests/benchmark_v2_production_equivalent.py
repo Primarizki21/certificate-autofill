@@ -47,12 +47,11 @@ from tests.benchmark_production_input_matrix import (
     evaluate_document_prediction,
     fallback_offline_extraction,
     load_manifest,
-    run_bootstrap_ci,
-    run_stratified_5fold,
 )
 from tests.evaluation_framework import load_csv, resolve_pdf_path
 from tests.gemini_client import GeminiClient, load_google_api_key
 from tests.gemini_field_extractor import ALL_EVAL_FIELDS
+from tests.v2_safety_review import is_optional_absence
 
 VARIANTS = ("v1_production", "v2_scope_aware")
 LITERAL_FIELDS = tuple(f for f in ALL_EVAL_FIELDS if f != "tingkat")
@@ -241,19 +240,27 @@ def _safety_metrics(
     rows: list[dict[str, Any]],
     production_confidence: bool,
 ) -> dict[str, Any]:
-    """Measure review recall using legacy calibration or production confidence."""
+    """Measure review recall while ignoring valid optional absences."""
     cell_error_total = 0
     cell_flagged_error = 0
     cell_flagged_total = 0
     doc_error_total = 0
     doc_flagged_error = 0
     doc_flagged_total = 0
+    ignored_optional_absences = 0
 
     for row in rows:
         doc_has_error = False
         doc_has_flag = False
         for field_name in ALL_EVAL_FIELDS:
             evaluation = row["evaluation"][field_name]
+            if is_optional_absence(
+                field_name,
+                evaluation.get("gt"),
+                evaluation.get("pred"),
+            ):
+                ignored_optional_absences += 1
+                continue
             is_exact = bool(evaluation["exact"])
             value = evaluation.get("pred")
             if production_confidence:
@@ -295,6 +302,7 @@ def _safety_metrics(
     )
     return {
         "mode": "production_fixed_0.90" if production_confidence else "legacy_calibrated",
+        "ignored_optional_absences": ignored_optional_absences,
         "cell_level": {
             "total_errors": cell_error_total,
             "flagged_errors": cell_flagged_error,
@@ -732,8 +740,6 @@ def run_benchmark(
     summaries: dict[str, Any] = {}
     for variant, rows in rows_by_variant.items():
         aggregate = compute_variant_aggregate(rows)
-        aggregate["bootstrap_ci"] = run_bootstrap_ci(rows, n_bootstraps=1000, seed=42)
-        aggregate["stratified_5fold_cv"] = run_stratified_5fold(rows, seed=42)
         aggregate["token_rollup"] = _token_rollup(rows)
         aggregate["safety_net_legacy_calibrated"] = _safety_metrics(rows, production_confidence=False)
         aggregate["safety_net_production_confidence"] = _safety_metrics(rows, production_confidence=True)

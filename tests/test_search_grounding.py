@@ -72,6 +72,13 @@ def test_compute_field_confidence_and_review():
     assert c1 >= 0.85
     assert r1 is False
 
+    # Tanggal tidak tersedia -> tidak memicu review
+    missing_conf, missing_review = compute_field_confidence_and_review(
+        "waktu_mulai_pelaksanaan", None, "llm"
+    )
+    assert missing_conf == 0.0
+    assert missing_review is False
+
     # Tingkat valid
     c2, r2 = compute_field_confidence_and_review("tingkat", "Nasional", "search")
     assert c2 >= 0.85

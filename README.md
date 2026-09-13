@@ -233,7 +233,7 @@ GET  /healthz                    # Health check endpoint
 
 | Dokumen | Deskripsi |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Konvensi proyek, standar pengujian 4 lapis empiris, dan protokol keamanan rahasia |
+| [AGENTS.md](AGENTS.md) | Konvensi proyek, standar pengujian 3 lapis empiris, dan protokol keamanan rahasia |
 | [docs/experiments_ledger.md](docs/experiments_ledger.md) | Rekam jejak seluruh eksperimen aktif maupun tertutup (*closed/failed approaches*) |
 | [docs/report/runs_summary.md](docs/report/runs_summary.md) | Rekapitulasi metrik numerik seluruh run eksperimen |
 | [docs/report/production_input_matrix.md](docs/report/production_input_matrix.md) | Laporan komparasi empiris 6 varian teks input OCR/PyMuPDF (`PROD-INPUT-MATRIX-001`) |

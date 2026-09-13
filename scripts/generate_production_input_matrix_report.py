@@ -309,35 +309,27 @@ def generate_markdown_report(run_dir: str, summary_data: dict[str, Any], results
             t = ov_delta.get("ties", 0)
             l = ov_delta.get("losses", 0)
             emb_cases = p_data.get("embedded_impact", [])
-            emb_desc = f"{len(emb_cases)} dokumen terpengaruh" if emb_cases else "Zero regression (identik)"
+            emb_desc = f"{len(emb_cases)} dokumen terpengaruh" if emb_cases else "Identik dengan baseline"
             lines.append(f"| `{v}` | +{w} | {t} | -{l} | {emb_desc} |")
 
     lines.extend([
         "",
-        "## 5. Empat Lapis Pembuktian Empiris (Generalisasi & Robustness)",
+        "## 5. Tiga Lapis Pembuktian Empiris (Generalisasi & Robustness)",
         "",
-        "### Lapis 1: Validasi Statistik (5-Fold Stratified CV & Bootstrap CI)",
-    ])
-
-    for v in (winner, "production_conditional"):
-        cv = variants.get(v, {}).get("stratified_5fold_cv", {})
-        boot = variants.get(v, {}).get("bootstrap_ci", {})
-        lines.extend([
-            f"- **`{v}`**:",
-            f"  * 5-Fold Stratified Mean: **{cv.get('mean_exact_pct', 0)}%** (Std Dev: {cv.get('std_dev_pct', 0)}%, Min-Fold: {cv.get('min_fold_exact_pct', 0)}%)",
-            f"  * Bootstrap 1000x CI: **{boot.get('all_cells_exact_95_ci', [0, 0])}** (Mean: {boot.get('all_cells_exact_mean_pct', 0)}%)",
-        ])
-
-    lines.extend([
+        "### Lapis 1: Uji Ketahanan Out-of-Distribution (Template Mutation & OCR Noise)",
+        "- Benchmark matriks input ini tidak menjalankan OOD live. Status **NOT_RUN** menjaga laporan tidak mengklaim bukti yang belum diukur.",
+        "- Jalankan `tests/validate_v2_production_equivalent.py --full` untuk mutasi entitas dan noise OCR 10/25/50% pada pipeline kandidat.",
         "",
-        "### Lapis 2: Integritas Uji Tanpa Leakage & Anti-Hardcoding",
+        "### Lapis 2: Ekstraksi Berbasis Structural Semantic Anchors (Anti-Hardcoding)",
         "- Seluruh input dibangun murni dari file biner dokumen sumber tanpa mengonsumsi cache ekstraksi lama.",
         "- Evaluasi dieksekusi menggunakan Ground Truth v9 dan Matcher v2 yang dibekukan (*frozen*).",
+        "- Prompt dan parser memakai relasi posisi/grammar, bukan judul event spesifik.",
         "",
         "### Lapis 3: Arsitektur Safety Net & Penanganan Kegagalan",
         "- Pacing rate-limiting (1.2s) dan exponential retry loop (3x percobaan) mencegah pemblokiran kuota HTTP 429.",
         "- Dokumen dengan teks kosong (49 scan pada `pymupdf_only`) ditangani secara short-circuit untuk menghemat kuota dan latensi.",
         "- Jika terjadi kegagalan jaringan setelah retry, pipeline otomatis jatuh ke offline fallback tanpa menghentikan pemrosesan batch (*zero unhandled 500*).",
+        "- Tanggal yang memang tidak tersedia boleh tetap `null` tanpa review; field wajib lain yang kosong tetap perlu verifikasi.",
         "",
         "## 6. Kesimpulan & Rekomendasi Deployment",
         f"1. **Keunggulan `{winner}`**: Hasil komparasi membuktikan pembentukan teks input berbasis `{winner}` menghasilkan akurasi form paling tinggi.",
@@ -462,37 +454,24 @@ def generate_docx_report(run_dir: str, summary_data: dict[str, Any], results_dat
             field_rows.append([fld, ev[fld]["pred"] or "null", ev[fld]["gt"], st])
         _build_docx_table(doc, field_headers, field_rows, [1.8, 2.2, 2.0, 1.0])
 
-    # Bab 5: 4 Lapis Pembuktian
+    # Bab 5: 3 Lapis Pembuktian
     _add_styled_heading(doc, "Bab 5: Empirical Robustness & Generalization Proof", level=1)
-    _add_styled_p(doc, "1. Lapis 1: Validasi Statistik (5-Fold Stratified CV & Bootstrap 1000x CI):")
-    cv_w = variants.get(winner, {}).get("stratified_5fold_cv", {})
-    boot_w = variants.get(winner, {}).get("bootstrap_ci", {})
+    _add_styled_p(doc, "1. Lapis 1: Uji Ketahanan Out-of-Distribution (Template Mutation & OCR Noise):")
     _add_styled_p(
         doc,
-        f"   - 5-Fold Stratified Accuracy: Mean {cv_w.get('mean_exact_pct', 0)}% (Min-Fold: {cv_w.get('min_fold_exact_pct', 0)}%, Std Dev: {cv_w.get('std_dev_pct', 0)}%)."
+        "   - Benchmark matriks input ini tidak menjalankan OOD live. Status NOT_RUN menjaga laporan tidak mengklaim bukti yang belum diukur. "
+        "Validasi penuh tersedia melalui tests/validate_v2_production_equivalent.py --full."
     )
-    _add_styled_p(
-        doc,
-        f"   - Bootstrap 1000x Resampling: 95% CI {boot_w.get('all_cells_exact_95_ci', [0, 0])}."
-    )
-    _add_styled_p(doc, "2. Lapis 2: Integritas Uji Bebas Kebocoran & Anti-Hardcoding:")
+    _add_styled_p(doc, "2. Lapis 2: Ekstraksi Berbasis Structural Semantic Anchors (Anti-Hardcoding):")
     _add_styled_p(
         doc,
         "   - Seluruh teks diekstrak murni dari biner dokumen sumber tanpa reuse teks lama. Evaluator Matcher v2 dan Ground Truth v9 dibekukan."
     )
-    _add_styled_p(doc, "3. Lapis 3: Arsitektur Safety Net Produksi & Failure Tolerance:")
+    _add_styled_p(doc, "3. Lapis 3: Arsitektur Safety Net & Failure Tolerance:")
     _add_styled_p(
         doc,
-        "   - Mekanisme pacing delay dan exponential retry loop memastikan reliabilitas terhadap lonjakan request dan pembatasan kuota."
+        "   - Pacing delay, exponential retry, dan offline fallback menjaga pemrosesan batch. Tanggal yang memang tidak tersedia boleh null tanpa review; field wajib lain yang kosong tetap perlu verifikasi."
     )
-
-    # Bab 6: Kesimpulan
-    _add_styled_heading(doc, "Bab 6: Kesimpulan & Rekomendasi Deployment", level=1)
-    _add_styled_p(
-        doc,
-        f"Berdasarkan bukti empiris di atas, varian {winner} direkomendasikan sebagai pembentukan teks input standar produksi. Perubahan konfigurasi produksi siap dipromosikan setelah peninjauan eksplisit tim."
-    )
-
     doc.save(OUT_DOCX_PATH)
     print("DOCX report saved successfully.")
 

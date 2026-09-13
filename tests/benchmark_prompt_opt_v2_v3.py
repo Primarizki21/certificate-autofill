@@ -781,10 +781,10 @@ def compute_field_confidence_and_review(
     val: str | None,
     source: str = "llm",
 ) -> tuple[float, bool]:
-    """Menghitung calibrated confidence dan flag needs_review (<0.85)."""
-    if not val or not str(val).strip():
+    if not val or str(val).strip().lower() in {"", "-", "none", "null"}:
+        if field_name in ("waktu_mulai_pelaksanaan", "waktu_selesai_pelaksanaan"):
+            return 0.0, False
         return 0.0, True
-
     v = str(val).strip()
     if field_name in ("waktu_mulai_pelaksanaan", "waktu_selesai_pelaksanaan"):
         if re.match(r"^\d{2}/\d{2}/\d{4}$", v):

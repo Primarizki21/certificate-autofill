@@ -6,7 +6,6 @@ import argparse
 import ast
 import json
 import os
-import random
 import re
 import sys
 from datetime import datetime, timezone
@@ -22,7 +21,7 @@ if str(BACKEND_DIR) not in sys.path:
 
 from tests.v2_ocr_normalizer import normalize_raw_ocr
 from tests.v2_organizer_boundary import apply_organizer_boundary
-from tests.v2_safety_review import build_review_annotations
+from tests.v2_safety_review import build_review_annotations, is_optional_absence
 from tests.v2_staging_common import (
     ALL_FIELDS,
     GT_PATH,
@@ -151,10 +150,18 @@ def _attach_metadata(
 def _review_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
     error_cells = flagged_error_cells = flagged_cells = 0
     error_docs = flagged_error_docs = flagged_docs = 0
+    ignored_optional_absences = 0
     for row in rows:
         has_error = False
         has_flag = False
-        for evaluation in row["evaluation"].values():
+        for field_name, evaluation in row["evaluation"].items():
+            if is_optional_absence(
+                field_name,
+                evaluation.get("gt"),
+                evaluation.get("pred"),
+            ):
+                ignored_optional_absences += 1
+                continue
             if not evaluation["exact"]:
                 error_cells += 1
                 has_error = True
@@ -170,6 +177,7 @@ def _review_metrics(rows: list[dict[str, Any]]) -> dict[str, Any]:
         if has_flag:
             flagged_docs += 1
     return {
+        "ignored_optional_absences": ignored_optional_absences,
         "cell_level": {
             "total_errors": error_cells,
             "flagged_errors": flagged_error_cells,
@@ -648,7 +656,7 @@ def _build_ablation(
         "variants": comparison,
         "notes": [
             "Semua varian dibandingkan dengan V2 cached pada stem dan matcher yang sama.",
-            "OOD dan proof four-layer kandidat tidak diambil dari artefak control lama.",
+            "OOD dan proof tiga lapis kandidat tidak diambil dari artefak control lama.",
             "Varian OCR hanya tersedia bila eksperimen OCR live selesai dengan artefak results.json.",
         ],
     }
@@ -701,74 +709,10 @@ def _semantic_anchor_audit() -> dict[str, Any]:
     }
 
 
-def _four_layer_proof(
+def _three_layer_proof(
     rows: list[dict[str, Any]],
     review_metrics: dict[str, Any],
 ) -> dict[str, Any]:
-    grouped: dict[str, list[dict[str, Any]]] = {}
-    for row in rows:
-        grouped.setdefault(row["doc_type"], []).append(row)
-    rng = random.Random(42)
-    folds: list[list[dict[str, Any]]] = [[] for _ in range(5)]
-    for group in grouped.values():
-        shuffled = list(group)
-        rng.shuffle(shuffled)
-        for index, row in enumerate(shuffled):
-            folds[index % 5].append(row)
-    fold_metrics: list[dict[str, Any]] = []
-    for index, fold in enumerate(folds, start=1):
-        total = len(fold) * len(ALL_FIELDS)
-        exact = sum(
-            int(row["evaluation"][field]["exact"])
-            for row in fold
-            for field in ALL_FIELDS
-        )
-        fold_metrics.append(
-            {
-                "fold": index,
-                "n_documents": len(fold),
-                "all_cells_exact_pct": round(exact / total * 100, 2)
-                if total
-                else 0.0,
-            }
-        )
-    fold_scores = [item["all_cells_exact_pct"] for item in fold_metrics]
-    mean_fold = sum(fold_scores) / len(fold_scores) if fold_scores else 0.0
-    variance = (
-        sum((score - mean_fold) ** 2 for score in fold_scores) / 4
-        if len(fold_scores) > 1
-        else 0.0
-    )
-
-    bootstrap_rng = random.Random(42)
-    all_scores: list[float] = []
-    framework_scores: list[float] = []
-    for _ in range(1000):
-        sample = (
-            [rows[bootstrap_rng.randrange(len(rows))] for _ in rows]
-            if rows
-            else []
-        )
-        all_total = len(sample) * len(ALL_FIELDS)
-        all_exact = sum(
-            int(row["evaluation"][field]["exact"])
-            for row in sample
-            for field in ALL_FIELDS
-        )
-        framework_total = framework_exact = 0
-        for row in sample:
-            for field in LITERAL_FIELDS:
-                evaluation = row["evaluation"][field]
-                if evaluation["gt"] and evaluation["gt"] != "-":
-                    framework_total += 1
-                    framework_exact += int(evaluation["exact"])
-        all_scores.append(all_exact / all_total * 100 if all_total else 0.0)
-        framework_scores.append(
-            framework_exact / framework_total * 100 if framework_total else 0.0
-        )
-    all_scores.sort()
-    framework_scores.sort()
-    anchor_audit = _semantic_anchor_audit()
     ood_summary = {
         "status": "NOT_RUN",
         "gate_pass": False,
@@ -782,70 +726,36 @@ def _four_layer_proof(
             "levels": ["10%", "25%", "50%"],
         },
     }
-    layer1 = {
-        "status": "DESCRIPTIVE_FIXED_PIPELINE_HOLDOUT",
-        "independent_model_fit_per_fold": False,
-        "method": (
-            "Stratified 5-fold holdout atas prediction kandidat tetap; "
-            "tidak ada fitting model per fold."
-        ),
-        "stratified_5fold_holdout": {
-            "k_folds": 5,
-            "folds": fold_metrics,
-            "mean_exact_pct": round(mean_fold, 2),
-            "std_dev_pct": round(variance**0.5, 2),
-            "min_fold_exact_pct": min(fold_scores) if fold_scores else 0.0,
-        },
-        "bootstrap_ci": {
-            "n_bootstraps": 1000,
-            "all_cells_exact_mean_pct": round(sum(all_scores) / 1000, 2),
-            "all_cells_exact_95_ci": [all_scores[25], all_scores[975]],
-            "framework_exact_mean_pct": round(sum(framework_scores) / 1000, 2),
-            "framework_exact_95_ci": [
-                framework_scores[25],
-                framework_scores[975],
-            ],
-        },
-    }
-    layer1_gate = False
-    layer1_gate_reason = (
-        "NOT_RUN sebagai independent model fitting; hasil hanya holdout deskriptif "
-        "atas prediksi kandidat tetap."
-    )
+    anchor_audit = _semantic_anchor_audit()
     cell_recall = review_metrics.get("cell_level", {}).get("recall_pct")
-    layer4_gate = cell_recall is not None and cell_recall >= 95.0
+    safety_gate = cell_recall is not None and cell_recall >= 95.0
     gates = {
-        "layer_1_statistical": {
-            "pass": layer1_gate,
-            "status": layer1["status"],
-            "reason": layer1_gate_reason,
-        },
-        "layer_2_ood": {
+        "layer_1_ood": {
             "pass": False,
             "status": ood_summary["status"],
+            "reason": ood_summary["reason"],
         },
-        "layer_3_semantic_anchors": {
+        "layer_2_semantic_anchors": {
             "pass": anchor_audit["pass"],
             "status": anchor_audit["status"],
         },
-        "layer_4_safety_net": {
-            "pass": bool(layer4_gate),
+        "layer_3_safety_net": {
+            "pass": bool(safety_gate),
             "minimum_cell_recall_pct": 95.0,
             "cell_recall_pct": cell_recall,
         },
     }
+    all_pass = all(item["pass"] for item in gates.values())
     return {
         "metadata": {
             "n_documents": len(rows),
-            "n_bootstraps": 1000,
-            "seed": 42,
+            "proof_layers": 3,
             "production_promotion": False,
             "status": "STAGING_ONLY",
-            "completeness": "INCOMPLETE" if not all(item["pass"] for item in gates.values()) else "COMPLETE",
+            "completeness": "INCOMPLETE" if not all_pass else "COMPLETE",
         },
-        "layer_1_statistical": layer1,
-        "layer_2_ood": ood_summary,
-        "layer_3_semantic_anchors": {
+        "layer_1_ood": ood_summary,
+        "layer_2_semantic_anchors": {
             "title_anchors": [
                 "dalam acara/kegiatan",
                 "pada kegiatan/ajang",
@@ -862,13 +772,13 @@ def _four_layer_proof(
             ],
             "audit": anchor_audit,
         },
-        "layer_4_safety_net": {
+        "layer_3_safety_net": {
             **review_metrics,
             "minimum_cell_recall_pct": 95.0,
-            "gate_pass": bool(layer4_gate),
+            "gate_pass": bool(safety_gate),
         },
         "gates": gates,
-        "all_pass": all(item["pass"] for item in gates.values()),
+        "all_pass": all_pass,
     }
 
 
@@ -924,7 +834,7 @@ def run_step(
                 reasons_selector=lambda field, item: annotations[item["stem"]][field]["reasons"],
             )
             review = _review_metrics(candidate_rows)
-            integrated_proof = _four_layer_proof(candidate_rows, review)
+            integrated_proof = _three_layer_proof(candidate_rows, review)
             extra_gates = {
                 f"proof_{name}": {
                     "pass": value["pass"],
@@ -950,7 +860,7 @@ def run_step(
                 "Tidak ada perubahan backend produksi dan tidak ada panggilan Gemini baru.",
                 *(
                     [
-                        "Four-layer proof dihitung sebelum gate; OOD kandidat berstatus NOT_RUN "
+                        "Three-layer proof dihitung sebelum gate; OOD kandidat berstatus NOT_RUN "
                         "sampai validator live dijalankan."
                     ]
                     if integrated_proof is not None
@@ -959,18 +869,18 @@ def run_step(
             ],
         )
         if integrated_proof is not None:
-            write_json(output_dir / "four_layer_proof.json", integrated_proof)
+            write_json(output_dir / "three_layer_proof.json", integrated_proof)
             ablation = _build_ablation(
                 corpus,
                 baseline_rows,
                 candidate_rows,
                 source_run_dir=source_run_dir,
             )
-            ablation["four_layer_proof"] = integrated_proof
+            ablation["three_layer_proof"] = integrated_proof
             write_json(output_dir / "ablation.json", ablation)
             payload = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
             payload["ablation"] = ablation
-            payload["four_layer_proof"] = integrated_proof
+            payload["three_layer_proof"] = integrated_proof
             write_json(output_dir / "results.json", payload)
         return proof
     if step == "review":

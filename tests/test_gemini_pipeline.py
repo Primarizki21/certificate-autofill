@@ -7,7 +7,7 @@ Verifies:
   - Enum mapping for tingkat and role
   - Mandatory full_text injection for form_mapper compatibility
   - Evaluation metric aggregation and Matcher v2 compatibility
-  - 4-layer empirical proof functions (5-fold CV, Bootstrap CI, anti-hardcoding audit, safety net)
+  - 3-layer empirical proof functions (OOD, anti-hardcoding audit, safety net)
 """
 
 import os
@@ -44,9 +44,7 @@ from tests.benchmark_gemini_tesseract import (
 )
 from tests.validate_gemini_4layer import (
     run_anti_hardcoding_audit,
-    run_bootstrap_resampling,
     run_safety_net_calibration,
-    run_stratified_5fold_cv,
 )
 from tests.matchers import match_field
 
@@ -289,33 +287,7 @@ class TestBenchmarkAndEvaluation:
         assert agg["macro_avg"]["exact_pct"] == 75.0
 
 
-class TestEmpirical4LayerComponents:
-    def test_stratified_5fold_cv(self):
-        """Uji split 5-fold CV terstratifikasi."""
-        dummy_certs = []
-        for i in range(25):
-            dummy_certs.append({
-                "doc_type": "scan" if i < 15 else "embedded",
-                "evaluation": {f: {"exact": True} for f in ALL_EVAL_FIELDS},
-            })
-        cv_res = run_stratified_5fold_cv(dummy_certs, seed=42)
-        assert cv_res["k_folds"] == 5
-        assert len(cv_res["fold_results"]) == 5
-        assert cv_res["mean_macro_exact_pct"] == 100.0
-        assert cv_res["std_dev_pct"] == 0.0
-
-    def test_bootstrap_resampling(self):
-        """Uji Bootstrap 1000x resampling."""
-        dummy_certs = []
-        for i in range(20):
-            dummy_certs.append({
-                "evaluation": {f: {"exact": (i % 2 == 0)} for f in ALL_EVAL_FIELDS},
-            })
-        boot_res = run_bootstrap_resampling(dummy_certs, n_bootstraps=100, seed=42)
-        assert "macro_exact_95_ci" in boot_res
-        lower, upper = boot_res["macro_exact_95_ci"]
-        assert lower <= upper
-        assert 0.0 <= lower <= 100.0
+class TestEmpirical3LayerComponents:
 
     def test_anti_hardcoding_audit(self):
         """Uji deteksi anti-hardcoding kata kunci korpus."""
@@ -353,6 +325,29 @@ class TestEmpirical4LayerComponents:
         assert sn_res["confusion_matrix"]["true_positive"] == 1
         assert sn_res["confusion_matrix"]["true_negative"] == 1
         assert sn_res["review_recall_pct"] == 100.0
+    def test_safety_net_accepts_absent_optional_dates(self):
+        """Tanggal yang tidak ada tidak dihitung sebagai error atau alarm."""
+        date_fields = {
+            "waktu_mulai_pelaksanaan",
+            "waktu_selesai_pelaksanaan",
+        }
+        certificate = {
+            "evaluation": {
+                field_name: {
+                    "gt": "" if field_name in date_fields else "Val",
+                    "pred": "" if field_name in date_fields else "Val",
+                    "exact": field_name not in date_fields,
+                    "confidence": 0.0 if field_name in date_fields else 0.90,
+                }
+                for field_name in ALL_EVAL_FIELDS
+            }
+        }
+
+        result = run_safety_net_calibration([certificate])
+
+        assert result["ignored_optional_absences"] == 2
+        assert result["confusion_matrix"]["true_negative"] == 1
+        assert result["gate_recall_pass"] is True
 
 
 class TestDocumentModelSchema:

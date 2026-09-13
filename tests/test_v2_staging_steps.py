@@ -76,7 +76,7 @@ def test_ocr_normalizer_limits_character_repairs_to_number_region() -> None:
     assert result.replacements == 3
 
 
-def test_safety_review_emits_field_reason_without_changing_value() -> None:
+def test_safety_review_allows_absent_optional_dates() -> None:
     annotations = build_review_annotations(
         "Dalam kegiatan MAIN SUMMIT yang diselenggarakan oleh Host University",
         {
@@ -88,7 +88,24 @@ def test_safety_review_emits_field_reason_without_changing_value() -> None:
             "tingkat": "Nasional",
         },
     )
-    assert annotations["waktu_mulai_pelaksanaan"]["needs_review"] is True
-    assert "missing_value" in annotations["waktu_mulai_pelaksanaan"]["reasons"]
+    assert annotations["waktu_mulai_pelaksanaan"]["needs_review"] is False
+    assert annotations["waktu_selesai_pelaksanaan"]["needs_review"] is False
     assert annotations["nomor_bukti_fisik_nomor_sertifikasi"]["needs_review"] is True
     assert annotations["tingkat"]["needs_review"] is True
+
+
+def test_safety_review_flags_missing_date_with_raw_anchor() -> None:
+    annotations = build_review_annotations(
+        "Held on 24/08/2024 for MAIN SUMMIT",
+        {
+            "nama_kegiatan_sertifikasi": "MAIN SUMMIT",
+            "waktu_mulai_pelaksanaan": "",
+            "waktu_selesai_pelaksanaan": "",
+            "penyelenggara_kegiatan": "Host University",
+            "nomor_bukti_fisik_nomor_sertifikasi": "01/HU/2024",
+            "tingkat": "Nasional",
+        },
+    )
+    for field in ("waktu_mulai_pelaksanaan", "waktu_selesai_pelaksanaan"):
+        assert annotations[field]["needs_review"] is True
+        assert "date_value_missing_despite_raw_anchor" in annotations[field]["reasons"]

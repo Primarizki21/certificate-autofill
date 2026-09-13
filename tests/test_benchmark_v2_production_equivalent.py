@@ -97,6 +97,23 @@ def test_legacy_safety_calibration_has_same_semantic_gap() -> None:
     assert safety["doc_level"]["recall_pct"] == 0.0
 
 
+
+def test_optional_absent_dates_are_excluded_from_safety_metrics() -> None:
+    candidate = [_evaluation_row("v2_scope_aware")]
+    for field_name in (
+        "waktu_mulai_pelaksanaan",
+        "waktu_selesai_pelaksanaan",
+    ):
+        candidate[0]["evaluation"][field_name].update(
+            {"gt": "", "pred": "", "exact": False, "fuzzy": False, "confidence": 0.0}
+        )
+
+    safety = _safety_metrics(candidate, production_confidence=True)
+
+    assert safety["ignored_optional_absences"] == 2
+    assert safety["cell_level"]["total_errors"] == 0
+    assert safety["cell_review_recall_pct"] == 100.0
+
 def test_b14_guard_rejects_nonempty_output(tmp_path) -> None:
     output_dir = tmp_path / "run"
     output_dir.mkdir()

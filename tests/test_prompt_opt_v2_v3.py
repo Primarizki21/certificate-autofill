@@ -62,6 +62,18 @@ def test_compute_field_confidence_and_review():
     assert conf1 >= 0.85
     assert rev1 is False
 
+    # Tanggal tidak tersedia -> tidak memicu review
+    conf_missing, rev_missing = compute_field_confidence_and_review(
+        "waktu_mulai_pelaksanaan", None
+    )
+    assert conf_missing == 0.0
+    assert rev_missing is False
+    conf_marker, rev_marker = compute_field_confidence_and_review(
+        "waktu_selesai_pelaksanaan", "-"
+    )
+    assert conf_marker == 0.0
+    assert rev_marker is False
+
     # Tanggal invalid format -> low confidence (0.50, needs review)
     conf2, rev2 = compute_field_confidence_and_review("waktu_mulai_pelaksanaan", "Agustus 2024")
     assert conf2 < 0.85

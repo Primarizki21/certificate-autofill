@@ -1,5 +1,5 @@
 from app.services.field_extractor import extract_certificate_fields
-from app.services.form_mapper import map_fields_to_form
+from app.services.form_mapper import field_needs_review, map_fields_to_form
 
 
 def test_airnology_certificate_rules():
@@ -71,3 +71,9 @@ def test_date_interval_only_year_once_airnology_generic():
     fields = extract_certificate_fields(text)
     assert fields["waktu_mulai_pelaksanaan"].value == "24/08/2024"
     assert fields["waktu_selesai_pelaksanaan"].value == "22/09/2024"
+
+
+def test_missing_dates_do_not_require_review() -> None:
+    assert field_needs_review("waktu_mulai_pelaksanaan", None, 0.0) is False
+    assert field_needs_review("waktu_selesai_pelaksanaan", "", 0.0) is False
+    assert field_needs_review("nomor_bukti_fisik_nomor_sertifikasi", None, 0.0) is True
