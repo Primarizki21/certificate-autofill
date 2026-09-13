@@ -48,6 +48,7 @@ from tests.benchmark_search_grounding import (
     parse_cot_tingkat,
 )
 from tests.gemini_client import DEFAULT_EXCHANGE_RATE_IDR, GeminiClient, load_google_api_key
+from tests.v2_staging_common import ensure_fresh_directory
 
 logging.basicConfig(
     level=logging.INFO,
@@ -111,6 +112,8 @@ class AttemptRecord:
     web_queries: list[str]
     raw_response: str
     parsed_json: dict[str, Any] | None
+    status: str = "success"
+    error: str | None = None
 
 
 def determine_outcome_category(
@@ -143,128 +146,133 @@ def determine_outcome_category(
             return "V3 Salah Tanpa Search (Q=0)"
     return "Lainnya"
 
+def _mock_tingkat_from_raw(raw_text: str) -> str:
+    text = raw_text.lower()
+    if "internasional" in text or "international" in text:
+        return "Internasional"
+    if any(
+        keyword in text
+        for keyword in ("nasional", "national", "se-indonesia", "indonesia")
+    ):
+        return "Nasional"
+    if "universitas" in text or "university" in text:
+        return "Universitas"
+    if "fakultas" in text or "faculty" in text or "bem" in text:
+        return "Fakultas"
+    if "departemen" in text or "program studi" in text or "prodi" in text:
+        return "Departemen/Program Studi"
+    return "Lainnya"
+
 
 def run_mock_forced_inference(
-    nama_file: str,
     raw_text: str,
-    gt_tingkat: str,
-    v2_pred: str,
 ) -> dict[str, Any]:
-    """Mock runner untuk pengujian dry-run plumbing dan verifikasi invariant."""
-    h = hashlib.md5(f"{nama_file}:{raw_text[:40]}".encode()).hexdigest()
+    """Mock runner yang hanya memakai raw OCR, bukan metadata atau GT."""
+    h = hashlib.md5(raw_text.encode()).hexdigest()
     val_int = int(h, 16)
+    raw_level = _mock_tingkat_from_raw(raw_text)
 
-    # Simulasikan Stage 1
     s1_tokens = 1220
     s1_cost_idr = 9.5
-
-    # Simulasikan apakah Attempt 1 memicu web search (~35% mock chance)
-    attempt1_queries = [f"kegiatan {nama_file[:15]}"] if (val_int % 3 == 0) else []
+    attempt1_queries = ["kegiatan organisasi"] if val_int % 3 == 0 else []
 
     attempts: list[AttemptRecord] = []
     if attempt1_queries:
-        # Grounded pada Attempt 1
-        tingkat_res = gt_tingkat if (val_int % 4 != 0) else "Internasional"
-        att1 = AttemptRecord(
-            attempt_index=1,
-            prompt_tokens=420,
-            candidates_tokens=65,
-            cached_tokens=0,
-            thoughts_tokens=0,
-            total_tokens=485,
-            cost_usd=0.0001,
-            cost_idr=1.8,
-            latency_s=1.5,
-            web_queries=attempt1_queries,
-            raw_response=json.dumps({"tingkat": tingkat_res, "alasan": "mock grounded 1"}),
-            parsed_json={"tingkat": tingkat_res, "alasan": "mock grounded 1"},
+        tingkat_res = raw_level if val_int % 4 != 0 else "Internasional"
+        attempts.append(
+            AttemptRecord(
+                attempt_index=1,
+                prompt_tokens=420,
+                candidates_tokens=65,
+                cached_tokens=0,
+                thoughts_tokens=0,
+                total_tokens=485,
+                cost_usd=0.0001,
+                cost_idr=1.8,
+                latency_s=1.5,
+                web_queries=attempt1_queries,
+                raw_response=json.dumps({"tingkat": tingkat_res, "alasan": "mock grounded 1"}),
+                parsed_json={"tingkat": tingkat_res, "alasan": "mock grounded 1"},
+            )
         )
-        attempts.append(att1)
         grounding_status = "grounded_first_attempt"
         final_tingkat = tingkat_res
     else:
-        # Attempt 1 ungrounded -> jalankan Attempt 2
-        att1 = AttemptRecord(
-            attempt_index=1,
-            prompt_tokens=420,
-            candidates_tokens=60,
-            cached_tokens=0,
-            thoughts_tokens=0,
-            total_tokens=480,
-            cost_usd=0.0001,
-            cost_idr=1.7,
-            latency_s=1.2,
-            web_queries=[],
-            raw_response=json.dumps({"tingkat": v2_pred, "alasan": "mock ungrounded 1"}),
-            parsed_json={"tingkat": v2_pred, "alasan": "mock ungrounded 1"},
+        attempts.append(
+            AttemptRecord(
+                attempt_index=1,
+                prompt_tokens=420,
+                candidates_tokens=60,
+                cached_tokens=0,
+                thoughts_tokens=0,
+                total_tokens=480,
+                cost_usd=0.0001,
+                cost_idr=1.7,
+                latency_s=1.2,
+                web_queries=[],
+                raw_response=json.dumps({"tingkat": raw_level, "alasan": "mock ungrounded 1"}),
+                parsed_json={"tingkat": raw_level, "alasan": "mock ungrounded 1"},
+            )
         )
-        attempts.append(att1)
-
-        # Attempt 2 retry: ~50% peluang terpicu
-        attempt2_queries = [f"info lomba {nama_file[:15]}"] if (val_int % 2 == 0) else []
+        attempt2_queries = ["info lomba"] if val_int % 2 == 0 else []
         if attempt2_queries:
-            tingkat_res = gt_tingkat if (val_int % 5 != 0) else "Lainnya"
+            final_tingkat = raw_level if val_int % 5 != 0 else "Lainnya"
             grounding_status = "grounded_on_retry"
-            final_tingkat = tingkat_res
         else:
-            tingkat_res = v2_pred
+            final_tingkat = raw_level
             grounding_status = "ungrounded_fallback"
-            final_tingkat = tingkat_res
-
-        att2 = AttemptRecord(
-            attempt_index=2,
-            prompt_tokens=450,
-            candidates_tokens=70,
-            cached_tokens=0,
-            thoughts_tokens=0,
-            total_tokens=520,
-            cost_usd=0.00012,
-            cost_idr=2.1,
-            latency_s=1.8 if attempt2_queries else 1.1,
-            web_queries=attempt2_queries,
-            raw_response=json.dumps({"tingkat": final_tingkat, "alasan": "mock retry"}),
-            parsed_json={"tingkat": final_tingkat, "alasan": "mock retry"},
+        attempts.append(
+            AttemptRecord(
+                attempt_index=2,
+                prompt_tokens=450,
+                candidates_tokens=70,
+                cached_tokens=0,
+                thoughts_tokens=0,
+                total_tokens=520,
+                cost_usd=0.00012,
+                cost_idr=2.1,
+                latency_s=1.8 if attempt2_queries else 1.1,
+                web_queries=attempt2_queries,
+                raw_response=json.dumps({"tingkat": final_tingkat, "alasan": "mock retry"}),
+                parsed_json={"tingkat": final_tingkat, "alasan": "mock retry"},
+            )
         )
-        attempts.append(att2)
 
-    all_queries: list[str] = []
-    for att in attempts:
-        all_queries.extend(att.web_queries)
-
+    all_queries = [
+        query
+        for attempt in attempts
+        for query in attempt.web_queries
+    ]
     total_query_count = len(all_queries)
     search_fee_idr = round(total_query_count * SEARCH_QUERY_FEE_IDR, 2)
-    s2_tok_cost = sum(a.cost_idr for a in attempts)
+    s2_tok_cost = sum(attempt.cost_idr for attempt in attempts)
     total_effective_cost = round(s1_cost_idr + s2_tok_cost + search_fee_idr, 2)
-
-    outcome_cat = determine_outcome_category(final_tingkat, v2_pred, gt_tingkat, total_query_count)
-
     fields = {
-        "nama_kegiatan_sertifikasi": f"Kegiatan Mock {nama_file[:10]}",
+        "nama_kegiatan_sertifikasi": "Kegiatan Mock",
         "nomor_bukti_fisik_nomor_sertifikasi": f"123/MOCK/{val_int % 1000:03d}",
         "penyelenggara_kegiatan": "BEM Fakultas Mock",
         "waktu_mulai_pelaksanaan": "15/08/2024",
         "waktu_selesai_pelaksanaan": "15/08/2024",
         "tingkat": final_tingkat,
     }
-
     return {
         "fields": fields,
         "grounding_status": grounding_status,
-        "outcome_category": outcome_cat,
         "attempts_count": len(attempts),
         "total_web_queries": total_query_count,
-        "web_queries": all_queries,
+        "web_search_queries": all_queries,
         "search_fee_idr": search_fee_idr,
         "stage1_tokens": s1_tokens,
         "stage1_cost_idr": s1_cost_idr,
-        "stage2_tokens": sum(a.total_tokens for a in attempts),
+        "stage2_tokens": sum(attempt.total_tokens for attempt in attempts),
         "stage2_cost_idr": round(s2_tok_cost, 2),
-        "total_tokens": s1_tokens + sum(a.total_tokens for a in attempts),
+        "total_tokens": s1_tokens + sum(attempt.total_tokens for attempt in attempts),
         "total_effective_cost_idr": total_effective_cost,
         "calls_details": [
             {
                 "stage": "stage1_literal",
                 "attempt": 1,
+                "status": "success",
                 "prompt_tokens": 1150,
                 "candidates_tokens": 70,
                 "cached_tokens": 0,
@@ -273,23 +281,27 @@ def run_mock_forced_inference(
                 "cost_usd": 0.0003,
                 "cost_idr": s1_cost_idr,
                 "latency_s": 0.8,
-                "queries": [],
+                "web_search_queries": [],
+                "error": None,
             }
-        ] + [
+        ]
+        + [
             {
                 "stage": "stage2_forced_search",
-                "attempt": a.attempt_index,
-                "prompt_tokens": a.prompt_tokens,
-                "candidates_tokens": a.candidates_tokens,
-                "cached_tokens": a.cached_tokens,
-                "thoughts_tokens": a.thoughts_tokens,
-                "total_tokens": a.total_tokens,
-                "cost_usd": a.cost_usd,
-                "cost_idr": a.cost_idr,
-                "latency_s": a.latency_s,
-                "queries": a.web_queries,
+                "attempt": attempt.attempt_index,
+                "status": attempt.status,
+                "prompt_tokens": attempt.prompt_tokens,
+                "candidates_tokens": attempt.candidates_tokens,
+                "cached_tokens": attempt.cached_tokens,
+                "thoughts_tokens": attempt.thoughts_tokens,
+                "total_tokens": attempt.total_tokens,
+                "cost_usd": attempt.cost_usd,
+                "cost_idr": attempt.cost_idr,
+                "latency_s": attempt.latency_s,
+                "web_search_queries": attempt.web_queries,
+                "error": attempt.error,
             }
-            for a in attempts
+            for attempt in attempts
         ],
     }
 
@@ -299,8 +311,6 @@ def run_gemini_forced_inference(
     raw_text: str,
     client: GeminiClient,
     model: str,
-    gt_tingkat: str,
-    v2_pred: str,
 ) -> dict[str, Any]:
     """Eksekusi inferensi live ke Gemini API dengan Stage 1 + Stage 2 Forced Search Bounded Retry."""
     t0 = time.perf_counter()
@@ -346,6 +356,8 @@ def run_gemini_forced_inference(
         cost_idr=res2_att1.cost_idr,
         latency_s=lat_att1,
         web_queries=res2_att1.web_search_queries or [],
+        status=res2_att1.status,
+        error=res2_att1.error_message,
         raw_response=res2_att1.response_text,
         parsed_json=parsed_att1,
     )
@@ -379,6 +391,8 @@ def run_gemini_forced_inference(
             cost_idr=res2_att2.cost_idr,
             latency_s=lat_att2,
             web_queries=res2_att2.web_search_queries or [],
+            status=res2_att2.status,
+            error=res2_att2.error_message,
             raw_response=res2_att2.response_text,
             parsed_json=parsed_att2,
         )
@@ -404,15 +418,12 @@ def run_gemini_forced_inference(
     s2_tok_cost = sum(a.cost_idr for a in attempts)
     total_effective_cost = round(s1_tok_cost + s2_tok_cost + search_fee_idr, 2)
 
-    outcome_cat = determine_outcome_category(tingkat_val, v2_pred, gt_tingkat, total_query_count)
-
     return {
         "fields": norm_fields,
         "grounding_status": grounding_status,
-        "outcome_category": outcome_cat,
         "attempts_count": len(attempts),
         "total_web_queries": total_query_count,
-        "web_queries": all_queries,
+        "web_search_queries": all_queries,
         "search_fee_idr": search_fee_idr,
         "stage1_tokens": res1.total_tokens,
         "stage1_cost_idr": round(s1_tok_cost, 2),
@@ -425,6 +436,7 @@ def run_gemini_forced_inference(
             {
                 "stage": "stage1_literal",
                 "attempt": 1,
+                "status": res1.status,
                 "prompt_tokens": res1.prompt_tokens,
                 "candidates_tokens": res1.candidates_tokens,
                 "cached_tokens": res1.cached_tokens,
@@ -432,13 +444,15 @@ def run_gemini_forced_inference(
                 "total_tokens": res1.total_tokens,
                 "cost_usd": res1.cost_usd,
                 "cost_idr": round(s1_tok_cost, 2),
-                "latency_s": round(time.perf_counter() - t0, 3),
-                "queries": res1.web_search_queries or [],
+                "latency_s": res1.latency_s,
+                "web_search_queries": res1.web_search_queries or [],
+                "error": res1.error_message,
             }
         ] + [
             {
                 "stage": "stage2_forced_search",
                 "attempt": a.attempt_index,
+                "status": a.status,
                 "prompt_tokens": a.prompt_tokens,
                 "candidates_tokens": a.candidates_tokens,
                 "cached_tokens": a.cached_tokens,
@@ -448,6 +462,8 @@ def run_gemini_forced_inference(
                 "cost_idr": a.cost_idr,
                 "latency_s": a.latency_s,
                 "queries": a.web_queries,
+                "web_search_queries": a.web_queries,
+                "error": a.error,
             }
             for a in attempts
         ],
@@ -488,6 +504,53 @@ Model Target: `{model}` | Tanggal: {datetime.now().strftime("%Y-%m-%d")}
 """
     out_path.write_text(content, encoding="utf-8")
 
+def _input_digest(path: Path) -> str:
+    if not path.exists():
+        raise FileNotFoundError(f"Input benchmark tidak ditemukan: {path}")
+    digest = hashlib.sha256()
+    if path.is_file():
+        digest.update(path.read_bytes())
+    else:
+        for child in sorted(p for p in path.rglob("*") if p.is_file()):
+            digest.update(str(child.relative_to(path)).encode())
+            digest.update(child.read_bytes())
+    return digest.hexdigest()
+
+
+def _build_run_identity(
+    manifest_path: Path,
+    raw_texts_dir: Path,
+    gt_csv_path: Path,
+    model: str,
+    backend: str,
+    max_cumulative_queries: int,
+    max_cumulative_cost_idr: float,
+    offset: int = 0,
+    limit: int | None = None,
+) -> dict[str, Any]:
+    payload = {
+        "campaign_id": "EXP-SEARCH-GROUNDING-CAMPAIGN-001",
+        "experiment_id": "EXP-SEARCH-GROUNDING-002",
+        "manifest_sha256": _input_digest(manifest_path),
+        "raw_texts_sha256": _input_digest(raw_texts_dir),
+        "ground_truth_sha256": _input_digest(gt_csv_path),
+        "model": model,
+        "backend": backend,
+        "max_cumulative_queries": max_cumulative_queries,
+        "max_cumulative_cost_idr": max_cumulative_cost_idr,
+        "offset": offset,
+        "limit": limit,
+        "prompt_sha256": hashlib.sha256(
+            (STAGE1_SYSTEM_INSTRUCTION + STAGE1_USER_PROMPT_TEMPLATE
+             + STAGE2_FORCED_PROMPT_ATTEMPT1 + STAGE2_FORCED_PROMPT_ATTEMPT2).encode()
+        ).hexdigest(),
+        "runner_sha256": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+    }
+    payload["identity_sha256"] = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, ensure_ascii=False).encode()
+    ).hexdigest()
+    return payload
+
 
 def run_benchmark(
     manifest_path: str = "docs/experiments/EXP-SEARCH-GROUNDING-002/manifest_94_fallback.csv",
@@ -504,6 +567,7 @@ def run_benchmark(
     offset: int = 0,
     mock: bool = False,
     force: bool = False,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Eksekusi evaluasi forced search grounding berpasangan pada manifest 94 residual."""
     # Jika mode mock dan output_dir masih default EXP-002, alihkan ke dry_run folder
@@ -512,32 +576,58 @@ def run_benchmark(
 
     out_dir_path = Path(REPO_ROOT) / output_dir
 
-    # B14 Immutability Guard: Tolak menimpa deliverable final jika sudah ada
-    deliverables = [out_dir_path / "comparative_metrics.json", out_dir_path / "evaluation_details.csv"]
-    existing_delivs = [f.name for f in deliverables if f.exists()]
-    if existing_delivs and not force:
-        raise FileExistsError(
-            f"B14 Immutability Guard: Deliverable final {existing_delivs} sudah ada di {out_dir_path}. "
-            "Gunakan folder output baru atau tentukan --force untuk menimpa secara eksplisit."
-        )
+    if resume and force:
+        raise ValueError("Pilih salah satu: --resume atau --force.")
+    if force or resume:
+        out_dir_path.mkdir(parents=True, exist_ok=True)
+    else:
+        ensure_fresh_directory(out_dir_path)
 
-    out_dir_path.mkdir(parents=True, exist_ok=True)
-
-    # 1. Muat Ground Truth Resmi (Unified 104)
-    gt_map = load_and_normalize_gt(Path(REPO_ROOT) / gt_csv_path)
-
-    # 2. Muat Manifest 94 Fallback
+    gt_path = Path(REPO_ROOT) / gt_csv_path
     man_path = Path(REPO_ROOT) / manifest_path
+    raw_dir = Path(REPO_ROOT) / raw_texts_dir
     if not man_path.exists():
         raise FileNotFoundError(f"Manifest tidak ditemukan: {man_path}")
-
     with open(man_path, encoding="utf-8") as f:
         manifest_rows = list(csv.DictReader(f))
+    if len(manifest_rows) != 94:
+        raise ValueError(
+            f"Manifest harus memuat tepat 94 dokumen, ditemukan {len(manifest_rows)}"
+        )
+    gt_map = load_and_normalize_gt(gt_path)
+    for row in manifest_rows:
+        filename = row["nama_file"]
+        if not gt_map.get(filename) and not gt_map.get(Path(filename).stem):
+            raise ValueError(f"Ground truth tidak memiliki baris untuk {filename}")
 
-    assert len(manifest_rows) == 94, f"Manifest harus memuat tepat 94 dokumen, ditemukan {len(manifest_rows)}"
+    run_identity = _build_run_identity(
+        man_path,
+        raw_dir,
+        gt_path,
+        model,
+        backend,
+        max_cumulative_queries,
+        max_cumulative_cost_idr,
+        offset=offset,
+        limit=limit,
+    )
+    identity_path = out_dir_path / "run_identity.json"
+    if resume:
+        if not identity_path.exists():
+            raise FileNotFoundError(f"Checkpoint identity tidak ditemukan: {identity_path}")
+        stored_identity = json.loads(identity_path.read_text(encoding="utf-8"))
+        if stored_identity.get("identity_sha256") != run_identity["identity_sha256"]:
+            raise ValueError("Checkpoint identity berbeda dari input/configuration saat ini.")
+    identity_path.write_text(
+        json.dumps(run_identity, indent=2, ensure_ascii=False) + "\n",
+        encoding="utf-8",
+    )
 
     target_slice = manifest_rows[offset : (offset + limit) if limit else None]
-    logger.info(f"Target manifest slice: {len(target_slice)} dokumen (offset={offset}, limit={limit})")
+    logger.info(
+        f"Target manifest slice: {len(target_slice)} dokumen "
+        f"(offset={offset}, limit={limit})"
+    )
 
     # 3. Inisialisasi Klien API (jika non-mock)
     client: GeminiClient | None = None
@@ -546,16 +636,16 @@ def run_benchmark(
 
     checkpoint_file = out_dir_path / "checkpoint_forced_search.jsonl"
     existing_records: dict[str, dict[str, Any]] = {}
-    if checkpoint_file.exists():
+    if resume and checkpoint_file.exists():
         with open(checkpoint_file, encoding="utf-8") as f:
             for line in f:
                 if line.strip():
                     rec = json.loads(line)
-                    existing_records[rec["nama_file"]] = rec
-        logger.info(f"Ditemukan {len(existing_records)} record dari checkpoint sebelumnya.")
+                    if rec.get("run_identity") == run_identity["identity_sha256"]:
+                        existing_records[rec["nama_file"]] = rec
+        logger.info(f"Ditemukan {len(existing_records)} record kompatibel dari checkpoint.")
     # 4. Evaluasi Dokumen
-    raw_dir = Path(REPO_ROOT) / raw_texts_dir
-    cp_writer = open(checkpoint_file, "a", encoding="utf-8")
+    cp_writer = open(checkpoint_file, "a" if resume else "w", encoding="utf-8")
 
     all_records: list[dict[str, Any]] = []
     cumulative_queries = sum(r.get("total_web_queries", 0) for r in existing_records.values())
@@ -582,20 +672,28 @@ def run_benchmark(
             stem = Path(fn).stem
             txt_path = raw_dir / f"{stem}.txt"
             if not txt_path.exists():
-                logger.warning(f"Raw text tidak ditemukan untuk {fn}, lewati.")
-                continue
+                raise FileNotFoundError(f"Raw text tidak ditemukan untuk {fn}: {txt_path}")
             raw_text = txt_path.read_text(encoding="utf-8")
+            if not raw_text.strip():
+                raise ValueError(f"Raw text kosong untuk {fn}: {txt_path}")
 
             if mock:
-                res_meta = run_mock_forced_inference(fn, raw_text, gt_tkt, v2_pred)
+                res_meta = run_mock_forced_inference(raw_text)
             else:
                 assert client is not None
-                res_meta = run_gemini_forced_inference(fn, raw_text, client, model, gt_tkt, v2_pred)
+                res_meta = run_gemini_forced_inference(fn, raw_text, client, model)
+            res_meta["outcome_category"] = determine_outcome_category(
+                res_meta["fields"].get("tingkat"),
+                v2_pred,
+                gt_tkt,
+                res_meta["total_web_queries"],
+            )
 
             doc_gt = gt_map.get(fn, gt_map.get(stem, {}))
             # Evaluasi per-field
             eval_dict = evaluate_predictions(res_meta["fields"], doc_gt)
             record = {
+                "run_identity": run_identity["identity_sha256"],
                 "no": row["no"],
                 "dataset": row["dataset"],
                 "nama_file": fn,
@@ -608,7 +706,8 @@ def run_benchmark(
                 "outcome_category": res_meta["outcome_category"],
                 "attempts_count": res_meta["attempts_count"],
                 "total_web_queries": res_meta["total_web_queries"],
-                "web_queries": res_meta["web_queries"],
+                "web_search_queries": res_meta["web_search_queries"],
+                "web_queries": res_meta["web_search_queries"],
                 "search_fee_idr": res_meta["search_fee_idr"],
                 "stage1_tokens": res_meta.get("stage1_tokens", 0),
                 "stage1_cost_idr": res_meta.get("stage1_cost_idr", 0.0),
@@ -653,15 +752,78 @@ def run_benchmark(
     for r in all_records:
         cat_counts[r["outcome_category"]] = cat_counts.get(r["outcome_category"], 0) + 1
 
+    target_complete = len(all_records) == len(target_slice)
+    total_search_fee_idr = round(sum(r["search_fee_idr"] for r in all_records), 2)
+    total_prompt_tokens = sum(
+        call.get("prompt_tokens", 0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_candidates_tokens = sum(
+        call.get("candidates_tokens", 0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_cached_tokens = sum(
+        call.get("cached_tokens", 0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_thoughts_tokens = sum(
+        call.get("thoughts_tokens", 0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_tokens = sum(
+        call.get("total_tokens", 0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_latency_s = sum(
+        call.get("latency_s", 0.0)
+        for record in all_records
+        for call in record.get("calls_details", [])
+    )
+    total_calls = sum(len(record.get("calls_details", [])) for record in all_records)
+    all_web_search_queries = [
+        query
+        for record in all_records
+        for query in record.get("web_search_queries", [])
+    ]
+    calls_details = [
+        {"nama_file": record["nama_file"], **call}
+        for record in all_records
+        for call in record.get("calls_details", [])
+    ]
+    status_counts: dict[str, int] = {}
+    for call in calls_details:
+        status = call.get("status", "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
+    total_token_cost_idr = round(
+        sum(r.get("stage1_cost_idr", 0.0) + r.get("stage2_cost_idr", 0.0) for r in all_records),
+        2,
+    )
+    total_token_cost_usd = round(
+        sum(
+            call.get("cost_usd", 0.0)
+            for record in all_records
+            for call in record.get("calls_details", [])
+        ),
+        6,
+    )
     summary_metrics = {
         "metadata": {
+            "campaign_id": "EXP-SEARCH-GROUNDING-CAMPAIGN-001",
             "experiment_id": "EXP-SEARCH-GROUNDING-002",
             "model": model,
             "backend": backend,
             "mock": mock,
+            "status": "STAGING_ONLY",
+            "run_identity": run_identity["identity_sha256"],
             "timestamp": datetime.now().isoformat(),
             "total_documents_evaluated": n_docs,
-            "target_denominator": 94,
+            "target_denominator": len(target_slice),
+            "target_complete": target_complete,
         },
         "accuracy": {
             "v2_historical_tingkat_exact": v2_tkt_acc,
@@ -674,18 +836,48 @@ def run_benchmark(
         "grounding_cohorts": {
             "grounded_count": len(grounded_cohort),
             "grounded_rate": round(len(grounded_cohort) / n_docs * 100.0, 2) if n_docs else 0.0,
-            "grounded_v3_accuracy": round(sum(r["v3_exact"] for r in grounded_cohort) / len(grounded_cohort) * 100.0, 2) if grounded_cohort else 0.0,
-            "grounded_v2_accuracy": round(sum(r["v2_historical_exact"] for r in grounded_cohort) / len(grounded_cohort) * 100.0, 2) if grounded_cohort else 0.0,
+            "grounded_v3_accuracy": round(
+                sum(r["v3_exact"] for r in grounded_cohort) / len(grounded_cohort) * 100.0,
+                2,
+            ) if grounded_cohort else 0.0,
+            "grounded_v2_accuracy": round(
+                sum(r["v2_historical_exact"] for r in grounded_cohort) / len(grounded_cohort) * 100.0,
+                2,
+            ) if grounded_cohort else 0.0,
             "ungrounded_count": len(ungrounded_cohort),
             "ungrounded_rate": round(len(ungrounded_cohort) / n_docs * 100.0, 2) if n_docs else 0.0,
-            "ungrounded_v3_accuracy": round(sum(r["v3_exact"] for r in ungrounded_cohort) / len(ungrounded_cohort) * 100.0, 2) if ungrounded_cohort else 0.0,
+            "ungrounded_v3_accuracy": round(
+                sum(r["v3_exact"] for r in ungrounded_cohort) / len(ungrounded_cohort) * 100.0,
+                2,
+            ) if ungrounded_cohort else 0.0,
         },
         "costs": {
-            "total_queries": sum(r["total_web_queries"] for r in all_records),
-            "total_search_fee_idr": round(sum(r["search_fee_idr"] for r in all_records), 2),
-            "total_tokens": sum(r["total_tokens"] for r in all_records),
-            "total_effective_cost_idr": round(sum(r["total_effective_cost_idr"] for r in all_records), 2),
-            "avg_cost_per_doc_idr": round(sum(r["total_effective_cost_idr"] for r in all_records) / n_docs, 2) if n_docs else 0.0,
+            "total_queries": len(all_web_search_queries),
+            "web_search_queries": all_web_search_queries,
+            "search_query_fee_usd": round(
+                len(all_web_search_queries) * SEARCH_QUERY_FEE_USD,
+                6,
+            ),
+            "total_search_fee_idr": total_search_fee_idr,
+            "total_prompt_tokens": total_prompt_tokens,
+            "total_candidates_tokens": total_candidates_tokens,
+            "total_cached_tokens": total_cached_tokens,
+            "total_thoughts_tokens": total_thoughts_tokens,
+            "total_tokens": total_tokens,
+            "total_calls": total_calls,
+            "total_latency_s": round(total_latency_s, 4),
+            "avg_latency_s": round(total_latency_s / total_calls, 4) if total_calls else 0.0,
+            "status_counts": status_counts,
+            "calls_details": calls_details,
+            "total_token_cost_usd": total_token_cost_usd,
+            "total_token_cost_idr": total_token_cost_idr,
+            "total_effective_cost_idr": round(
+                sum(r["total_effective_cost_idr"] for r in all_records), 2
+            ),
+            "avg_cost_per_doc_idr": round(
+                sum(r["total_effective_cost_idr"] for r in all_records) / n_docs,
+                2,
+            ) if n_docs else 0.0,
         },
     }
 
@@ -703,6 +895,7 @@ def run_benchmark(
             "nama_file",
             "gt_tingkat",
             "v2_pred",
+            "web_search_queries",
             "v2_exact",
             "v3_pred",
             "v3_exact",
@@ -728,7 +921,7 @@ def run_benchmark(
                 "nama_file": r["nama_file"],
                 "gt_tingkat": r["gt_tingkat"],
                 "v2_pred": r["v2_historical_pred"],
-                "v2_exact": r["v2_historical_exact"],
+                "web_search_queries": ";".join(r["web_search_queries"]),
                 "v3_pred": r["v3_pred"],
                 "v3_exact": r["v3_exact"],
                 "grounding_status": r["grounding_status"],
@@ -756,6 +949,7 @@ if __name__ == "__main__":
     parser.add_argument("--model", default="gemini-3.1-flash-lite")
     parser.add_argument("--live", action="store_true", help="Wajib disertakan untuk eksekusi API live nyata. Jika tidak disertakan, default mode adalah mock dry-run.")
     parser.add_argument("--force", action="store_true", help="Paksa menimpa output directory yang sudah ada.")
+    parser.add_argument("--resume", action="store_true", help="Lanjutkan checkpoint dengan identity yang sama.")
     parser.add_argument("--pacing-delay", type=float, default=1.2, help="Jeda pacing antar request (detik).")
     parser.add_argument("--timeout-s", type=float, default=30.0, help="Timeout HTTP per request (detik).")
     parser.add_argument("--limit", type=int, default=None)
@@ -771,6 +965,7 @@ if __name__ == "__main__":
         model=args.model,
         mock=is_mock,
         force=args.force,
+        resume=args.resume,
         pacing_delay=args.pacing_delay,
         timeout_s=args.timeout_s,
         limit=args.limit,

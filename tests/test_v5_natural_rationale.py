@@ -102,16 +102,8 @@ class TestV5PromptContract:
 
     def test_v5_mock_inference_determinism(self) -> None:
         """Memastikan mock inference untuk v5 berjalan deterministik dan menghasilkan 6 field standar."""
-        gt_sample = {
-            "Nama Kegiatan Sertifikasi": "Dataquest 4.0",
-            "Nomor Bukti Fisik Nomor Sertifikasi": "123/DQ/2024",
-            "Penyelenggara Kegiatan": "BEM FTMM UNAIR",
-            "Waktu Mulai Pelaksanaan": "24/08/2024",
-            "Waktu Selesai Pelaksanaan": "24/08/2024",
-            "Tingkat": "Nasional",
-        }
         raw_text = "Sertifikat Dataquest 4.0 kompetisi sains data tingkat nasional se-Indonesia."
-        fields, meta = run_mock_inference("v5_natural_rationale", raw_text, gt_sample)
+        fields, meta = run_mock_inference("v5_natural_rationale", raw_text)
 
         for f in ALL_6_FIELDS:
             assert f in fields

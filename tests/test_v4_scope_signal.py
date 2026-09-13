@@ -140,17 +140,12 @@ class TestV4PromptContract:
             assert norm_fields.get(f) is None
 
     def test_run_mock_inference_v4_heuristics(self) -> None:
-        """Memastikan mock inference V4 dapat dieksekusi tanpa menyalin ground truth secara naif."""
-        doc_info = {
-            "Nama Kegiatan Sertifikasi": "Seminar Nasional AI",
-            "Nomor Bukti Fisik Nomor Sertifikasi": "123/SN/2024",
-            "Penyelenggara Kegiatan": "BEM FTMM",
-            "Waktu Mulai Pelaksanaan": "10/10/2024",
-            "Waktu Selesai Pelaksanaan": "10/10/2024",
-            "Tingkat": "Nasional",
-        }
-        raw_text = "Seminar Nasional AI untuk Indonesia Maju diselenggarakan oleh BEM FTMM"
-        fields, meta = run_mock_inference("v4_scope_signal", raw_text, doc_info)
+        """Memastikan mock inference V4 membaca nilai dari raw OCR."""
+        raw_text = (
+            "Seminar Nasional AI diselenggarakan oleh BEM FTMM. "
+            "Nomor 123/SN/2024, tanggal 10/10/2024."
+        )
+        fields, meta = run_mock_inference("v4_scope_signal", raw_text)
 
         assert fields["tingkat"] == "Nasional"
         assert fields["nama_kegiatan_sertifikasi"] == "Seminar Nasional AI"
@@ -226,9 +221,9 @@ class TestV4PromptContract:
         # Buat deliverable palsu di folder
         (tmp_path / "comparative_summary.md").write_text("Dummy summary", encoding="utf-8")
         manifest_file = tmp_path / "manifest.json"
-        manifest_file.write_text("[]", encoding="utf-8")
+        manifest_file.write_text('[{"nama_file": "dummy.pdf"}]', encoding="utf-8")
         gt_file = tmp_path / "gt.csv"
-        gt_file.write_text("Nama File,Tingkat\n", encoding="utf-8")
+        gt_file.write_text("Nama File,Tingkat\ndummy.pdf,Fakultas\n", encoding="utf-8")
 
         # Tanpa force -> wajib raise FileExistsError
         with pytest.raises(FileExistsError) as exc_info:
@@ -250,5 +245,6 @@ class TestV4PromptContract:
             output_dir=str(tmp_path),
             cache_dir=str(tmp_path / "cache"),
             force=True,
+            offset=1,
         )
         assert isinstance(res, dict)

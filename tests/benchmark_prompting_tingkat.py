@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import re
@@ -29,6 +30,7 @@ import sys
 import time
 from collections import Counter
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable
 
@@ -45,8 +47,8 @@ from tests.prompting_tingkat import (
     build_cot_prompt,
     validate_tingkat,
     run_self_consistency,
-    run_iterative_prompting,
 )
+from tests.v2_staging_common import ensure_fresh_directory
 
 
 @dataclass
@@ -66,7 +68,7 @@ class EvalRecord:
     total_tokens: int = 0
     cost_usd: float = 0.0
     cost_idr: float = 0.0
-    web_queries: list[str] = field(default_factory=list)
+    web_search_queries: list[str] = field(default_factory=list)
     raw_response: str = ""
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -191,9 +193,14 @@ def make_llm_runner(
                     prompt_tokens=p_tok,
                     candidates_tokens=c_tok,
                     total_tokens=p_tok + c_tok,
+                    status="success",
                 )
             except Exception as e:
-                return LLMCallMeta(text=f"[OLLAMA_ERROR: {e}]")
+                return LLMCallMeta(
+                    text=f"[OLLAMA_ERROR: {e}]",
+                    status="error",
+                    error=str(e),
+                )
 
         return ollama_runner
 
@@ -226,6 +233,8 @@ def make_llm_runner(
                     cost_usd=res.cost_usd,
                     cost_idr=res.cost_idr,
                     web_search_queries=res.web_search_queries,
+                    status=res.status,
+                    error=res.error_message,
                 )
             return LLMCallMeta(
                 text=res.response_text.strip(),
@@ -237,6 +246,8 @@ def make_llm_runner(
                 cost_usd=res.cost_usd,
                 cost_idr=res.cost_idr,
                 web_search_queries=res.web_search_queries,
+                status=res.status,
+                error=res.error_message,
             )
 
         return gemini_runner
@@ -329,6 +340,20 @@ def evaluate_single(
         raise ValueError(f"Teknik '{technique}' tidak dikenali.")
 
 
+def _input_digest(path: Path) -> str:
+    if not path.exists():
+        raise FileNotFoundError(f"Input benchmark tidak ditemukan: {path}")
+    digest = hashlib.sha256()
+    if path.is_file():
+        digest.update(path.read_bytes())
+    else:
+        for child in sorted(path.rglob("*")):
+            if child.is_file():
+                digest.update(str(child.relative_to(path)).encode("utf-8"))
+                digest.update(child.read_bytes())
+    return digest.hexdigest()
+
+
 def run_benchmark(
     gt_path: Path,
     texts_path: Path,
@@ -339,9 +364,14 @@ def run_benchmark(
     output_dir: Path | None = None,
     gemini_model: str = "gemini-3.1-flash-lite",
     enable_grounding: bool = False,
+    *,
+    force: bool = False,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Menjalankan benchmark lengkap untuk teknik prompting."""
     records = load_gt(gt_path)
+    if not records:
+        raise ValueError(f"Ground truth kosong: {gt_path}")
     if limit:
         records = records[:limit]
 
@@ -360,13 +390,60 @@ def run_benchmark(
         "iterative",
     ]
 
-    llm_func = make_llm_runner(backend, gemini_model=gemini_model, enable_grounding=enable_grounding)
-    results_by_tech: dict[str, list[EvalRecord]] = {tech: [] for tech in selected_techniques}
+    llm_func = make_llm_runner(
+        backend, gemini_model=gemini_model, enable_grounding=enable_grounding
+    )
+    results_by_tech: dict[str, list[EvalRecord]] = {
+        tech: [] for tech in selected_techniques
+    }
     completed_keys: set[tuple[str, str]] = set()
+    identity_payload = {
+        "gt_sha256": _input_digest(gt_path),
+        "ocr_sha256": _input_digest(texts_path),
+        "mapping_sha256": _input_digest(mapping_path) if mapping_path else None,
+        "filenames": [row.get("Nama File", "").strip() for row in records],
+        "techniques": selected_techniques,
+        "backend": backend,
+        "model": gemini_model,
+        "enable_grounding": enable_grounding,
+        "runner_sha256": _input_digest(Path(__file__)),
+    }
+    identity_serialized = json.dumps(
+        identity_payload, sort_keys=True, separators=(",", ":")
+    )
+    started_at = datetime.now(timezone.utc).isoformat()
+    run_identity = hashlib.sha256(identity_serialized.encode("utf-8")).hexdigest()
+    ckpt_path: Path | None = None
     if output_dir:
-        output_dir.mkdir(parents=True, exist_ok=True)
+        if force or resume:
+            output_dir.mkdir(parents=True, exist_ok=True)
+        else:
+            ensure_fresh_directory(output_dir)
+        identity_path = output_dir / "run_identity.json"
+        if identity_path.exists():
+            existing_identity = json.loads(identity_path.read_text(encoding="utf-8"))
+            if existing_identity.get("run_identity") != run_identity:
+                raise ValueError(
+                    "Output directory berisi run identity berbeda; gunakan folder baru."
+                )
+        elif resume:
+            raise ValueError("Resume ditolak: run_identity.json tidak ditemukan.")
+        identity_path.write_text(
+            json.dumps(
+                {
+                    "campaign_id": "EXP-TINGKAT-PROMPT-CAMPAIGN-001",
+                    "run_identity": run_identity,
+                    "status": "STAGING_ONLY",
+                    "payload": identity_payload,
+                },
+                indent=2,
+                ensure_ascii=False,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
         ckpt_path = output_dir / "checkpoint_details.jsonl"
-        if ckpt_path.exists():
+        if resume and ckpt_path.exists():
             with open(ckpt_path, "r", encoding="utf-8") as f_ckpt:
                 for line in f_ckpt:
                     line_s = line.strip()
@@ -376,7 +453,11 @@ def run_benchmark(
                         cdata = json.loads(line_s)
                         fn = cdata["filename"]
                         tech = cdata["technique"]
-                        if tech in results_by_tech and (fn, tech) not in completed_keys:
+                        if (
+                            cdata.get("run_identity") == run_identity
+                            and tech in results_by_tech
+                            and (fn, tech) not in completed_keys
+                        ):
                             rec = EvalRecord(
                                 filename=fn,
                                 gt_tingkat=cdata.get("gt_tingkat", ""),
@@ -393,14 +474,23 @@ def run_benchmark(
                                 total_tokens=int(cdata.get("total_tokens", 0)),
                                 cost_usd=float(cdata.get("cost_usd", 0.0)),
                                 cost_idr=float(cdata.get("cost_idr", 0.0)),
-                                web_queries=cdata.get("web_queries", []),
+                                web_search_queries=cdata.get(
+                                    "web_search_queries",
+                                    cdata.get("web_queries", []),
+                                ),
+                                metadata={"call_metrics": cdata.get("call_metrics", [])},
                             )
                             results_by_tech[tech].append(rec)
                             completed_keys.add((fn, tech))
-                    except Exception:
-                        pass
+                    except (KeyError, TypeError, ValueError, json.JSONDecodeError):
+                        continue
             if completed_keys:
-                print(f"[Checkpoint Loaded]: {len(completed_keys)} record(s) sudah selesai, melanjutkan sisa...")
+                print(
+                    f"[Checkpoint Loaded]: {len(completed_keys)} record(s) "
+                    "sudah selesai, melanjutkan sisa..."
+                )
+        elif ckpt_path.exists():
+            ckpt_path.write_text("", encoding="utf-8")
     print(f"=== Menjalankan Benchmark Prompting Tingkat ===")
     print(f"Dataset: {gt_path.name} ({len(records)} baris)")
     print(f"Teks OCR Source: {texts_path}")
@@ -452,18 +542,17 @@ def run_benchmark(
                 total_tokens=res.total_tokens,
                 cost_usd=res.cost_usd,
                 cost_idr=res.cost_idr,
-                web_queries=res.web_search_queries,
+                web_search_queries=res.web_search_queries,
                 raw_response=res.raw_response,
                 metadata={**res.metadata, "call_metrics": res.call_metrics},
             )
             results_by_tech[tech].append(eval_rec)
 
             # Checkpoint per row bila output_dir disediakan
-            if output_dir:
-                output_dir.mkdir(parents=True, exist_ok=True)
-                ckpt_path = output_dir / "checkpoint_details.jsonl"
+            if ckpt_path:
                 with open(ckpt_path, "a", encoding="utf-8") as f_ckpt:
                     f_ckpt.write(json.dumps({
+                        "run_identity": run_identity,
                         "filename": orig_filename,
                         "technique": tech,
                         "gt_tingkat": gt_tingkat,
@@ -479,7 +568,8 @@ def run_benchmark(
                         "total_tokens": res.total_tokens,
                         "cost_usd": res.cost_usd,
                         "cost_idr": res.cost_idr,
-                        "web_queries": res.web_search_queries,
+                        "web_search_queries": res.web_search_queries,
+                        "call_metrics": res.call_metrics,
                     }) + "\n")
 
     # Hitung metrik per teknik
@@ -507,7 +597,42 @@ def run_benchmark(
         tot_tokens = sum(e.total_tokens for e in evals)
         tot_cost_usd = sum(e.cost_usd for e in evals)
         tot_cost_idr = sum(e.cost_idr for e in evals)
-        tot_web_queries = sum(len(e.web_queries) for e in evals)
+        web_search_queries = [
+            query
+            for evaluation in evals
+            for query in evaluation.web_search_queries
+        ]
+        calls_details: list[dict[str, Any]] = []
+        for index, evaluation in enumerate(evals, start=1):
+            details = evaluation.metadata.get("call_metrics", [])
+            if details:
+                calls_details.extend(
+                    {"document_index": index, **detail}
+                    for detail in details
+                )
+            else:
+                calls_details.append(
+                    {
+                        "document_index": index,
+                        "status": "success" if evaluation.pred_tingkat else "unparsed",
+                        "prompt_tokens": evaluation.prompt_tokens,
+                        "candidates_tokens": evaluation.candidates_tokens,
+                        "cached_tokens": evaluation.cached_tokens,
+                        "thoughts_tokens": evaluation.thoughts_tokens,
+                        "total_tokens": evaluation.total_tokens,
+                        "cost_usd": evaluation.cost_usd,
+                        "cost_idr": evaluation.cost_idr,
+                        "latency_s": evaluation.latency_s,
+                        "web_search_queries": list(evaluation.web_search_queries),
+                        "error": None,
+                    }
+                )
+        status_counts: dict[str, int] = {}
+        for detail in calls_details:
+            status = detail.get("status", "unknown")
+            status_counts[status] = status_counts.get(status, 0) + 1
+        tot_web_queries = len(web_search_queries)
+        total_calls = len(calls_details)
 
         summary[tech] = {
             "total": total,
@@ -524,6 +649,10 @@ def run_benchmark(
             "total_cost_usd": round(tot_cost_usd, 5),
             "total_cost_idr": round(tot_cost_idr, 2),
             "total_web_queries": tot_web_queries,
+            "web_search_queries": web_search_queries,
+            "total_calls": total_calls,
+            "status_counts": status_counts,
+            "calls_details": calls_details,
             "nasional_misclassified_as_fakultas": nasional_as_fakultas,
             "fakultas_misclassified_as_nasional": fakultas_as_nasional,
         }
@@ -539,9 +668,26 @@ def run_benchmark(
             f"{tokens_str:>16}   | Rp{stats['total_cost_idr']:>7.2f}  | {stats['avg_latency_s']:.3f}s"
         )
     print("=" * 88)
-    # Simpan artefak dokumentasi jika output_dir dispesifikasikan
     if output_dir:
         output_dir.mkdir(parents=True, exist_ok=True)
+        finished_at = datetime.now(timezone.utc).isoformat()
+        manifest_payload = {
+            "campaign_id": "EXP-TINGKAT-PROMPT-CAMPAIGN-001",
+            "experiment_id": output_dir.name,
+            "parent_experiment_id": None,
+            "related_experiment_ids": [],
+            "role": "prompting_tingkat",
+            "status": "STAGING_ONLY",
+            "started_at": started_at,
+            "completed_records": sum(
+                len(values) for values in results_by_tech.values()
+            ),
+            "expected_records": len(records) * len(selected_techniques),
+        }
+        (output_dir / "manifest.json").write_text(
+            json.dumps(manifest_payload, indent=2, ensure_ascii=False) + "\n",
+            encoding="utf-8",
+        )
         # 1. Summary JSON
         summary_file = output_dir / "benchmark_summary.json"
         summary_file.write_text(json.dumps(summary, indent=2), encoding="utf-8")
@@ -565,17 +711,20 @@ def run_benchmark(
                         gemini_model if backend == "gemini" else backend,
                         "success" if e.pred_tingkat else "unparsed",
                         e.prompt_tokens, e.candidates_tokens, e.cached_tokens, e.thoughts_tokens, e.total_tokens,
-                        f"{e.cost_usd:.6f}", f"{e.cost_idr:.2f}", "; ".join(e.web_queries),
+                        f"{e.cost_usd:.6f}", f"{e.cost_idr:.2f}", "; ".join(e.web_search_queries),
                         json.dumps(e.metadata.get("call_metrics", [])), e.raw_response[:100]
                     ])
 
         # 3. Markdown Report
-        md_file = output_dir / "report.md"
         md_lines = [
             f"# Laporan Eksperimen Prompting Tingkat ({backend.upper()})",
-            f"\nDataset: `{gt_path.name}` ({len(records)} baris)  ",
+            f"\nCampaign: `EXP-TINGKAT-PROMPT-CAMPAIGN-001`  ",
+            f"Experiment: `{output_dir.name}`  ",
+            f"Run identity: `{run_identity}`  ",
+            f"Status: `STAGING_ONLY`  ",
+            f"Dataset: `{gt_path.name}` ({len(records)} baris)  ",
             f"Sumber Teks OCR: `{texts_path.name}`  ",
-            f"Tanggal Eksekusi: {time.strftime('%Y-%m-%d %H:%M:%S')}\n",
+            f"Tanggal Eksekusi: {finished_at}\n",
             "## Ringkasan Perbandingan Teknik Prompting\n",
             "| Teknik | Akurasi | Review Rate | Prompt Tok | Cand Tok | Cached | Thoughts | Total Tok | Cost (IDR) | Cost (USD) | Web Queries | Nas->Fak | Fak->Nas | Avg Latency |",
             "|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
@@ -629,7 +778,7 @@ def run_benchmark(
                         gemini_model if backend == "gemini" else backend,
                         "success" if e.pred_tingkat else "unparsed",
                         e.prompt_tokens, e.candidates_tokens, e.cached_tokens, e.thoughts_tokens, e.total_tokens,
-                        e.cost_idr, e.cost_usd, "; ".join(e.web_queries),
+                        e.cost_idr, e.cost_usd, "; ".join(e.web_search_queries),
                         json.dumps(e.metadata.get("call_metrics", []))
                     ])
             xlsx_file = output_dir / "results.xlsx"
@@ -691,7 +840,16 @@ def main() -> None:
         default=None,
         help="Direktori penyimpanan output dokumentasi eksperimen (docs/experiments/<ID>/)",
     )
-    args = parser.parse_args()
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Izinkan overwrite setelah run identity cocok",
+    )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Lanjutkan checkpoint dengan run identity sama",
+    )
 
     if not args.texts_path:
         print("ERROR: --texts-path atau env GT_TEXTS_DIR wajib diisi untuk menentukan lokasi artefak teks OCR mentah.")
@@ -716,6 +874,8 @@ def main() -> None:
         output_dir=out_dir,
         gemini_model=args.gemini_model,
         enable_grounding=args.enable_search,
+        force=args.force,
+        resume=args.resume,
     )
 
 

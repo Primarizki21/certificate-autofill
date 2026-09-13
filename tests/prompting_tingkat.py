@@ -61,6 +61,8 @@ class LLMCallMeta:
     cost_usd: float = 0.0
     cost_idr: float = 0.0
     web_search_queries: list[str] = field(default_factory=list)
+    status: str = "success"
+    error: str | None = None
 
 
 @dataclass
@@ -331,8 +333,10 @@ def run_self_consistency(
             "thoughts_tokens": meta.thoughts_tokens,
             "total_tokens": meta.total_tokens,
             "cost_usd": meta.cost_usd,
+            "status": meta.status,
+            "error": meta.error,
             "cost_idr": meta.cost_idr,
-            "web_queries": meta.web_search_queries,
+            "web_search_queries": meta.web_search_queries,
         })
 
         raw_samples.append(meta.text)
@@ -438,7 +442,9 @@ def run_iterative_prompting(
             "total_tokens": meta.total_tokens,
             "cost_usd": meta.cost_usd,
             "cost_idr": meta.cost_idr,
-            "web_queries": meta.web_search_queries,
+            "status": meta.status,
+            "error": meta.error,
+            "web_search_queries": meta.web_search_queries,
         })
         return meta.text
 

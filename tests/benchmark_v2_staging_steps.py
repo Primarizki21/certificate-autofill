@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import os
 import random
+import re
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -25,6 +27,7 @@ from tests.v2_staging_common import (
     ALL_FIELDS,
     GT_PATH,
     LITERAL_FIELDS,
+    RAW_TEXT_DIR,
     SOURCE_RUN_DIR,
     aggregate_rows,
     ensure_fresh_directory,
@@ -53,19 +56,27 @@ def _utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _source_manifest() -> dict[str, Any]:
-    metadata_path = SOURCE_RUN_DIR / "run_metadata.json"
+def _source_manifest(
+    source_run_dir: Path = SOURCE_RUN_DIR,
+    raw_text_dir: Path | None = None,
+    gt_path: Path = GT_PATH,
+) -> dict[str, Any]:
+    raw_dir = raw_text_dir or source_run_dir / "raw_texts/production_conditional"
+    metadata_path = source_run_dir / "run_metadata.json"
+    results_path = source_run_dir / "results.json"
+    for required in (metadata_path, results_path, gt_path, raw_dir):
+        if not required.exists():
+            raise FileNotFoundError(f"Input staging tidak ditemukan: {required}")
     metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
     return {
-        "path": str(SOURCE_RUN_DIR.relative_to(REPO_ROOT)),
+        "path": os.path.relpath(source_run_dir, REPO_ROOT),
         "run_id": metadata.get("run_id"),
         "git_sha": metadata.get("git_sha"),
-        "gt_path": str(GT_PATH.relative_to(REPO_ROOT)),
-        "gt_sha256": sha256_text(GT_PATH.read_text(encoding="utf-8")),
-        "results_sha256": sha256_text(
-            (SOURCE_RUN_DIR / "results.json").read_text(encoding="utf-8")
-        ),
-        "raw_text_count": len(list((SOURCE_RUN_DIR / "raw_texts/production_conditional").glob("*.txt"))),
+        "gt_path": os.path.relpath(gt_path, REPO_ROOT),
+        "gt_sha256": sha256_text(gt_path.read_text(encoding="utf-8")),
+        "results_sha256": sha256_text(results_path.read_text(encoding="utf-8")),
+        "raw_text_dir": os.path.relpath(raw_dir, REPO_ROOT),
+        "raw_text_count": len(list(raw_dir.glob("*.txt"))),
     }
 
 
@@ -190,6 +201,7 @@ def _gate_report(
     *,
     review: dict[str, Any] | None = None,
     token_accounting: dict[str, Any] | None = None,
+    extra_gates: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     baseline = aggregate_rows(baseline_rows)
     candidate = aggregate_rows(candidate_rows)
@@ -220,30 +232,69 @@ def _gate_report(
         "no_paired_field_losses": {"pass": no_losses},
     }
     if review is not None:
+        cell_recall = review["cell_level"]["recall_pct"]
         gates["review_recall"] = {
             **review,
-            "minimum_doc_recall_pct": 95.0,
-            "pass": review["doc_level"]["recall_pct"] >= 95.0,
+            "minimum_cell_recall_pct": 95.0,
+            "pass": cell_recall >= 95.0,
         }
     if token_accounting is not None:
+        required_fields = (
+            "prompt_tokens",
+            "candidates_tokens",
+            "cached_tokens",
+            "thoughts_tokens",
+            "total_tokens",
+            "cost_usd",
+            "cost_idr",
+            "calls_count",
+            "latency_s",
+            "web_search_queries",
+            "calls_details",
+        )
+        all_required_fields = all(
+            key in token_accounting for key in required_fields
+        )
+        web_search_queries = token_accounting.get("web_search_queries", [])
+        calls_details = token_accounting.get("calls_details", [])
+        if not isinstance(web_search_queries, list):
+            all_required_fields = False
+            web_search_queries = []
+        if not isinstance(calls_details, list):
+            all_required_fields = False
+            calls_details = []
+        detail_fields = (
+            "status",
+            "prompt_tokens",
+            "candidates_tokens",
+            "cached_tokens",
+            "thoughts_tokens",
+            "total_tokens",
+            "cost_usd",
+            "cost_idr",
+            "latency_s",
+            "web_search_queries",
+            "error",
+        )
+        if any(
+            not isinstance(detail, dict)
+            or any(field not in detail for field in detail_fields)
+            for detail in calls_details
+        ):
+            all_required_fields = False
         gates["token_accounting"] = {
-            "all_required_fields": all(
-                key in token_accounting
-                for key in (
-                    "prompt_tokens",
-                    "candidates_tokens",
-                    "cached_tokens",
-                    "thoughts_tokens",
-                    "total_tokens",
-                    "cost_usd",
-                    "cost_idr",
-                    "web_search_queries",
-                )
-            ),
-            "web_search_queries": token_accounting["web_search_queries"],
-            "pass": not token_accounting["web_search_queries"],
+            "all_required_fields": all_required_fields,
+            "required_fields": list(required_fields),
+            "web_search_queries": web_search_queries,
+            "pass": all_required_fields and not web_search_queries,
         }
-    gates["all_pass"] = all(item["pass"] for item in gates.values())
+    if extra_gates:
+        gates.update(extra_gates)
+    gates["all_pass"] = all(
+        gate.get("pass", False)
+        for name, gate in gates.items()
+        if name != "all_pass"
+    )
     return {
         "baseline": baseline,
         "candidate": candidate,
@@ -268,7 +319,8 @@ def _token_rollup(call_meta: dict[str, dict[str, Any]]) -> dict[str, Any]:
     rollup: dict[str, Any] = {field: 0 for field in fields}
     queries: list[str] = []
     statuses: dict[str, int] = {}
-    for meta in call_meta.values():
+    calls_details: list[dict[str, Any]] = []
+    for stem, meta in call_meta.items():
         for field in fields:
             rollup[field] += meta.get(field, 0) or 0
         for query in meta.get("web_search_queries", []):
@@ -276,8 +328,13 @@ def _token_rollup(call_meta: dict[str, dict[str, Any]]) -> dict[str, Any]:
                 queries.append(query)
         status = meta.get("status", "unknown")
         statuses[status] = statuses.get(status, 0) + 1
+        calls_details.extend(
+            {"stem": stem, **detail}
+            for detail in meta.get("calls_details", [])
+        )
     rollup["web_search_queries"] = queries
     rollup["status_counts"] = statuses
+    rollup["calls_details"] = calls_details
     for field in fields:
         if field in {"cost_usd", "cost_idr", "latency_s"}:
             rollup[field] = round(float(rollup[field]), 6)
@@ -321,7 +378,7 @@ def _summary_markdown(
         "|---|---:|",
     ]
     for field, delta in proof["deltas_pct"].items():
-        lines.append(f"|`{field}`|{delta:+.2f}|" )
+        lines.append(f"|`{field}`|{delta:+.2f}|")
     lines.extend(["", "## Gate", ""])
     for name, gate in gates.items():
         if name == "all_pass":
@@ -357,28 +414,48 @@ def _write_step(
     candidate_rows: list[dict[str, Any]],
     decisions: dict[str, dict[str, Any]],
     notes: list[str],
+    source_run_dir: Path,
+    raw_text_dir: Path,
+    gt_path: Path,
     review_metrics: dict[str, Any] | None = None,
     token_accounting: dict[str, Any] | None = None,
+    extra_gates: dict[str, dict[str, Any]] | None = None,
     output_ready: bool = False,
 ) -> dict[str, Any]:
     if not output_ready:
         ensure_fresh_directory(output_dir)
     experiment_id = output_dir.name
-    source = _source_manifest()
+    source = _source_manifest(source_run_dir, raw_text_dir, gt_path)
     proof = _gate_report(
         baseline_rows,
         candidate_rows,
         review=review_metrics,
         token_accounting=token_accounting,
+        extra_gates=extra_gates,
     )
     _attach_metadata(candidate_rows, corpus, decisions=decisions)
+    generated_at = _utc_now()
     manifest = {
+        "campaign_id": "EXP-PROD-V2-CAMPAIGN-001",
         "experiment_id": experiment_id,
+        "parent_experiment_id": None,
+        "related_experiment_ids": [],
+        "role": step,
         "step": step,
-        "generated_at": _utc_now(),
+        "status": "STAGING_ONLY",
+        "started_at": generated_at,
+        "finished_at": _utc_now(),
+        "generated_at": generated_at,
         "immutable": True,
         "production_promotion": False,
         "source": source,
+        "commit": source["git_sha"],
+        "input_artifacts": {
+            "source_run_dir": source["path"],
+            "raw_text_dir": source["raw_text_dir"],
+            "gt_path": source["gt_path"],
+            "gt_sha256": source["gt_sha256"],
+        },
         "fields": list(ALL_FIELDS),
         "notes": notes,
     }
@@ -487,9 +564,11 @@ def _build_ablation(
     corpus: dict[str, dict[str, Any]],
     baseline_rows: list[dict[str, Any]],
     integrated_rows: list[dict[str, Any]],
+    *,
+    source_run_dir: Path = SOURCE_RUN_DIR,
 ) -> dict[str, Any]:
     artifact_paths = {
-        "v2_cached": SOURCE_RUN_DIR,
+        "v2_cached": source_run_dir,
         "title_boundary": REPO_ROOT / "docs/experiments/EXP-PROD-V2-TITLE-BOUNDARY-001",
         "organizer_boundary": REPO_ROOT
         / "docs/experiments/EXP-PROD-V2-ORGANIZER-BOUNDARY-003",
@@ -561,28 +640,67 @@ def _build_ablation(
                 for value in paired["per_field"].values()
             ),
         }
-    proof_path = (
-        SOURCE_RUN_DIR.parent
-        / "proof_full_74_token_accounted"
-        / "four_layer_proof.json"
-    )
-    four_layer = (
-        json.loads(proof_path.read_text(encoding="utf-8"))
-        if proof_path.exists()
-        else {"status": "missing"}
-    )
     return {
         "source_artifacts": {
-            name: str(path.relative_to(REPO_ROOT)) if path else None
+            name: os.path.relpath(path, REPO_ROOT) if path else None
             for name, path in artifact_paths.items()
         },
         "variants": comparison,
-        "four_layer_proof_source": four_layer,
         "notes": [
             "Semua varian dibandingkan dengan V2 cached pada stem dan matcher yang sama.",
+            "OOD dan proof four-layer kandidat tidak diambil dari artefak control lama.",
             "Varian OCR hanya tersedia bila eksperimen OCR live selesai dengan artefak results.json.",
         ],
     }
+def _semantic_anchor_audit() -> dict[str, Any]:
+    """Audit boundary modules against known corpus event literals."""
+    from tests.validate_gemini_4layer import CORPUS_EVENT_KEYWORDS
+
+    audited_files = (
+        REPO_ROOT / "tests/v2_title_boundary.py",
+        REPO_ROOT / "tests/v2_organizer_boundary.py",
+        REPO_ROOT / "tests/v2_safety_review.py",
+    )
+    violations: list[dict[str, Any]] = []
+    for path in audited_files:
+        source = path.read_text(encoding="utf-8")
+        try:
+            tree = ast.parse(source, filename=str(path))
+        except SyntaxError as exc:
+            return {
+                "status": "ERROR",
+                "audited_files": [os.path.relpath(path, REPO_ROOT) for path in audited_files],
+                "violations_found": [f"{path}:{exc.lineno}: syntax error"],
+                "hardcoded_event_names": 0,
+                "pass": False,
+            }
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Constant) or not isinstance(node.value, str):
+                continue
+            literal = node.value.upper()
+            for keyword in CORPUS_EVENT_KEYWORDS:
+                if re.search(
+                    rf"(?<![A-Z0-9]){re.escape(keyword.upper())}(?![A-Z0-9])",
+                    literal,
+                ):
+                    violations.append(
+                        {
+                            "file": os.path.relpath(path, REPO_ROOT),
+                            "line": node.lineno,
+                            "literal": keyword,
+                        }
+                    )
+    unique_names = {item["literal"] for item in violations}
+    return {
+        "status": "PASS" if not violations else "FAIL",
+        "audited_files": [os.path.relpath(path, REPO_ROOT) for path in audited_files],
+        "audited_keywords_count": len(CORPUS_EVENT_KEYWORDS),
+        "violations_found": violations,
+        "hardcoded_event_names": len(unique_names),
+        "pass": not violations,
+    }
+
+
 def _four_layer_proof(
     rows: list[dict[str, Any]],
     review_metrics: dict[str, Any],
@@ -615,14 +733,22 @@ def _four_layer_proof(
             }
         )
     fold_scores = [item["all_cells_exact_pct"] for item in fold_metrics]
-    mean_fold = sum(fold_scores) / len(fold_scores)
-    variance = sum((score - mean_fold) ** 2 for score in fold_scores) / 4
+    mean_fold = sum(fold_scores) / len(fold_scores) if fold_scores else 0.0
+    variance = (
+        sum((score - mean_fold) ** 2 for score in fold_scores) / 4
+        if len(fold_scores) > 1
+        else 0.0
+    )
 
     bootstrap_rng = random.Random(42)
     all_scores: list[float] = []
     framework_scores: list[float] = []
     for _ in range(1000):
-        sample = [rows[bootstrap_rng.randrange(len(rows))] for _ in rows]
+        sample = (
+            [rows[bootstrap_rng.randrange(len(rows))] for _ in rows]
+            if rows
+            else []
+        )
         all_total = len(sample) * len(ALL_FIELDS)
         all_exact = sum(
             int(row["evaluation"][field]["exact"])
@@ -636,43 +762,76 @@ def _four_layer_proof(
                 if evaluation["gt"] and evaluation["gt"] != "-":
                     framework_total += 1
                     framework_exact += int(evaluation["exact"])
-        all_scores.append(all_exact / all_total * 100)
+        all_scores.append(all_exact / all_total * 100 if all_total else 0.0)
         framework_scores.append(
             framework_exact / framework_total * 100 if framework_total else 0.0
         )
     all_scores.sort()
     framework_scores.sort()
-    proof_path = (
-        SOURCE_RUN_DIR.parent
-        / "proof_full_74_token_accounted"
-        / "four_layer_proof.json"
-    )
-    source_proof = json.loads(proof_path.read_text(encoding="utf-8"))
-    source_ood = source_proof["layer_2_ood"]
-    source_noise = source_ood["noise"]
+    anchor_audit = _semantic_anchor_audit()
     ood_summary = {
-        "status": "inherited_control_measurement",
-        "source": str(proof_path.relative_to(REPO_ROOT)),
-        "note": "Boundary bundle tidak menjalankan ulang model pada mutasi/noise; angka berikut adalah control V2.",
-        "mutation": {
-            key: source_ood["mutation"][key]
-            for key in (
-                "baseline_accuracy_pct",
-                "mutated_accuracy_pct",
-                "drop_pct",
-                "gate_threshold_drop_pct",
-                "gate_pass",
-            )
-        },
+        "status": "NOT_RUN",
+        "gate_pass": False,
+        "reason": (
+            "Boundary staging memakai cache deterministik; OOD kandidat penuh "
+            "harus dijalankan oleh validate_v2_production_equivalent.py."
+        ),
+        "mutation": {"status": "NOT_RUN", "gate_pass": False},
         "noise": {
-            "clean_all_cells_exact_pct": source_noise["clean_all_cells_exact_pct"],
-            "levels": {
-                level: {
-                    key: values[key]
-                    for key in ("all_cells_exact_pct", "drop_from_clean_all_cells_pct")
-                }
-                for level, values in source_noise["levels"].items()
-            },
+            "status": "NOT_RUN",
+            "levels": ["10%", "25%", "50%"],
+        },
+    }
+    layer1 = {
+        "status": "DESCRIPTIVE_FIXED_PIPELINE_HOLDOUT",
+        "independent_model_fit_per_fold": False,
+        "method": (
+            "Stratified 5-fold holdout atas prediction kandidat tetap; "
+            "tidak ada fitting model per fold."
+        ),
+        "stratified_5fold_holdout": {
+            "k_folds": 5,
+            "folds": fold_metrics,
+            "mean_exact_pct": round(mean_fold, 2),
+            "std_dev_pct": round(variance**0.5, 2),
+            "min_fold_exact_pct": min(fold_scores) if fold_scores else 0.0,
+        },
+        "bootstrap_ci": {
+            "n_bootstraps": 1000,
+            "all_cells_exact_mean_pct": round(sum(all_scores) / 1000, 2),
+            "all_cells_exact_95_ci": [all_scores[25], all_scores[975]],
+            "framework_exact_mean_pct": round(sum(framework_scores) / 1000, 2),
+            "framework_exact_95_ci": [
+                framework_scores[25],
+                framework_scores[975],
+            ],
+        },
+    }
+    layer1_gate = False
+    layer1_gate_reason = (
+        "NOT_RUN sebagai independent model fitting; hasil hanya holdout deskriptif "
+        "atas prediksi kandidat tetap."
+    )
+    cell_recall = review_metrics.get("cell_level", {}).get("recall_pct")
+    layer4_gate = cell_recall is not None and cell_recall >= 95.0
+    gates = {
+        "layer_1_statistical": {
+            "pass": layer1_gate,
+            "status": layer1["status"],
+            "reason": layer1_gate_reason,
+        },
+        "layer_2_ood": {
+            "pass": False,
+            "status": ood_summary["status"],
+        },
+        "layer_3_semantic_anchors": {
+            "pass": anchor_audit["pass"],
+            "status": anchor_audit["status"],
+        },
+        "layer_4_safety_net": {
+            "pass": bool(layer4_gate),
+            "minimum_cell_recall_pct": 95.0,
+            "cell_recall_pct": cell_recall,
         },
     }
     return {
@@ -681,26 +840,10 @@ def _four_layer_proof(
             "n_bootstraps": 1000,
             "seed": 42,
             "production_promotion": False,
+            "status": "STAGING_ONLY",
+            "completeness": "INCOMPLETE" if not all(item["pass"] for item in gates.values()) else "COMPLETE",
         },
-        "layer_1_statistical": {
-            "stratified_5fold_cv": {
-                "k_folds": 5,
-                "folds": fold_metrics,
-                "mean_exact_pct": round(mean_fold, 2),
-                "std_dev_pct": round(variance**0.5, 2),
-                "min_fold_exact_pct": min(fold_scores),
-            },
-            "bootstrap_ci": {
-                "n_bootstraps": 1000,
-                "all_cells_exact_mean_pct": round(sum(all_scores) / 1000, 2),
-                "all_cells_exact_95_ci": [all_scores[25], all_scores[975]],
-                "framework_exact_mean_pct": round(sum(framework_scores) / 1000, 2),
-                "framework_exact_95_ci": [
-                    framework_scores[25],
-                    framework_scores[975],
-                ],
-            },
-        },
+        "layer_1_statistical": layer1,
         "layer_2_ood": ood_summary,
         "layer_3_semantic_anchors": {
             "title_anchors": [
@@ -717,14 +860,15 @@ def _four_layer_proof(
                 "issuer before award phrase",
                 "organization before certificate header",
             ],
-            "dataset_event_literals": [],
-            "hardcoded_event_names": 0,
+            "audit": anchor_audit,
         },
         "layer_4_safety_net": {
             **review_metrics,
-            "minimum_doc_recall_pct": 95.0,
-            "gate_pass": review_metrics["doc_level"]["recall_pct"] >= 95.0,
+            "minimum_cell_recall_pct": 95.0,
+            "gate_pass": bool(layer4_gate),
         },
+        "gates": gates,
+        "all_pass": all(item["pass"] for item in gates.values()),
     }
 
 
@@ -735,8 +879,12 @@ def run_step(
     model: str,
     request_delay: float,
     skip_gemini: bool,
+    source_run_dir: Path = SOURCE_RUN_DIR,
+    raw_text_dir: Path | None = None,
+    gt_path: Path = GT_PATH,
 ) -> dict[str, Any]:
-    corpus = load_cached_corpus()
+    raw_dir = raw_text_dir or source_run_dir / "raw_texts/production_conditional"
+    corpus = load_cached_corpus(source_run_dir, raw_dir, gt_path)
     baseline_rows = _baseline_rows(corpus)
     if step == "baseline":
         return _write_step(
@@ -746,6 +894,9 @@ def run_step(
             baseline_rows=baseline_rows,
             candidate_rows=baseline_rows,
             decisions={},
+            source_run_dir=source_run_dir,
+            raw_text_dir=raw_dir,
+            gt_path=gt_path,
             notes=[
                 "Control replay dari V2 Scope-Aware tersimpan; tidak ada panggilan baru.",
                 "Fuzzy memakai matcher v2 saat ini; angka fuzzy report lama tidak ditimpa.",
@@ -755,6 +906,8 @@ def run_step(
         decisions, selector = _decision_rows(corpus, step)
         candidate_rows = evaluate_fields(corpus, selector, source=f"v2_{step}_boundary")
         review = None
+        integrated_proof = None
+        extra_gates = None
         if step == "integrated":
             annotations = {
                 row["stem"]: build_review_annotations(
@@ -771,6 +924,15 @@ def run_step(
                 reasons_selector=lambda field, item: annotations[item["stem"]][field]["reasons"],
             )
             review = _review_metrics(candidate_rows)
+            integrated_proof = _four_layer_proof(candidate_rows, review)
+            extra_gates = {
+                f"proof_{name}": {
+                    "pass": value["pass"],
+                    "status": value.get("status"),
+                }
+                for name, value in integrated_proof["gates"].items()
+                if name != "all_pass"
+            }
         proof = _write_step(
             step=step,
             output_dir=output_dir,
@@ -778,32 +940,38 @@ def run_step(
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
             decisions=decisions,
+            source_run_dir=source_run_dir,
+            raw_text_dir=raw_dir,
+            gt_path=gt_path,
             review_metrics=review,
+            extra_gates=extra_gates,
             notes=[
                 "Nilai model V2 tetap menjadi control; hanya boundary struktural yang diproses.",
                 "Tidak ada perubahan backend produksi dan tidak ada panggilan Gemini baru.",
+                *(
+                    [
+                        "Four-layer proof dihitung sebelum gate; OOD kandidat berstatus NOT_RUN "
+                        "sampai validator live dijalankan."
+                    ]
+                    if integrated_proof is not None
+                    else []
+                ),
             ],
         )
-        if step == "integrated":
-            integrated_proof = _four_layer_proof(candidate_rows, review or {})
+        if integrated_proof is not None:
             write_json(output_dir / "four_layer_proof.json", integrated_proof)
-            ablation = _build_ablation(corpus, baseline_rows, candidate_rows)
+            ablation = _build_ablation(
+                corpus,
+                baseline_rows,
+                candidate_rows,
+                source_run_dir=source_run_dir,
+            )
             ablation["four_layer_proof"] = integrated_proof
             write_json(output_dir / "ablation.json", ablation)
             payload = json.loads((output_dir / "results.json").read_text(encoding="utf-8"))
             payload["ablation"] = ablation
             payload["four_layer_proof"] = integrated_proof
             write_json(output_dir / "results.json", payload)
-            with (output_dir / "summary.md").open("a", encoding="utf-8") as handle:
-                handle.write("\n## Ablation lintas langkah\n\n")
-                for name, variant in ablation["variants"].items():
-                    metrics = variant["metrics"]
-                    handle.write(
-                        f"- `{name}`: all-cells exact "
-                        f"`{metrics['all_cells_exact_pct']}%`, framework exact "
-                        f"`{metrics['framework_exact_pct']}%`, "
-                        f"no field loss `{variant['no_field_losses']}`.\n"
-                    )
         return proof
     if step == "review":
         candidate_rows, annotations = _review_rows(corpus, source="v2_semantic_review")
@@ -818,6 +986,9 @@ def run_step(
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
             decisions=decisions,
+            source_run_dir=source_run_dir,
+            raw_text_dir=raw_dir,
+            gt_path=gt_path,
             review_metrics=_review_metrics(candidate_rows),
             notes=[
                 "Review reasons memakai raw OCR dan structural evidence, bukan ground truth.",
@@ -841,6 +1012,9 @@ def run_step(
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
             decisions=decisions,
+            source_run_dir=source_run_dir,
+            raw_text_dir=raw_dir,
+            gt_path=gt_path,
             token_accounting=token_accounting,
             output_ready=True,
             notes=[
@@ -859,22 +1033,31 @@ def run_step(
         pipeline_text = (REPO_ROOT / "backend/app/services/extraction_pipeline.py").read_text(
             encoding="utf-8"
         )
+        source = _source_manifest(source_run_dir, raw_dir, gt_path)
         checks = {
             "combined_v4_2_default_false": 'os.getenv("ENABLE_COMBINED_V4_2", "false")' in config_text,
             "tesseract_gemini_default_true": 'os.getenv("ENABLE_TESSERACT_GEMINI", "true")' in config_text,
             "production_pipeline_keeps_direct_gemini_branch": "enable_tesseract_gemini" in pipeline_text,
             "no_promotion_flag_added": True,
-            "source_run_git_sha": _source_manifest()["git_sha"],
+            "source_run_git_sha": source["git_sha"],
         }
-        output_dir.mkdir(parents=True, exist_ok=True)
         ensure_fresh_directory(output_dir)
+        generated_at = _utc_now()
         manifest = {
+            "campaign_id": "EXP-PROD-V2-CAMPAIGN-001",
             "experiment_id": output_dir.name,
+            "parent_experiment_id": None,
+            "related_experiment_ids": [],
+            "role": step,
             "step": step,
-            "generated_at": _utc_now(),
+            "status": "STAGING_ONLY",
+            "started_at": generated_at,
+            "finished_at": _utc_now(),
+            "generated_at": generated_at,
             "immutable": True,
             "production_promotion": False,
-            "source": _source_manifest(),
+            "source": source,
+            "commit": source["git_sha"],
             "checks": checks,
             "pass": all(value for key, value in checks.items() if key != "source_run_git_sha"),
         }
@@ -896,8 +1079,11 @@ def run_step(
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--step", choices=tuple(STEP_DIRECTORIES))
+    parser.add_argument("--step", choices=tuple(STEP_DIRECTORIES), required=True)
     parser.add_argument("--output-dir", type=Path)
+    parser.add_argument("--source-run-dir", type=Path, default=SOURCE_RUN_DIR)
+    parser.add_argument("--raw-text-dir", type=Path)
+    parser.add_argument("--gt-path", type=Path, default=GT_PATH)
     parser.add_argument("--model", default="gemini-3.1-flash-lite")
     parser.add_argument("--request-delay", type=float, default=1.2)
     parser.add_argument("--skip-gemini", action="store_true")
@@ -911,6 +1097,9 @@ def main() -> None:
         model=args.model,
         request_delay=args.request_delay,
         skip_gemini=args.skip_gemini,
+        source_run_dir=args.source_run_dir,
+        raw_text_dir=args.raw_text_dir,
+        gt_path=args.gt_path,
     )
     print(json.dumps({"step": args.step, "output_dir": str(output_dir)}, ensure_ascii=False))
 

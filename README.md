@@ -32,12 +32,18 @@ GOOGLE_API_KEY=""  # Masukkan kunci Google AI Studio API Anda
 
 ---
 
-### 2. Menjalankan via Docker Compose (Full Stack — Rekomendasi)
+### 2. Menjalankan via Docker Compose
 
-Docker Compose akan menjalankan backend FastAPI, PostgreSQL 17, Prometheus, Grafana, dan Loki secara terpadu.
+Perintah default hanya menyalakan backend FastAPI dan PostgreSQL 17:
 
 ```bash
 docker compose up --build
+```
+
+Untuk menyalakan Prometheus, Grafana, dan Loki, gunakan profile `monitoring`:
+
+```bash
+docker compose --profile monitoring up --build
 ```
 
 Setelah container aktif:
@@ -45,9 +51,9 @@ Setelah container aktif:
 |---------|-----|------------|
 | **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
-| **Prometheus** | `http://localhost:9090` | Metrik sistem dan performa pipeline |
-| **Grafana** | `http://localhost:3000` | Dashboard visualisasi (`admin:admin`) |
-| **Loki** | `http://localhost:3100` | Agregator log sistem |
+| **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
+| **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
+| **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
 
 > Variabel `GOOGLE_API_KEY` dari file `.env` Anda akan otomatis diteruskan ke container backend oleh Docker Compose.
 

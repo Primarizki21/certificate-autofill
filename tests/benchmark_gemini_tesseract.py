@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import os
 import sys
@@ -42,7 +43,7 @@ from tests.gemini_field_extractor import (
     extract_fields_from_ocr,
 )
 from tests.matchers import match_field
-
+from tests.v2_staging_common import ensure_fresh_directory
 DEFAULT_GT_PATH = os.environ.get(
     "GT_CSV_PATH", os.path.join(REPO_ROOT, "Ground_Truth_Sertifikat_v9.csv")
 )
@@ -154,29 +155,55 @@ def run_benchmark_for_model(
 ) -> dict[str, Any]:
     """Jalankan benchmark ekstraksi direct Gemini untuk satu model spesifik."""
     exchange_rate = get_exchange_rate()
+
+    texts_path = Path(texts_dir)
+    if not texts_path.is_dir():
+        raise FileNotFoundError(f"Direktori teks OCR tidak ditemukan: {texts_path}")
+    gt_path = Path(gt_csv_path)
+    if not gt_path.is_file():
+        raise FileNotFoundError(f"Ground truth tidak ditemukan: {gt_path}")
+    manifest = load_manifest()
+    gt_rows = load_csv(gt_csv_path)
+    if not gt_rows:
+        raise ValueError(f"Ground truth kosong: {gt_csv_path}")
+    stem_to_gt: dict[str, dict[str, str]] = {}
+    for r in gt_rows:
+        fname = (r.get("nama_file") or "").strip()
+        stem = os.path.splitext(fname)[0]
+        if stem:
+            if stem in stem_to_gt:
+                raise ValueError(f"Ground truth memiliki stem duplikat: {stem}")
+            stem_to_gt[stem] = r
+    txt_files = sorted(texts_path.glob("*.txt"))
+    if not txt_files:
+        raise FileNotFoundError(f"Tidak ada teks OCR .txt di {texts_path}")
+    if limit is None and "v9" in gt_path.name.lower():
+        if len(gt_rows) != 74 or len(txt_files) != 74:
+            raise ValueError(
+                "Benchmark GT v9 penuh membutuhkan 74 GT dan 74 teks OCR; "
+                f"ditemukan {len(gt_rows)} GT dan {len(txt_files)} teks."
+            )
+    missing_gt = sorted(path.stem for path in txt_files if path.stem not in stem_to_gt)
+    if missing_gt:
+        raise ValueError(
+            f"Teks OCR tanpa pasangan GT ({len(missing_gt)}): {missing_gt[:5]}"
+        )
+    if limit and limit > 0:
+        txt_files = txt_files[:limit]
+    for txt_path in txt_files:
+        if not txt_path.read_text(encoding="utf-8", errors="replace").strip():
+            raise ValueError(f"Teks OCR kosong: {txt_path}")
     client = GeminiClient(
         default_model=model,
         request_delay=request_delay,
         exchange_rate=exchange_rate,
     )
-
-    manifest = load_manifest()
-    gt_rows = load_csv(gt_csv_path)
-    stem_to_gt: dict[str, dict[str, str]] = {}
-    for r in gt_rows:
-        fname = (r.get("nama_file") or "").strip()
-        stem = os.path.splitext(fname)[0]
-        stem_to_gt[stem] = r
-
-    txt_files = sorted(Path(texts_dir).glob("*.txt"))
-    if limit and limit > 0:
-        txt_files = txt_files[:limit]
-
     timestamp_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     sanitized_model_name = model.replace("-", "_").replace(".", "_")
     run_name = f"{sanitized_model_name}_{timestamp_str}"
-    run_dir = os.path.join(out_root, run_name)
-    os.makedirs(run_dir, exist_ok=True)
+    run_dir_path = Path(out_root) / run_name
+    ensure_fresh_directory(run_dir_path)
+    run_dir = str(run_dir_path)
 
     print(f"\n=======================================================")
     print(f"BENCHMARK TESSERACT -> GOOGLE GEMINI: {model}")
@@ -266,12 +293,24 @@ def run_benchmark_for_model(
     agg_framework_all = aggregate_metrics(cert_results, EVAL_FIELDS)
     agg_framework_scan = aggregate_metrics(scan_certs, EVAL_FIELDS) if scan_certs else {}
     agg_framework_emb = aggregate_metrics(emb_certs, EVAL_FIELDS) if emb_certs else {}
-
     run_meta = {
         "run_name": run_name,
         "model": model,
         "timestamp": timestamp_str,
+        "campaign_id": "EXP-GEMINI-TESSERACT-CAMPAIGN-001",
+        "experiment_id": run_name,
+        "status": "STAGING_ONLY",
+        "production_promotion": False,
         "dataset_size": len(cert_results),
+        "input_artifacts": {
+            "gt_csv": os.path.relpath(gt_path, REPO_ROOT),
+            "gt_sha256": hashlib.sha256(gt_path.read_bytes()).hexdigest(),
+            "raw_text_dir": os.path.relpath(texts_path, REPO_ROOT),
+            "raw_text_sha256": {
+                path.stem: hashlib.sha256(path.read_bytes()).hexdigest()
+                for path in txt_files
+            },
+        },
         "exchange_rate_idr_per_usd": exchange_rate,
         "pricing": PRICING_TABLE.get(model).__dict__ if PRICING_TABLE.get(model) else {},
         "totals": {
@@ -290,6 +329,29 @@ def run_benchmark_for_model(
             "cost_idr": avg_idr,
             "latency_s": avg_lat,
         },
+        "calls_count": len(cert_results),
+        "web_search_queries": [
+            query
+            for result in cert_results
+            for query in result["call_result"].get("web_search_queries", [])
+        ],
+        "calls_details": [
+            {
+                "stem": result["stem"],
+                "status": result["call_result"].get("status"),
+                "prompt_tokens": result["call_result"].get("prompt_tokens", 0),
+                "candidates_tokens": result["call_result"].get("candidates_tokens", 0),
+                "cached_tokens": result["call_result"].get("cached_tokens", 0),
+                "thoughts_tokens": result["call_result"].get("thoughts_tokens", 0),
+                "total_tokens": result["call_result"].get("total_tokens", 0),
+                "cost_usd": result["call_result"].get("cost_usd", 0.0),
+                "cost_idr": result["call_result"].get("cost_idr", 0.0),
+                "latency_s": result["call_result"].get("latency_s", 0.0),
+                "web_search_queries": result["call_result"].get("web_search_queries", []),
+                "error": result["call_result"].get("error_message"),
+            }
+            for result in cert_results
+        ],
         "aggregates": {
             "all_cells_6field": {
                 "all": agg_all,

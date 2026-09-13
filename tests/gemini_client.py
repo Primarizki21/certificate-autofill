@@ -70,6 +70,7 @@ class GeminiCallResult:
             "model": self.model,
             "status": self.status,
             "error_message": self.error_message,
+            "web_search_queries": list(self.web_search_queries),
         }
 
 

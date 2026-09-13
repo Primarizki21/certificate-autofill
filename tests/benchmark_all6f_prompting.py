@@ -52,7 +52,7 @@ from tests.gemini_client import (
 )
 from tests.matchers import match_field
 from tests.ocr_engine import ocr_rapid, ocr_tess
-
+from tests.v2_staging_common import ensure_fresh_directory
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
@@ -437,68 +437,78 @@ def get_or_extract_raw_text(
 def run_mock_inference(
     variant: str,
     raw_text: str,
-    gt_row: dict[str, str],
 ) -> tuple[dict[str, str | None], dict[str, Any]]:
-    """Mock inference deterministik untuk dry-run validasi pipeline & testing."""
-    kegiatan = gt_row.get("Nama Kegiatan Sertifikasi") or "Kegiatan Mahasiswa"
-    nomor = gt_row.get("Nomor Bukti Fisik Nomor Sertifikasi") or "123/UN3/2024"
-    penyelenggara = gt_row.get("Penyelenggara Kegiatan") or "Universitas Airlangga"
-    tgl_mulai = standardize_date(gt_row.get("Waktu Mulai Pelaksanaan")) or "01/01/2024"
-    tgl_selesai = standardize_date(gt_row.get("Waktu Selesai Pelaksanaan")) or tgl_mulai
-    gt_tingkat = gt_row.get("Tingkat") or "Fakultas"
-
-    # Simulasi bias tingkat per varian
-    if variant == "v1_baseline":
-        # Varian 1 baseline punya bias: lomba fakultas sering dipetakan ke Fakultas
-        if "BEM" in penyelenggara and gt_tingkat == "Nasional":
-            pred_tingkat = "Fakultas"  # simulasi bias baseline
-        else:
-            pred_tingkat = gt_tingkat
-    elif variant == "v2_scope_aware":
-        pred_tingkat = gt_tingkat
-    elif variant == "v3_decoupled":
-        # Coba router dulu
-        router_res, rule_name = route_tingkat_trace(raw_text, penyelenggara)
-        if router_res:
-            pred_tingkat = router_res
-        else:
-            pred_tingkat = gt_tingkat
-    elif variant == "v4_scope_signal":
-        # Mock smoke test: deterministik heuristic tanpa menyalin GT
-        text_lower = raw_text.lower()
-        if "internasional" in text_lower or "international" in text_lower:
-            pred_tingkat = "Internasional"
-        elif any(k in text_lower for k in ["nasional", "se-indonesia", "indonesia", "kompetisi"]):
-            pred_tingkat = "Nasional"
-        elif "fakultas" in penyelenggara.lower() or "bem" in penyelenggara.lower():
-            pred_tingkat = "Fakultas"
-        else:
-            pred_tingkat = "Lainnya"
-    elif variant == "v5_natural_rationale":
-        # Mock smoke test: deterministik heuristic dengan natural rationale
-        text_lower = raw_text.lower()
-        if "internasional" in text_lower or "international" in text_lower:
-            pred_tingkat = "Internasional"
-        elif any(k in text_lower for k in ["nasional", "se-indonesia", "indonesia", "kompetisi"]):
-            pred_tingkat = "Nasional"
-        elif "fakultas" in penyelenggara.lower() or "bem" in penyelenggara.lower():
-            pred_tingkat = "Fakultas"
-        else:
-            pred_tingkat = "Lainnya"
-
+    """Mock inference yang hanya memakai raw text, bukan ground truth."""
+    text = raw_text or ""
+    activity_match = re.search(
+        r"(.+?)(?:\s+(?:diselenggarakan|diadakan|dilaksanakan)\b)",
+        text,
+        re.IGNORECASE,
+    )
+    kegiatan = (
+        activity_match.group(1).strip(" .:-")
+        if activity_match
+        else next(
+            (line.strip() for line in text.splitlines() if line.strip()),
+            "Mock activity from raw OCR",
+        )
+    )
+    number_match = next(
+        (
+            match.group(0)
+            for match in re.finditer(
+                r"\b[0-9A-Z]+(?:[/._-][0-9A-Z]+)+\b", text, re.IGNORECASE
+            )
+            if not re.fullmatch(r"\d{1,2}[/-]\d{1,2}[/-]\d{4}", match.group(0))
+        ),
+        "MOCK/NUMBER",
+    )
+    organizer_match = re.search(
+        r"(?:diselenggarakan|diadakan|dilaksanakan)\s+(?:oleh\s+)?(.+?)(?:[.;\n]|$)",
+        text,
+        re.IGNORECASE,
+    )
+    penyelenggara = (
+        organizer_match.group(1).strip(" .:-;,")
+        if organizer_match
+        else "Mock organizer from raw OCR"
+    )
+    dates = re.findall(r"\b\d{1,2}[/-]\d{1,2}[/-]\d{4}\b", text)
+    tgl_mulai = standardize_date(dates[0]) if dates else "01/01/2000"
+    tgl_selesai = standardize_date(dates[1]) if len(dates) > 1 else tgl_mulai
+    text_lower = text.lower()
+    if "internasional" in text_lower or "international" in text_lower:
+        raw_level = "Internasional"
+    elif any(
+        keyword in text_lower
+        for keyword in ("nasional", "se-indonesia", "indonesia", "kompetisi")
+    ):
+        raw_level = "Nasional"
+    elif "universitas" in text_lower or "university" in text_lower:
+        raw_level = "Universitas"
+    elif "fakultas" in text_lower or "faculty" in text_lower or "bem" in text_lower:
+        raw_level = "Fakultas"
+    elif "departemen" in text_lower or "program studi" in text_lower:
+        raw_level = "Departemen/Program Studi"
     else:
-        pred_tingkat = gt_tingkat
+        raw_level = "Lainnya"
+
+    if variant == "v1_baseline" and "bem" in text_lower and raw_level == "Nasional":
+        pred_tingkat = "Fakultas"
+    elif variant == "v3_decoupled":
+        pred_tingkat = route_tingkat_trace(text, penyelenggara)[0] or raw_level
+    else:
+        pred_tingkat = raw_level
 
     fields = {
         "nama_kegiatan_sertifikasi": kegiatan,
-        "nomor_bukti_fisik_nomor_sertifikasi": nomor,
+        "nomor_bukti_fisik_nomor_sertifikasi": number_match,
         "penyelenggara_kegiatan": penyelenggara,
         "waktu_mulai_pelaksanaan": tgl_mulai,
         "waktu_selesai_pelaksanaan": tgl_selesai,
         "tingkat": pred_tingkat,
         "raw_role": "Peserta",
     }
-
     meta = {
         "status": "success",
         "prompt_tokens": 350,
@@ -509,9 +519,44 @@ def run_mock_inference(
         "cost_usd": 0.0002,
         "cost_idr": 3.55,
         "latency_s": 0.01,
+        "web_search_queries": [],
+        "calls_details": [
+            {
+                "stage": "single_pass",
+                "variant": variant,
+                "status": "success",
+                "prompt_tokens": 350,
+                "candidates_tokens": 80,
+                "cached_tokens": 0,
+                "thoughts_tokens": 0,
+                "total_tokens": 430,
+                "cost_usd": 0.0002,
+                "cost_idr": 3.55,
+                "latency_s": 0.01,
+                "web_search_queries": [],
+                "error": None,
+            }
+        ],
         "calls_count": 1,
     }
     return fields, meta
+
+
+def _call_detail(result: Any, stage: str) -> dict[str, Any]:
+    return {
+        "stage": stage,
+        "status": result.status,
+        "prompt_tokens": result.prompt_tokens,
+        "candidates_tokens": result.candidates_tokens,
+        "cached_tokens": result.cached_tokens,
+        "thoughts_tokens": result.thoughts_tokens,
+        "total_tokens": result.total_tokens,
+        "cost_usd": result.cost_usd,
+        "cost_idr": result.cost_idr,
+        "latency_s": result.latency_s,
+        "web_search_queries": list(result.web_search_queries),
+        "error": result.error_message,
+    }
 
 
 def run_gemini_inference(
@@ -534,7 +579,8 @@ def run_gemini_inference(
             "cost_idr": 0.0,
             "latency_s": 0.0,
             "calls_count": 0,
-            "error": "Teks mentah kosong",
+            "web_search_queries": [],
+            "calls_details": [],
         }
 
     t0 = time.perf_counter()
@@ -561,7 +607,8 @@ def run_gemini_inference(
             "cost_idr": res.cost_idr,
             "latency_s": latency,
             "calls_count": 1,
-            "web_queries": res.web_search_queries,
+            "web_search_queries": res.web_search_queries,
+            "calls_details": [_call_detail(res, "single_pass")],
             "error": res.error_message,
         }
         return norm_fields, meta
@@ -588,7 +635,8 @@ def run_gemini_inference(
             "cost_idr": res.cost_idr,
             "latency_s": latency,
             "calls_count": 1,
-            "web_queries": res.web_search_queries,
+            "web_search_queries": res.web_search_queries,
+            "calls_details": [_call_detail(res, "single_pass")],
             "error": res.error_message,
         }
         return norm_fields, meta
@@ -632,7 +680,8 @@ def run_gemini_inference(
             "cost_idr": res.cost_idr,
             "latency_s": latency,
             "calls_count": 1,
-            "web_queries": res.web_search_queries,
+            "web_search_queries": res.web_search_queries,
+            "calls_details": [_call_detail(res, "single_pass")],
             "error": res.error_message,
             "pola_cakupan": pola_cakupan_audit,
             "pola_is_valid": pola_is_valid,
@@ -678,7 +727,8 @@ def run_gemini_inference(
             "cost_idr": res.cost_idr,
             "latency_s": latency,
             "calls_count": 1,
-            "web_queries": res.web_search_queries,
+            "web_search_queries": res.web_search_queries,
+            "calls_details": [_call_detail(res, "single_pass")],
             "error": res.error_message,
             "pertimbangan_tingkat": rationale_audit,
             "has_rationale": has_rationale,
@@ -716,6 +766,7 @@ def run_gemini_inference(
         # Step 2a: Router Deterministik (18 rules)
         router_decision, rule_name = route_tingkat_trace(raw_text, organizer_val)
 
+        res2 = None
         if router_decision:
             norm_fields["tingkat"] = router_decision
             norm_fields["tingkat_source"] = f"router:{rule_name}"
@@ -770,10 +821,16 @@ def run_gemini_inference(
 
             norm_fields["tingkat"] = tingkat_from_llm or "Lainnya"
             norm_fields["tingkat_source"] = "llm_specialized_tingkat"
-
         latency = time.perf_counter() - t0
+        res2_status = getattr(res2, "status", "success")
+        res2_error = getattr(res2, "error_message", None)
+        combined_status = (
+            "success"
+            if res1.status == "success" and res2_status == "success"
+            else (res1.status if res1.status != "success" else res2_status)
+        )
         meta = {
-            "status": "success" if res1.status == "success" else res1.status,
+            "status": combined_status,
             "prompt_tokens": p_tokens,
             "candidates_tokens": c_tokens,
             "cached_tokens": ca_tokens,
@@ -783,8 +840,16 @@ def run_gemini_inference(
             "cost_idr": cost_idr,
             "latency_s": latency,
             "calls_count": calls_count,
-            "web_queries": web_queries,
-            "error": res1.error_message,
+            "web_search_queries": web_queries,
+            "calls_details": [
+                _call_detail(res1, "stage1_literal"),
+                *(
+                    [_call_detail(res2, "stage2_tingkat")]
+                    if res2 is not None
+                    else []
+                ),
+            ],
+            "error": res1.error_message or res2_error,
         }
         return norm_fields, meta
 
@@ -863,7 +928,7 @@ def evaluate_predictions(
         1 for r in doc_results if r["eval"]["tingkat"]["gt"] == "Fakultas"
     )
 
-    # Token and Cost rollups
+    # Token, biaya, latensi, status, dan kueri web dari setiap call.
     tot_prompt_tok = sum(r["meta"].get("prompt_tokens", 0) for r in doc_results)
     tot_cand_tok = sum(r["meta"].get("candidates_tokens", 0) for r in doc_results)
     tot_cached_tok = sum(r["meta"].get("cached_tokens", 0) for r in doc_results)
@@ -872,6 +937,21 @@ def evaluate_predictions(
     tot_cost_usd = sum(r["meta"].get("cost_usd", 0.0) for r in doc_results)
     tot_cost_idr = sum(r["meta"].get("cost_idr", 0.0) for r in doc_results)
     tot_calls = sum(r["meta"].get("calls_count", 1) for r in doc_results)
+    tot_latency_s = sum(r["meta"].get("latency_s", 0.0) for r in doc_results)
+    web_search_queries = [
+        query
+        for row in doc_results
+        for query in row["meta"].get("web_search_queries", [])
+    ]
+    calls_details = [
+        {"nama_file": row.get("nama_file"), **detail}
+        for row in doc_results
+        for detail in row["meta"].get("calls_details", [])
+    ]
+    status_counts: dict[str, int] = {}
+    for detail in calls_details:
+        status = detail.get("status", "unknown")
+        status_counts[status] = status_counts.get(status, 0) + 1
 
     eff_tok_per_doc = round(tot_tokens / n_docs, 1) if n_docs else 0.0
     cost_per_doc_usd = tot_cost_usd / n_docs if n_docs else 0.0
@@ -926,6 +1006,11 @@ def evaluate_predictions(
             "thoughts_tokens": tot_thought_tok,
             "total_tokens": tot_tokens,
             "eff_tokens_per_doc": eff_tok_per_doc,
+            "total_latency_s": round(tot_latency_s, 4),
+            "avg_latency_s": round(tot_latency_s / tot_calls, 4) if tot_calls else 0.0,
+            "web_search_queries": web_search_queries,
+            "status_counts": status_counts,
+            "calls_details": calls_details,
             "total_cost_usd": round(tot_cost_usd, 4),
             "total_cost_idr": round(tot_cost_idr, 2),
             "cost_per_doc_usd": round(cost_per_doc_usd, 6),
@@ -1080,7 +1165,7 @@ def write_results_excel(
                 meta.get("thoughts_tokens", 0),
                 meta.get("total_tokens", 0),
                 meta.get("cost_idr", 0.0),
-                ";".join(meta.get("web_queries", [])),
+                ";".join(meta.get("web_search_queries", [])),
             ])
             c_status = ws_det.cell(row=det_row_idx, column=7)
             if status_match == "EXACT":
@@ -1159,7 +1244,7 @@ def write_evaluation_csv(out_path: Path, all_eval_rows: list[dict[str, Any]]) ->
                     meta.get("cost_usd", 0.0),
                     meta.get("cost_idr", 0.0),
                     meta.get("latency_s", 0.0),
-                    ";".join(meta.get("web_queries", [])),
+                    ";".join(meta.get("web_search_queries", [])),
                 ])
     logger.info(f"CSV report saved: {out_path}")
 
@@ -1175,17 +1260,28 @@ def compute_run_identity(
     enable_grounding: bool = False,
     pacing_delay: float = 1.2,
     timeout_s: float = 35.0,
+    offset: int = 0,
+    limit: int | None = None,
 ) -> str:
     """Menghitung identitas hash unik untuk run agar checkpoint tidak terkontaminasi."""
-    m_bytes = Path(manifest_path).read_bytes() if Path(manifest_path).exists() else b""
-    g_bytes = Path(gt_path).read_bytes() if Path(gt_path).exists() else b""
-    m_hash = hashlib.sha256(m_bytes).hexdigest()[:8]
-    g_hash = hashlib.sha256(g_bytes).hexdigest()[:8]
+    manifest_path_obj = Path(manifest_path)
+    gt_path_obj = Path(gt_path)
+    if not manifest_path_obj.exists() or not gt_path_obj.exists():
+        missing = [
+            str(path)
+            for path in (manifest_path_obj, gt_path_obj)
+            if not path.exists()
+        ]
+        raise FileNotFoundError(f"Input benchmark tidak ditemukan: {missing}")
+    m_hash = hashlib.sha256(manifest_path_obj.read_bytes()).hexdigest()[:8]
+    g_hash = hashlib.sha256(gt_path_obj.read_bytes()).hexdigest()[:8]
     docs_str = ",".join(sorted(target_doc_names))
     d_hash = hashlib.sha256(docs_str.encode("utf-8")).hexdigest()[:8]
     vars_str = "-".join(sorted(variants))
     clean_model = model.replace("/", "_").replace(":", "_")
-    return f"{backend}_{clean_model}_{m_hash}_{g_hash}_{d_hash}_{vars_str}_scope{checkpoint_scope}_grnd{int(enable_grounding)}_pace{pacing_delay}_tout{int(timeout_s)}"
+    source_hash = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()[:8]
+    slice_key = f"off{offset}_lim{limit if limit is not None else 'all'}"
+    return f"{backend}_{clean_model}_{m_hash}_{g_hash}_{d_hash}_{vars_str}_scope{checkpoint_scope}_{slice_key}_grnd{int(enable_grounding)}_pace{pacing_delay}_tout{int(timeout_s)}_src{source_hash}"
 
 def write_comparative_summary_md(
     out_path: Path,
@@ -1374,9 +1470,6 @@ def write_prompt_registry(out_path: Path, active_variants: list[str]) -> None:
 
 
 # ==============================================================================
-# MAIN BENCHMARK RUNNER CONTROLLER
-# ==============================================================================
-
 def run_benchmark(
     manifest_path: str,
     gt_path: str,
@@ -1386,20 +1479,23 @@ def run_benchmark(
     limit: int | None = None,
     offset: int = 0,
     output_dir: str = "docs/experiments/EXP-ALL6F-PROMPT-001",
-    cache_dir: str = "docs/experiments/EXP-ALL6F-PROMPT-001/raw_texts",
+    cache_dir: str | None = None,
     checkpoint_scope: str = "full",
     enable_grounding: bool = False,
     pacing_delay: float = 1.2,
     timeout_s: float = 35.0,
     force: bool = False,
+    resume: bool = False,
 ) -> dict[str, Any]:
     """Menjalankan alur benchmark All-6-Fields komprehensif dengan namespaced checkpointing."""
     logger.info("=== Starting All-6-Fields & Prompting Architecture Benchmark ===")
     logger.info(f"Backend: {backend} | Model: {gemini_model} | Limit: {limit} | Offset: {offset}")
     logger.info(f"Output Dir: {output_dir}")
-
     out_dir_path = Path(output_dir)
-    out_dir_path.mkdir(parents=True, exist_ok=True)
+    if force or resume:
+        out_dir_path.mkdir(parents=True, exist_ok=True)
+    else:
+        ensure_fresh_directory(out_dir_path)
 
     # 1. Load Manifest & Ground Truth
     with open(manifest_path, "r", encoding="utf-8") as f:
@@ -1408,17 +1504,24 @@ def run_benchmark(
     with open(gt_path, "r", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         gt_rows: dict[str, dict[str, str]] = {
-            row["Nama File"].strip(): row for row in reader
+            row["Nama File"].strip(): row
+            for row in reader
+            if row.get("Nama File")
         }
+    if not gt_rows:
+        raise ValueError(f"Ground truth kosong: {gt_path}")
 
-    # Filter documents matching GT
-    docs: list[dict[str, Any]] = []
-    for item in manifest:
-        fname = item["nama_file"].strip()
-        if fname in gt_rows:
-            docs.append(item)
-        else:
-            logger.warning(f"File {fname} in manifest but not found in GT CSV. Skipping.")
+    manifest_names = {item["nama_file"].strip() for item in manifest}
+    missing_from_manifest = sorted(set(gt_rows) - manifest_names)
+    if missing_from_manifest:
+        raise ValueError(
+            "Manifest/GT tidak lengkap; dokumen GT tanpa manifest: "
+            f"{missing_from_manifest}"
+        )
+
+    docs: list[dict[str, Any]] = [
+        item for item in manifest if item["nama_file"].strip() in gt_rows
+    ]
 
     if offset > 0:
         docs = docs[offset:]
@@ -1428,7 +1531,7 @@ def run_benchmark(
     logger.info(f"Target documents for evaluation: {len(docs)}")
 
     # 2. Setup Cache, Identity & Checkpoint
-    cache_path = Path(cache_dir)
+    cache_path = Path(cache_dir) if cache_dir else out_dir_path / "raw_texts"
     cache_path.mkdir(parents=True, exist_ok=True)
 
     active_variants = variants_to_run or [
@@ -1447,6 +1550,8 @@ def run_benchmark(
         enable_grounding=enable_grounding,
         pacing_delay=pacing_delay,
         timeout_s=timeout_s,
+        offset=offset,
+        limit=limit,
     )
     checkpoint_file = out_dir_path / f"checkpoint_{run_id}.jsonl"
 
@@ -1460,15 +1565,39 @@ def run_benchmark(
         out_dir_path / "PROMPT_REGISTRY.md",
     ]
     existing_deliverables = [f.name for f in deliverable_files if f.exists()]
-    if existing_deliverables and not force:
+    if existing_deliverables and not force and not resume:
         raise FileExistsError(
             f"Folder output '{output_dir}' sudah berisi deliverable eksperimen ({', '.join(existing_deliverables)}). "
-            "Sesuai aturan B14 AGENTS.md, dilarang keras menimpa eksperimen lama tanpa persetujuan eksplisit. "
-            "Gunakan folder output terisolasi baru (mis. EXP-ALL6F-PROMPT-004) atau sertakan flag --force jika diizinkan."
+            "Gunakan folder output terisolasi baru atau --resume untuk checkpoint identity yang sama."
         )
+    identity_path = out_dir_path / "run_identity.json"
+    if identity_path.exists():
+        existing_identity = json.loads(identity_path.read_text(encoding="utf-8"))
+        if existing_identity.get("run_identity") != run_id:
+            raise ValueError(
+                "Output directory berisi run identity berbeda; gunakan folder baru."
+            )
+    elif resume:
+        raise ValueError("Resume ditolak: run_identity.json tidak ditemukan.")
+    identity_path.write_text(
+        json.dumps(
+            {
+                "campaign_id": "EXP-ALL6F-PROMPT-CAMPAIGN-001",
+                "run_identity": run_id,
+                "status": "STAGING_ONLY",
+                "manifest_path": manifest_path,
+                "gt_path": gt_path,
+                "variants": active_variants,
+            },
+            indent=2,
+            ensure_ascii=False,
+        )
+        + "\n",
+        encoding="utf-8",
+    )
     # Load verified checkpoint records
     checkpoint_records: dict[tuple[str, str], dict[str, Any]] = {}
-    if checkpoint_file.exists():
+    if resume and checkpoint_file.exists():
         with open(checkpoint_file, "r", encoding="utf-8") as cf:
             for line in cf:
                 line = line.strip()
@@ -1481,10 +1610,13 @@ def run_benchmark(
                         if k[0] and k[1] and rec.get("eval"):
                             checkpoint_records[k] = rec
                 except Exception:
-                    pass
+                    continue
         logger.info(
-            f"Loaded {len(checkpoint_records)} verified checkpoint records from {checkpoint_file.name}"
+            f"Loaded {len(checkpoint_records)} verified checkpoint records "
+            f"from {checkpoint_file.name}"
         )
+    elif checkpoint_file.exists():
+        checkpoint_file.write_text("", encoding="utf-8")
 
     client = None
     if backend == "gemini":
@@ -1514,6 +1646,8 @@ def run_benchmark(
 
         # Step 3a: Obtain Raw Text (cached)
         raw_text, ext_method = get_or_extract_raw_text(doc_info, cache_path)
+        if not raw_text.strip():
+            raise ValueError(f"Raw OCR kosong untuk {fname}; benchmark dihentikan.")
 
         for variant in active_variants:
             ckpt_key = (variant, fname)
@@ -1527,7 +1661,7 @@ def run_benchmark(
                 continue
 
             if backend == "mock":
-                pred_fields, meta = run_mock_inference(variant, raw_text, gt_row)
+                pred_fields, meta = run_mock_inference(variant, raw_text)
             else:
                 assert client is not None
                 pred_fields, meta = run_gemini_inference(
@@ -1623,8 +1757,10 @@ def run_benchmark(
     is_complete = (completed_evals == expected_evals) and (expected_evals > 0)
 
     overall_summary = {
+        "campaign_id": "EXP-ALL6F-PROMPT-CAMPAIGN-001",
         "timestamp": datetime.now().isoformat(),
         "run_identity": run_id,
+        "status": "STAGING_ONLY",
         "backend": backend,
         "model": gemini_model,
         "gt_path": str(gt_path),
@@ -1715,6 +1851,11 @@ def main() -> None:
         help="Izinkan penimpaan deliverable eksperimen pada output-dir yang sudah ada (B14 AGENTS.md)",
     )
     parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="Lanjutkan checkpoint jika run identity sama",
+    )
+    parser.add_argument(
         "--timeout-s",
         type=float,
         default=35.0,
@@ -1733,10 +1874,8 @@ def main() -> None:
     )
     parser.add_argument(
         "--cache-dir",
-        default=os.path.join(
-            REPO_ROOT, "docs", "experiments", "EXP-ALL6F-PROMPT-001", "raw_texts"
-        ),
-        help="Direktori cache teks mentah OCR",
+        default=None,
+        help="Direktori cache teks mentah OCR (default: di dalam output-dir)",
     )
     parser.add_argument(
         "--enable-grounding",
@@ -1763,6 +1902,7 @@ def main() -> None:
         offset=args.offset,
         output_dir=args.output_dir,
         cache_dir=args.cache_dir,
+        resume=args.resume,
         checkpoint_scope=scope,
         enable_grounding=args.enable_grounding,
         pacing_delay=args.pacing_delay,

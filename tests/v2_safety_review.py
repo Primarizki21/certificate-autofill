@@ -5,6 +5,7 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from tests.date_normalizer import normalize_date
 from tests.v2_organizer_boundary import apply_organizer_boundary
 from tests.v2_title_boundary import apply_title_boundary
 
@@ -17,10 +18,13 @@ VALID_TINGKAT = {
     "Lainnya",
 }
 _DATE_ANCHOR_RE = re.compile(
-    r"(?:\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\b\d{1,2}\s+"
-    r"(?:januari|februari|maret|april|mei|juni|juli|agustus|september|"
+    r"(?:\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|"
+    r"\b\d{1,2}\s+(?:januari|februari|maret|april|mei|juni|juli|agustus|"
+    r"september|oktober|november|desember|january|february|march|may|"
+    r"june|july|august|october|november|december)\s+\d{4}\b|"
+    r"\b(?:januari|februari|maret|april|mei|juni|juli|agustus|september|"
     r"oktober|november|desember|january|february|march|may|june|july|"
-    r"august|september|october|november|december)\s+\d{4}\b)",
+    r"august|october|november|december)\s+\d{1,2},?\s+\d{4}\b)",
     re.IGNORECASE,
 )
 _PRIMARY_ORGANIZER_RE = re.compile(
@@ -49,27 +53,12 @@ def _compact(value: str) -> str:
 
 
 def _date_seen(raw_text: str, value: str) -> bool:
-    if not value or not _DATE_ANCHOR_RE.search(raw_text or ""):
+    expected = normalize_date(value)
+    if not expected:
         return False
-    digits = re.sub(r"\D", "", value)
-    if len(digits) != 8:
-        return False
-    day, month, year = digits[:2], digits[2:4], digits[4:]
-    month_names = (
-        "januari|februari|maret|april|mei|juni|juli|agustus|september|"
-        "oktober|november|desember|january|february|march|may|june|july|"
-        "august|october|december"
-    )
-    if year not in (raw_text or ""):
-        return False
-    if re.search(rf"\b{int(day)}[/-]{int(month)}[/-]{year}\b", raw_text or ""):
-        return True
-    return bool(
-        re.search(
-            rf"\b{int(day)}\s+(?:{month_names})\s+{year}\b",
-            raw_text or "",
-            re.IGNORECASE,
-        )
+    return any(
+        normalize_date(match.group(0)) == expected
+        for match in _DATE_ANCHOR_RE.finditer(raw_text or "")
     )
 
 
@@ -79,9 +68,22 @@ def _number_seen(raw_text: str, value: str) -> bool:
 
 
 def _level_evidence(raw_text: str) -> set[str]:
+    """Find level terms only near explicit scope/level labels."""
+    text = raw_text or ""
     evidence: set[str] = set()
     for level, patterns in _LEVEL_PATTERNS.items():
-        if any(re.search(pattern, raw_text or "", re.IGNORECASE) for pattern in patterns):
+        term = "(?:" + "|".join(patterns) + ")"
+        before_label = (
+            rf"\b(?:tingkat|level|scope|skala|jenjang|cakupan)\b"
+            rf"\s*(?:kegiatan|acara|event|competition)?\s*[:\-]?\s*{term}"
+        )
+        after_label = (
+            rf"{term}\s+"
+            r"\b(?:level|scope|scale|tier)\b"
+        )
+        if re.search(before_label, text, re.IGNORECASE) or re.search(
+            after_label, text, re.IGNORECASE
+        ):
             evidence.add(level)
     return evidence
 
@@ -137,8 +139,12 @@ def build_review_annotations(
         add("tingkat", "unmapped_level_enum")
     else:
         evidence = _level_evidence(raw_text)
-        if len(evidence) != 1 or level not in evidence:
+        if not evidence:
+            add("tingkat", "level_evidence_unverified")
+        elif len(evidence) > 1:
             add("tingkat", "ambiguous_level_evidence")
+        elif level not in evidence:
+            add("tingkat", "level_conflicts_with_raw_ocr")
 
     return annotations
 

@@ -80,18 +80,10 @@ def test_compute_field_confidence_and_review():
 
 def test_run_mock_inference_all_four_variants():
     """Memastikan mock inference menghasilkan 6 field + role untuk seluruh 4 varian."""
-    gt_dummy = {
-        "Nama Kegiatan Sertifikasi": "Lomba AI Nasional",
-        "Nomor Bukti Fisik Nomor Sertifikasi": "012/UN3/2024",
-        "Penyelenggara Kegiatan": "BEM FTMM Universitas Airlangga",
-        "Waktu Mulai Pelaksanaan": "15/09/2024",
-        "Waktu Selesai Pelaksanaan": "16/09/2024",
-        "Tingkat": "Nasional",
-    }
     raw_text = "Sertifikat Lomba AI Nasional diselenggarakan BEM FTMM UNAIR"
 
     for var in ACTIVE_VARIANTS:
-        fields, meta = run_mock_inference(var, raw_text, gt_dummy)
+        fields, meta = run_mock_inference(var, raw_text)
         for f in ALL_6_FIELDS:
             assert f in fields
             assert fields[f] is not None

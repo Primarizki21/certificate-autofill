@@ -41,7 +41,9 @@ def ensure_fresh_directory(path: Path) -> None:
     if path.exists():
         existing = list(path.iterdir())
         if existing:
-            raise FileExistsError(f"B14 Immutability Guard: {path} is not empty")
+            raise FileExistsError(
+                f"B14 AGENTS.md Immutability Guard: {path} is not empty"
+            )
     path.mkdir(parents=True, exist_ok=True)
 
 
@@ -60,18 +62,50 @@ def load_ground_truth(path: Path = GT_PATH) -> dict[str, dict[str, str]]:
 def load_cached_corpus(
     run_dir: Path = SOURCE_RUN_DIR,
     raw_dir: Path = RAW_TEXT_DIR,
+    gt_path: Path = GT_PATH,
 ) -> dict[str, dict[str, Any]]:
-    payload = json.loads((run_dir / "results.json").read_text(encoding="utf-8"))
-    ground_truth = load_ground_truth()
+    """Muat cache V1/V2 dengan manifest input yang lengkap dan konsisten."""
+    results_path = run_dir / "results.json"
+    if not results_path.exists():
+        raise FileNotFoundError(
+            f"Cached results.json tidak ditemukan di {results_path}. "
+            "Sediakan --source-run-dir dari run V2 yang valid."
+        )
+    if not gt_path.exists():
+        raise FileNotFoundError(
+            f"Ground truth tidak ditemukan di {gt_path}. "
+            "Sediakan --gt-path yang menunjuk ke Ground_Truth_Sertifikat_v9.csv."
+        )
+    if not raw_dir.exists():
+        raise FileNotFoundError(
+            f"Raw OCR directory tidak ditemukan di {raw_dir}. "
+            "Sediakan --raw-text-dir dari artefak OCR yang sesuai."
+        )
+    payload = json.loads(results_path.read_text(encoding="utf-8"))
+    ground_truth = load_ground_truth(gt_path)
     raw_texts = {
         path.stem: path.read_text(encoding="utf-8", errors="replace")
         for path in raw_dir.glob("*.txt")
     }
+    empty_raw = sorted(stem for stem, text in raw_texts.items() if not text.strip())
+    if empty_raw:
+        raise ValueError(
+            f"Raw OCR kosong untuk {len(empty_raw)} dokumen; "
+            "benchmark dihentikan agar model tidak dievaluasi pada input kosong."
+        )
     variants = payload["variants"]
     v1_by_stem = {row["stem"]: row for row in variants["v1_production"]}
     v2_by_stem = {row["stem"]: row for row in variants["v2_scope_aware"]}
-    if set(v2_by_stem) != set(ground_truth) or set(v2_by_stem) != set(raw_texts):
-        raise ValueError("Cached V1/V2, GT, and raw OCR manifests do not match")
+    expected_stems = set(ground_truth)
+    if (
+        set(v1_by_stem) != set(v2_by_stem)
+        or set(v2_by_stem) != expected_stems
+        or set(v2_by_stem) != set(raw_texts)
+    ):
+        raise ValueError(
+            "Cached V1/V2, GT, dan raw OCR manifests tidak sama; "
+            "benchmark dihentikan agar metrik tidak incomplete."
+        )
 
     corpus: dict[str, dict[str, Any]] = {}
     for stem, v2_row in v2_by_stem.items():

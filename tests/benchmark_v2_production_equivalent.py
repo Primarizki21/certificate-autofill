@@ -309,8 +309,10 @@ def _safety_metrics(
             "recall_pct": round(doc_recall, 2),
             "precision_pct": round(doc_precision, 2),
         },
-        "review_recall_pct": round(doc_recall, 2),
-        "review_precision_pct": round(doc_precision, 2),
+        "cell_review_recall_pct": round(cell_recall, 2),
+        "cell_review_precision_pct": round(cell_precision, 2),
+        "doc_review_recall_pct": round(doc_recall, 2),
+        "doc_review_precision_pct": round(doc_precision, 2),
     }
 
 
@@ -343,8 +345,8 @@ def _gate_report(
         >= baseline["per_field"][field_name]["exact_pct"]
         for field_name in LITERAL_FIELDS
     }
-    safety_gate_legacy = candidate_safety_legacy["review_recall_pct"] >= 95.0
-    safety_gate_production = candidate_safety_production["review_recall_pct"] >= 95.0
+    safety_gate_legacy = candidate_safety_legacy["cell_review_recall_pct"] >= 95.0
+    safety_gate_production = candidate_safety_production["cell_review_recall_pct"] >= 95.0
     gates = {
         "tingkat_gain": {
             "baseline_exact_pct": baseline["per_field"]["tingkat"]["exact_pct"],
@@ -360,12 +362,12 @@ def _gate_report(
         },
         "safety_net_legacy_calibrated": {
             **candidate_safety_legacy,
-            "minimum_review_recall_pct": 95.0,
+            "minimum_cell_review_recall_pct": 95.0,
             "pass": safety_gate_legacy,
         },
         "safety_net_production_confidence": {
             **candidate_safety_production,
-            "minimum_review_recall_pct": 95.0,
+            "minimum_cell_review_recall_pct": 95.0,
             "pass": safety_gate_production,
         },
         "all_pass": bool(
@@ -527,12 +529,10 @@ def _write_summary_md(
             "## Gate Results",
             "",
             f"- Tingkat gain gate: **{'PASS' if gates['tingkat_gain']['pass'] else 'FAIL'}** "
-            f"({gates['tingkat_gain']['delta_pct']}pt; minimum {gates['tingkat_gain']['minimum_delta_pct']}pt)",
-            f"- Literal field preservation: **{'PASS' if gates['literal_field_preservation']['pass'] else 'FAIL'}**",
             f"- Safety legacy calibrated: **{'PASS' if gates['safety_net_legacy_calibrated']['pass'] else 'FAIL'}** "
-            f"(recall {gates['safety_net_legacy_calibrated']['review_recall_pct']}%)",
+            f"(cell recall {gates['safety_net_legacy_calibrated']['cell_review_recall_pct']}%)",
             f"- Safety production confidence: **{'PASS' if gates['safety_net_production_confidence']['pass'] else 'FAIL'}** "
-            f"(recall {gates['safety_net_production_confidence']['review_recall_pct']}%)",
+            f"(cell recall {gates['safety_net_production_confidence']['cell_review_recall_pct']}%)",
             f"- **Overall: {'PASS' if gates['all_pass'] else 'FAIL'}**",
             "",
             "## Limitations",
@@ -556,8 +556,25 @@ def _token_rollup(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "cost_usd",
         "cost_idr",
         "calls_count",
+        "latency_s",
     )
-    totals = {field: sum(float(row["call_meta"].get(field, 0)) for row in rows) for field in fields}
+    totals = {
+        field: sum(float(row["call_meta"].get(field, 0) or 0) for row in rows)
+        for field in fields
+    }
+    web_search_queries = [
+        query
+        for row in rows
+        for query in row["call_meta"].get("web_search_queries", [])
+    ]
+    calls_details = [
+        {
+            "stem": row["stem"],
+            **detail,
+        }
+        for row in rows
+        for detail in row["call_meta"].get("calls_details", [])
+    ]
     return {
         "total_calls": int(totals["calls_count"]),
         "prompt_tokens": int(totals["prompt_tokens"]),
@@ -569,6 +586,12 @@ def _token_rollup(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "total_cost_usd": round(totals["cost_usd"], 6),
         "total_cost_idr": round(totals["cost_idr"], 2),
         "cost_per_doc_idr": round(totals["cost_idr"] / n_docs, 2) if n_docs else 0.0,
+        "total_latency_s": round(totals["latency_s"], 4),
+        "avg_latency_s": round(totals["latency_s"] / totals["calls_count"], 4)
+        if totals["calls_count"]
+        else 0.0,
+        "web_search_queries": web_search_queries,
+        "calls_details": calls_details,
     }
 
 
@@ -632,6 +655,7 @@ def run_benchmark(
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     run_id = f"production_v2_scope_{timestamp}"
     metadata = {
+        "campaign_id": "EXP-PROD-V2-CAMPAIGN-001",
         "run_id": run_id,
         "timestamp": timestamp,
         "git_sha": _git_sha(),
@@ -646,6 +670,8 @@ def run_benchmark(
         "timeout_s": timeout_s,
         "grounding_enabled": False,
         "input_path": "production: pymupdf -> conditional_ocr -> prompt",
+        "status": "STAGING_ONLY",
+        "production_promotion": False,
         "prompt_hashes": {
             "v1_system": sha256_text(PRODUCTION_V1_SYSTEM_INSTRUCTION),
             "v1_user": sha256_text(PRODUCTION_USER_PROMPT_TEMPLATE),

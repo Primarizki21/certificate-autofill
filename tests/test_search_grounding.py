@@ -85,9 +85,8 @@ def test_compute_field_confidence_and_review():
 
 def test_run_mock_inference():
     """Memastikan mock inference menghasilkan format data yang benar."""
-    doc = {"nama_file": "test.pdf"}
     for var in ACTIVE_VARIANTS:
-        fields, meta = run_mock_inference(var, "Sample text OCR", doc)
+        fields, meta = run_mock_inference(var, "Sample text OCR")
         assert "tingkat" in fields
         assert "nama_kegiatan_sertifikasi" in fields
         assert meta["status"] == "success"

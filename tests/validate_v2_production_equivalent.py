@@ -1,8 +1,10 @@
 """Four-layer empirical proof for the V2 Scope-Aware production-equivalent run.
 
-Layer 1 reuses paired-run CV/bootstrap artifacts. Layer 2 sends mutated and
-OCR-noisy versions through the V2 prompt. Layer 3 audits prompt hardcoding.
-Layer 4 reports both legacy calibrated and current production confidence.
+Layer 1 reports descriptive fixed-prediction holdout/bootstrap artifacts; it is
+not an independent model-fitting cross-validation claim. Layer 2 sends mutated
+and OCR-noisy versions through the V2 prompt. Layer 3 audits prompt and source
+hardcoding. Layer 4 reports both legacy calibrated and current production
+confidence.
 
 The validator is test-only and never changes production configuration.
 """
@@ -146,7 +148,10 @@ def _run_ood(
         text_path = texts_dir / f"{row['stem']}.txt"
         if not text_path.exists():
             raise FileNotFoundError(f"Raw text tidak ditemukan untuk stem {row['stem']}")
-        raw_texts[row["stem"]] = text_path.read_text(encoding="utf-8", errors="replace")
+        raw_text = text_path.read_text(encoding="utf-8", errors="replace")
+        if not raw_text.strip():
+            raise ValueError(f"Raw text kosong untuk stem {row['stem']}")
+        raw_texts[row["stem"]] = raw_text
 
     mutated_rows: list[dict[str, Any]] = []
     for row in base_rows:
@@ -236,6 +241,8 @@ def run_proof(
     delay: float = 1.2,
     timeout_s: float = 30.0,
     output_dir: str | None = None,
+    source_run_dir: str | None = None,
+    raw_text_dir: str | None = None,
 ) -> dict[str, Any]:
     """Run OOD and assemble four-layer proof for an existing paired run."""
     run_path = Path(run_dir)
@@ -255,7 +262,19 @@ def run_proof(
     if not candidate_rows:
         raise ValueError("Run tidak memiliki hasil v2_scope_aware.")
     gt_rows = load_csv(gt_csv)
-    gt_by_stem = {Path(row["nama_file"]).stem: row for row in gt_rows}
+    if not gt_rows:
+        raise ValueError(f"Ground truth kosong: {gt_csv}")
+    gt_by_stem: dict[str, dict[str, str]] = {}
+    for row in gt_rows:
+        stem = Path(row["nama_file"]).stem
+        if stem in gt_by_stem:
+            raise ValueError(f"Ground truth memiliki stem duplikat: {stem}")
+        gt_by_stem[stem] = row
+    if "v9" in Path(gt_csv).name.lower() and len(candidate_rows) != 74:
+        raise ValueError(
+            "Proof GT v9 penuh membutuhkan 74 hasil kandidat; "
+            f"ditemukan {len(candidate_rows)}."
+        )
     missing_gt = [row["stem"] for row in candidate_rows if row["stem"] not in gt_by_stem]
     if missing_gt:
         raise ValueError(f"GT tidak lengkap untuk {len(missing_gt)} dokumen.")
@@ -273,15 +292,33 @@ def run_proof(
         max_retries=0,
         timeout_s=timeout_s,
     )
-
     anti_hardcoding = run_anti_hardcoding_audit(
         V2_BASELINE_SYSTEM_INSTRUCTION,
         V2_BASELINE_USER_PROMPT_TEMPLATE,
+        source_files=(
+            Path(REPO_ROOT) / "tests" / "v2_title_boundary.py",
+            Path(REPO_ROOT) / "tests" / "v2_organizer_boundary.py",
+            Path(REPO_ROOT) / "tests" / "v2_safety_review.py",
+        ),
     )
+    source_path = (
+        Path(source_run_dir)
+        if source_run_dir
+        else run_path
+    )
+    if not source_path.is_absolute():
+        source_path = Path(REPO_ROOT) / source_path
+    texts_path = (
+        Path(raw_text_dir)
+        if raw_text_dir
+        else source_path / "raw_texts" / "production_conditional"
+    )
+    if not texts_path.is_absolute():
+        texts_path = Path(REPO_ROOT) / texts_path
     ood = _run_ood(
         base_rows=candidate_rows,
         gt_by_stem=gt_by_stem,
-        texts_dir=run_path / "raw_texts" / "production_conditional",
+        texts_dir=texts_path,
         client=client,
         model=effective_model,
     )
@@ -289,30 +326,43 @@ def run_proof(
     safety_legacy = candidate_summary["safety_net_legacy_calibrated"]
     safety_production = candidate_summary["safety_net_production_confidence"]
     layer1 = {
+        "status": "DESCRIPTIVE_FIXED_PIPELINE_HOLDOUT",
+        "independent_model_fit_per_fold": False,
+        "method": (
+            "Paired-run 5-fold holdout dan bootstrap atas prediksi tetap; "
+            "tidak ada fitting model independen per fold."
+        ),
         "stratified_5fold_cv": candidate_summary["stratified_5fold_cv"],
         "bootstrap_ci": candidate_summary["bootstrap_ci"],
         "proof_artifact_present": True,
     }
     gates = {
-        "layer_1_statistical_artifacts": bool(
-            layer1["stratified_5fold_cv"].get("k_folds") == 5
-            and layer1["bootstrap_ci"].get("n_bootstraps") == 1000
-        ),
+        "layer_1_statistical_artifacts": False,
         "layer_2_mutation": bool(ood["mutation"]["gate_pass"]),
         "layer_3_anti_hardcoding": bool(anti_hardcoding["anti_hardcoding_pass"]),
-        "layer_4_legacy_safety": bool(safety_legacy["review_recall_pct"] >= 95.0),
-        "layer_4_production_safety": bool(safety_production["review_recall_pct"] >= 95.0),
+        "layer_4_legacy_safety": bool(
+            safety_legacy["cell_review_recall_pct"] >= 95.0
+        ),
+        "layer_4_production_safety": bool(
+            safety_production["cell_review_recall_pct"] >= 95.0
+        ),
     }
     gates["all_pass"] = all(gates.values())
     proof = {
         "metadata": {
+            "campaign_id": "EXP-PROD-V2-CAMPAIGN-001",
             "run_dir": os.path.relpath(run_path, REPO_ROOT),
+            "source_run_dir": os.path.relpath(source_path, REPO_ROOT),
+            "raw_text_dir": os.path.relpath(texts_path, REPO_ROOT),
             "gt_csv": os.path.relpath(gt_csv, REPO_ROOT),
             "model": effective_model,
             "grounding_enabled": False,
             "n_documents": len(candidate_rows),
             "mutation_fields_gated": list(MUTATION_GATE_FIELDS),
             "noise_levels": [f"{int(level * 100)}%" for level in NOISE_LEVELS],
+            "status": "STAGING_ONLY",
+            "completeness": "INCOMPLETE" if not gates["all_pass"] else "COMPLETE",
+            "production_promotion": False,
         },
         "layer_1_statistical": layer1,
         "layer_2_ood": ood,
@@ -360,6 +410,8 @@ def _write_markdown(path: Path, proof: dict[str, Any]) -> None:
             f"- Min fold: {layer1['stratified_5fold_cv'].get('min_fold_exact_pct')}%",
             f"- Bootstrap: {layer1['bootstrap_ci'].get('n_bootstraps')} resamples",
             f"- Bootstrap All-Cells CI: {layer1['bootstrap_ci'].get('all_cells_exact_95_ci')}",
+            f"- Status: `{layer1['status']}`",
+            f"- Independent model fit per fold: `{layer1['independent_model_fit_per_fold']}`",
             "",
             "## Layer 2 — OOD",
             "",
@@ -402,17 +454,13 @@ def _write_markdown(path: Path, proof: dict[str, Any]) -> None:
             "",
             f"- Keywords audited: {layer3['audited_keywords_count']}",
             f"- Violations: {len(layer3['violations_found'])}",
-            f"- Status: **{'PASS' if layer3['anti_hardcoding_pass'] else 'FAIL'}**",
-            "",
-            "## Layer 4 — Safety Net",
-            "",
-            "| Mode | Review recall | Review precision | Status |",
+            "| Mode | Cell review recall | Cell review precision | Status |",
             "|---|---:|---:|---:|",
-            f"| Legacy calibrated | {safety['legacy_calibrated']['review_recall_pct']}% | "
-            f"{safety['legacy_calibrated']['review_precision_pct']}% | "
+            f"| Legacy calibrated | {safety['legacy_calibrated']['cell_review_recall_pct']}% | "
+            f"{safety['legacy_calibrated']['cell_review_precision_pct']}% | "
             f"{'PASS' if gates['layer_4_legacy_safety'] else 'FAIL'} |",
-            f"| Production confidence | {safety['production_confidence']['review_recall_pct']}% | "
-            f"{safety['production_confidence']['review_precision_pct']}% | "
+            f"| Production confidence | {safety['production_confidence']['cell_review_recall_pct']}% | "
+            f"{safety['production_confidence']['cell_review_precision_pct']}% | "
             f"{'PASS' if gates['layer_4_production_safety'] else 'FAIL'} |",
             "",
             "## Gate Summary",
@@ -435,7 +483,6 @@ def _write_markdown(path: Path, proof: dict[str, Any]) -> None:
     )
     path.write_text("\n".join(lines) + "\n", encoding="utf-8")
 
-
 def main() -> int:
     parser = argparse.ArgumentParser(description="Four-layer V2 Scope-Aware empirical proof")
     parser.add_argument("--run-dir", required=True)
@@ -444,6 +491,8 @@ def main() -> int:
     parser.add_argument("--delay", type=float, default=1.2)
     parser.add_argument("--timeout-s", type=float, default=30.0)
     parser.add_argument("--output-dir", default=None)
+    parser.add_argument("--source-run-dir", default=None)
+    parser.add_argument("--raw-text-dir", default=None)
     args = parser.parse_args()
     run_proof(
         run_dir=args.run_dir,
@@ -452,6 +501,8 @@ def main() -> int:
         delay=args.delay,
         timeout_s=args.timeout_s,
         output_dir=args.output_dir,
+        source_run_dir=args.source_run_dir,
+        raw_text_dir=args.raw_text_dir,
     )
     return 0
 
