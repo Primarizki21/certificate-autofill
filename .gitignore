@@ -91,6 +91,7 @@ khp/
 # Private experiment reports & documentation
 docs/report
 docs/experiments/
+docs/screenshots/
 old_docs/
 # Agents Instructions and internal notes
 AGENTS.md
