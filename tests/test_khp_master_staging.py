@@ -175,6 +175,7 @@ def test_staging_resolver_attaches_matching_master_rule() -> None:
         "tingkat": _field("Universitas"),
         "prestasi_partisipasi_jabatan": _field("Peserta"),
         "raw_role": _field("Peserta"),
+        "bukti_fisik": _field("Sertifikat"),
     }
     rule = MasterKegiatanRule(
         source_no=26,
@@ -197,6 +198,36 @@ def test_staging_resolver_attaches_matching_master_rule() -> None:
     assert resolution.rule_status == "matched"
     assert resolution.master_rule == rule
     assert resolution.as_dict()["master_rule"]["dasar_penilaian"] == "Sert/SK/SP"
+
+
+def test_staging_resolver_flags_disallowed_evidence() -> None:
+    fields = {
+        "jenis_kegiatan": _field("PKKMB"),
+        "tingkat": _field("Universitas"),
+        "prestasi_partisipasi_jabatan": _field("Peserta"),
+        "raw_role": _field("Peserta"),
+        "bukti_fisik": _field("Dokumen"),
+    }
+    rule = MasterKegiatanRule(
+        source_no=26,
+        id_kelompok_kegiatan=1,
+        id_kegiatan_1=41,
+        id_tingkat=4,
+        id_jabatan_prestasi=6,
+        dasar_penilaian="Sert/SK/SP",
+        id_kegiatan_2=9001,
+    )
+
+    resolution = resolve_khp_master_fields(
+        "Sertifikat PKKMB tingkat universitas",
+        fields,
+        [Kegiatan2LookupRow(9001, 41, 4, 6)],
+        [rule],
+    )
+
+    assert resolution.status == "needs_review"
+    assert resolution.evidence_status == "not_allowed"
+    assert "bukti_fisik_not_allowed" in resolution.reasons
 
 
 def test_staging_resolver_keeps_explicit_ukm_level() -> None:

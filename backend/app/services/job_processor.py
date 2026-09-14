@@ -12,6 +12,7 @@ from app.database import SessionLocal
 from app.models import Document, ExtractionJob, ExtractedField, KHPMasterResolution
 from app.services.extraction_pipeline import run_extraction_pipeline
 from app.services.form_mapper import field_needs_review
+from app.services.aucc_persistence import upsert_krp_khp
 from app.services.temporary_upload_store import upload_store
 
 logger = logging.getLogger("certificate-job-processor")
@@ -215,6 +216,14 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
                     source=extracted.source,
                     needs_review=needs_review,
                 )
+            )
+
+        if settings.enable_khp_master_staging and settings.enable_khp_aucc_persistence:
+            upsert_krp_khp(
+                db,
+                document_id=document_id,
+                mapped_fields=result.mapped_fields,
+                master_resolution=getattr(result, "master_resolution", None),
             )
 
         if settings.enable_khp_master_staging:

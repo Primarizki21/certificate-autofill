@@ -134,6 +134,7 @@ class KHPMasterResolution:
     reasons: tuple[str, ...]
     master_rule: MasterKegiatanRule | None = None
     rule_status: str = "not_loaded"
+    evidence_status: str = "not_checked"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -146,6 +147,7 @@ class KHPMasterResolution:
             "lookup_status": self.lookup_status,
             "master_rule": self.master_rule.as_dict() if self.master_rule else None,
             "rule_status": self.rule_status,
+            "evidence_status": self.evidence_status,
             "reasons": list(self.reasons),
         }
 
@@ -341,6 +343,39 @@ def lookup_kegiatan_2(
     return None, "not_found"
 
 
+_EVIDENCE_ALIASES = {
+    "sert": {"sertifikat"},
+    "sk": {"surat keputusan"},
+    "sp": {"surat perintah"},
+    "foto kopi karya": {"fotocopi hasil karya", "hasil karya"},
+    "daftar hadir": {"daftar hadir"},
+    "presensi": {"presensi"},
+    "kartu pemilih": {"kartu pemilih"},
+    "hasil karya": {"hasil karya", "fotocopi hasil karya"},
+    "paten": {"patent"},
+    "dok": {"dokumen"},
+}
+
+
+def _evidence_status(
+    mapped_fields: Mapping[str, Any],
+    rule: MasterKegiatanRule | None,
+) -> str:
+    if rule is None:
+        return "not_checked"
+    if "bukti_fisik" not in mapped_fields:
+        return "not_available"
+    value = _field_value(mapped_fields, "bukti_fisik")
+    if _is_unset(value):
+        return "missing"
+    accepted = {
+        accepted_label
+        for requirement in rule.dasar_penilaian.split("/")
+        for accepted_label in _EVIDENCE_ALIASES.get(_fold(requirement), ())
+    }
+    return "matched" if _fold(value) in accepted else "not_allowed"
+
+
 def _lookup_master_rule(
     rules: Iterable[MasterKegiatanRule] | None,
     *,
@@ -424,8 +459,14 @@ def resolve_khp_master_fields(
         )
         if rule_status == "ambiguous":
             reasons.append("master_rule_ambiguous")
+    evidence_status = _evidence_status(mapped_fields, master_rule)
+    if evidence_status in {"missing", "not_allowed"}:
+        reasons.append(f"bukti_fisik_{evidence_status}")
 
-    if field_reasons or rule_status == "ambiguous":
+    if field_reasons or rule_status == "ambiguous" or evidence_status in {
+        "missing",
+        "not_allowed",
+    }:
         status = "needs_review"
     elif id_kegiatan_2 is not None and lookup_status == "matched":
         status = "resolved"
@@ -441,6 +482,7 @@ def resolve_khp_master_fields(
         reasons=tuple(reasons),
         master_rule=master_rule,
         rule_status=rule_status,
+        evidence_status=evidence_status,
     )
 
 

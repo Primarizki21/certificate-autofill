@@ -35,6 +35,7 @@ class MasterResolution(BaseModel):
     lookup_status: str
     master_rule: dict[str, object] | None = None
     rule_status: str = "not_loaded"
+    evidence_status: str = "not_checked"
     reasons: list[str] = Field(default_factory=list)
 
 class ExtractionResult(BaseModel):
