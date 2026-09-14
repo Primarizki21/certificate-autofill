@@ -6,8 +6,8 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.master_data import KHP_MASTER_OPTIONS
+from app.services.aucc_catalog import Kegiatan2LookupRow
 from app.services.field_extractor import ExtractedValue
-
 
 ACTIVITY_FIELD = "jenis_kegiatan"
 GROUP_FIELD = "kelompok_kegiatan"
@@ -19,6 +19,10 @@ def _fold(value: str | None) -> str:
     if not value:
         return ""
     return re.sub(r"\s+", " ", re.sub(r"[^a-z0-9]+", " ", value.casefold())).strip()
+
+
+def _is_unset(value: str | None) -> bool:
+    return _fold(value) in {"", "--", "pilih", "pilih kelompok kegiatan"}
 
 
 def _field_value(fields: Mapping[str, Any], field_name: str) -> str | None:
@@ -35,16 +39,37 @@ def _options(key: str) -> tuple[dict[str, object], ...]:
 
 
 def _match_label(key: str, value: str | None) -> "KHPFieldMatch | None":
-    folded = _fold(value)
-    if not folded or folded in {"--", "pilih", "pilih kelompok kegiatan"}:
+    if _is_unset(value):
         return None
-    for option in _options(key):
-        if _fold(str(option["label"])) == folded:
-            return KHPFieldMatch(
-                id=int(option["id"]),
-                label=str(option["label"]),
-                status="matched",
-            )
+    value_text = str(value).strip()
+    exact_matches = [
+        option for option in _options(key) if str(option["label"]).strip() == value_text
+    ]
+    if len(exact_matches) == 1:
+        option = exact_matches[0]
+        return KHPFieldMatch(
+            id=int(option["id"]),
+            label=str(option["label"]),
+            status="matched",
+        )
+    folded = _fold(value_text)
+    folded_matches = [
+        option for option in _options(key) if _fold(str(option["label"])) == folded
+    ]
+    if len(folded_matches) == 1:
+        option = folded_matches[0]
+        return KHPFieldMatch(
+            id=int(option["id"]),
+            label=str(option["label"]),
+            status="matched",
+        )
+    if len(folded_matches) > 1:
+        return KHPFieldMatch(
+            id=None,
+            label=None,
+            status="ambiguous",
+            reasons=("ambiguous_master_label",),
+        )
     return None
 
 
@@ -54,24 +79,29 @@ def _match_patterns(
     patterns: Iterable[tuple[int, tuple[str, ...]]],
 ) -> "KHPFieldMatch | None":
     folded = _fold(text)
-    for option_id, option_patterns in patterns:
-        if any(re.search(pattern, folded) for pattern in option_patterns):
-            option = next(item for item in _options(key) if int(item["id"]) == option_id)
-            return KHPFieldMatch(
-                id=option_id,
-                label=str(option["label"]),
-                status="matched",
-                reasons=("structural_anchor_match",),
-            )
-    return None
-
-
-@dataclass(frozen=True)
-class Kegiatan2LookupRow:
-    id_kegiatan_2: int
-    id_kegiatan_1: int
-    id_tingkat: int
-    id_jabatan_prestasi: int
+    matched_ids = [
+        option_id
+        for option_id, option_patterns in patterns
+        if any(re.search(pattern, folded) for pattern in option_patterns)
+    ]
+    unique_ids = tuple(dict.fromkeys(matched_ids))
+    if len(unique_ids) != 1:
+        if not unique_ids:
+            return None
+        return KHPFieldMatch(
+            id=None,
+            label=None,
+            status="ambiguous",
+            reasons=("ambiguous_structural_anchor",),
+        )
+    option_id = unique_ids[0]
+    option = next(item for item in _options(key) if int(item["id"]) == option_id)
+    return KHPFieldMatch(
+        id=option_id,
+        label=str(option["label"]),
+        status="matched",
+        reasons=("structural_anchor_match",),
+    )
 
 
 @dataclass(frozen=True)
@@ -88,6 +118,7 @@ class KHPFieldMatch:
             "status": self.status,
             "reasons": list(self.reasons),
         }
+
 
 
 @dataclass(frozen=True)
@@ -217,6 +248,10 @@ def _unresolved(reason: str) -> KHPFieldMatch:
     return KHPFieldMatch(id=None, label=None, status="unresolved", reasons=(reason,))
 
 
+def _unspecified(reason: str) -> KHPFieldMatch:
+    return KHPFieldMatch(id=None, label=None, status="unspecified", reasons=(reason,))
+
+
 def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMatch:
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     mapped = _match_label(ACTIVITY_FIELD, mapped_value)
@@ -237,7 +272,7 @@ def _resolve_level(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldM
     if match is not None:
         return match
     mapped = _match_label(LEVEL_FIELD, _field_value(mapped_fields, LEVEL_FIELD))
-    return mapped or _unresolved("level_not_in_master")
+    return mapped or _unspecified("level_not_provided")
 
 
 def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMatch:
@@ -250,7 +285,7 @@ def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMa
     mapped_text = mapped_value or ""
     text = f"{role_text} {mapped_text} {raw_text}"
     match = _match_patterns(ROLE_FIELD, text, _ROLE_PATTERNS)
-    return match or _unresolved("role_not_in_master")
+    return match or _unspecified("role_not_provided")
 
 
 def _group_match(activity: KHPFieldMatch) -> KHPFieldMatch:
@@ -279,8 +314,8 @@ def lookup_kegiatan_2(
     rows: Iterable[Kegiatan2LookupRow] | None,
     *,
     id_kegiatan_1: int,
-    id_tingkat: int,
-    id_jabatan_prestasi: int,
+    id_tingkat: int | None,
+    id_jabatan_prestasi: int | None,
 ) -> tuple[int | None, str]:
     if rows is None:
         return None, "not_loaded"
@@ -316,13 +351,16 @@ def resolve_khp_master_fields(
     field_reasons = [
         f"{field_name}_{reason}"
         for field_name, field_match in fields.items()
-        if field_match.status != "matched"
+        if field_match.status in {"unresolved", "ambiguous"}
         for reason in field_match.reasons
     ]
     reasons = list(field_reasons)
     id_kegiatan_2 = None
     lookup_status = "blocked_by_missing_field"
-    if all(match.id is not None for match in (activity, level, role)):
+    lookup_fields = (activity, level, role)
+    if activity.id is not None and all(
+        match.status in {"matched", "unspecified"} for match in lookup_fields
+    ):
         id_kegiatan_2, lookup_status = lookup_kegiatan_2(
             kegiatan2_rows,
             id_kegiatan_1=activity.id,

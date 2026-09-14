@@ -116,6 +116,54 @@ def test_staging_resolver_splits_pkkmb_activity_from_role() -> None:
     assert resolution.id_kegiatan_2 is None
 
 
+def test_kegiatan_2_lookup_matches_nullable_dimensions_exactly() -> None:
+    rows = [
+        Kegiatan2LookupRow(9001, 41, 4, 6),
+        Kegiatan2LookupRow(9002, 41, None, 6),
+        Kegiatan2LookupRow(9003, 130, None, None),
+    ]
+
+    assert lookup_kegiatan_2(
+        rows,
+        id_kegiatan_1=41,
+        id_tingkat=None,
+        id_jabatan_prestasi=6,
+    ) == (9002, "matched")
+    assert lookup_kegiatan_2(
+        rows,
+        id_kegiatan_1=130,
+        id_tingkat=None,
+        id_jabatan_prestasi=None,
+    ) == (9003, "matched")
+    assert lookup_kegiatan_2(
+        rows,
+        id_kegiatan_1=41,
+        id_tingkat=5,
+        id_jabatan_prestasi=6,
+    ) == (None, "not_found")
+
+
+def test_staging_resolver_accepts_explicitly_nullable_dimensions() -> None:
+    fields = {
+        "jenis_kegiatan": _field("PKKMB"),
+        "tingkat": _field(None),
+        "prestasi_partisipasi_jabatan": _field("Peserta"),
+        "raw_role": _field("Peserta"),
+    }
+
+    resolution = resolve_khp_master_fields(
+        "Sertifikat PKKMB untuk peserta",
+        fields,
+        [Kegiatan2LookupRow(9002, 41, None, 6)],
+    )
+    mapped = apply_khp_master_mapping(fields, resolution)
+
+    assert resolution.status == "resolved"
+    assert resolution.id_kegiatan_2 == 9002
+    assert resolution.fields["tingkat"].status == "unspecified"
+    assert mapped["tingkat"].value is None
+
+
 def test_staging_resolver_keeps_explicit_ukm_level() -> None:
     fields = {
         "jenis_kegiatan": _field("--"),
