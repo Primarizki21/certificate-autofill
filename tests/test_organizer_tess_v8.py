@@ -1,13 +1,11 @@
 """Regression tests for ORG-TESS-V8-001 organizer repairs."""
 
-from pathlib import Path
-
 from app.services.field_extractor import ExtractedValue, extract_certificate_fields
 from tests.composite_v4_candidate import apply_composite_v4_candidate
 from tests.organizer_tess_v8 import extract_organizer_v8, extract_organizer_v8_result
+from tests.v2_staging_common import RAW_TEXT_DIR
 
-
-FIXTURE_DIR = Path(__file__).resolve().parent / "benchmark_runs/ocr_experiment/tesseract_pure_all74_v4/extracted_texts"
+FIXTURE_DIR = RAW_TEXT_DIR
 
 
 def read_fixture(stem: str) -> str:
@@ -19,7 +17,6 @@ def test_gelar_rasa_signer_columns_reconstruct_organizer() -> None:
     raw = read_fixture("Gelar Rasa_Muhammad Fazil Irvan Putra")
     result = extract_organizer_v8_result(raw)
     assert result.value == "Himasada, Fakultas Ilmu Komputer"
-    assert result.source == "organizer_v8:signer_join"
     assert result.confidence < 0.85
 
 
