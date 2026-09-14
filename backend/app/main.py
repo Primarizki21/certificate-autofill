@@ -21,7 +21,13 @@ from app.config import settings
 from app.database import get_db, init_db
 from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
 from app.models import Document, ExtractionJob, ExtractedField, KHPMasterResolution
-from app.schemas import ExtractionResult, FieldResult, OptionsResponse, UploadResponse
+from app.schemas import (
+    ExtractionResult,
+    FieldResult,
+    OptionsResponse,
+    PublicExtractionResult,
+    UploadResponse,
+)
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 from app.services.temporary_upload_store import upload_store
 
@@ -166,8 +172,8 @@ def upload_document(
     return UploadResponse(document_id=document_id, job_id=job_id, status=response_status)
 
 
-@app.get("/api/documents/{document_id}/result", response_model=ExtractionResult)
-def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionResult:
+@app.get("/api/documents/{document_id}/result", response_model=PublicExtractionResult)
+def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtractionResult:
     REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/result").inc()
     document = db.get(Document, document_id)
     if not document:
@@ -184,7 +190,7 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         )
         for f in fields
     }
-    master_resolution = None
+    master_needs_review = False
     if settings.enable_khp_master_staging:
         resolution_row = (
             db.query(KHPMasterResolution)
@@ -193,25 +199,19 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         )
         if resolution_row is not None:
             try:
-                master_resolution = json.loads(resolution_row.resolution_json)
+                master_res = json.loads(resolution_row.resolution_json)
+                master_needs_review = bool(master_res and master_res.get("status") != "resolved")
             except json.JSONDecodeError:
-                master_resolution = None
+                master_needs_review = True
 
-    master_needs_review = bool(
-        master_resolution and master_resolution.get("status") != "resolved"
-    )
     needs_review = (
         any(item.needs_review for item in field_dict.values())
         or document.status == "needs_review"
         or master_needs_review
     )
-
-    return ExtractionResult(
+    return PublicExtractionResult(
         document_id=document_id,
         status=document.status,
         needs_review=needs_review,
         fields=field_dict,
-        master_resolution=master_resolution,
-        raw_text_preview=None,
-        parser_engine=document.parser_engine,
     )

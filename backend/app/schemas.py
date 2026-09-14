@@ -47,6 +47,12 @@ class ExtractionResult(BaseModel):
     parser_engine: str | None = None
     master_resolution: MasterResolution | None = None
 
+class PublicExtractionResult(BaseModel):
+    document_id: str
+    status: str
+    needs_review: bool
+    fields: dict[str, FieldResult]
+
 
 class OptionsResponse(BaseModel):
     options: dict[str, list[str | MasterOption]]

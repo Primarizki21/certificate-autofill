@@ -233,8 +233,7 @@ function pollResult(documentId) {
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
         setLoading(false);
-        const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
-        setStatus(data.needs_review ? `Parsing selesai${engineTag}. Form sudah terisi, tetapi beberapa field perlu dicek ulang.` : `Parsing selesai${engineTag}. Form sudah terisi otomatis.`);
+        setStatus(data.needs_review ? 'Pengisian form selesai otomatis. Silakan periksa kembali isian sebelum menyimpan.' : 'Pengisian form selesai otomatis.');
       } else {
         setStatus(`Status parsing: ${data.status}. Menunggu...`);
       }
@@ -249,21 +248,19 @@ function pollResult(documentId) {
 
 function applyResult(data) {
   const fields = data.fields || {};
-  const masterFields = data.master_resolution?.fields || {};
 
   // 1. Set kelompok_kegiatan first
   const kelItem = fields['kelompok_kegiatan'];
-  const kelMaster = masterFields['kelompok_kegiatan'];
-  const kelVal = kelMaster?.id ?? kelItem?.value ?? '';
+  const kelVal = kelItem?.value ?? '';
   if (kelVal) {
     ensureOptionAndSet(el('kelompok_kegiatan'), kelVal);
   }
 
   // 2. Filter jenis_kegiatan based on kelompok_kegiatan, then set it
   const jenItem = fields['jenis_kegiatan'];
-  const jenMaster = masterFields['jenis_kegiatan'];
-  const jenVal = jenMaster?.id ?? jenItem?.value ?? '';
-  filterJenisKegiatanByGroup(kelVal, jenVal);
+  const jenVal = jenItem?.value ?? '';
+  const currentGroupId = el('kelompok_kegiatan')?.value || '';
+  filterJenisKegiatanByGroup(currentGroupId, jenVal);
   if (jenVal) {
     ensureOptionAndSet(el('jenis_kegiatan'), jenVal);
   }
@@ -275,112 +272,16 @@ function applyResult(data) {
     if (!item) return;
     const element = el(fieldId);
     if (!element) return;
-    const masterField = masterFields[fieldId];
-    const selectedValue = masterField?.id ?? item.value ?? '';
-    const value = normalizeDateForDisplay(
-      fieldId,
-      element.tagName === 'SELECT' ? selectedValue : item.value || '',
-    );
-    if (element.tagName === 'SELECT') ensureOptionAndSet(element, value);
-    else element.value = value;
-  });
-
-  // 4. Render AUCC resolution and evidence panel
-  renderAuccResolution(data.master_resolution, selectedOptionLabel(el('bukti_fisik')));
-}
-
-function renderAuccResolution(masterResolution, currentBuktiFisik) {
-  const panel = el('auccResolutionSection');
-  if (!panel) return;
-  if (!masterResolution) {
-    panel.classList.add('hidden');
-    return;
-  }
-  panel.classList.remove('hidden');
-
-  const badge = el('auccStatusBadge');
-  const idTag = el('auccIdTag');
-  const masterSummary = el('auccMasterSummary');
-  const evidenceSummary = el('auccEvidenceSummary');
-  const reasonsRow = el('auccReasonsRow');
-  const reasonsChips = el('auccReasonsChips');
-
-  const status = masterResolution.status || 'unknown';
-  const idKegiatan2 = masterResolution.id_kegiatan_2;
-  const rule = masterResolution.master_rule;
-  const evidenceStatus = masterResolution.evidence_status || 'not_checked';
-  const reasons = masterResolution.reasons || [];
-
-  // 1. Badge & Tag
-  badge.className = 'aucc-badge';
-  if (status === 'resolved') {
-    badge.classList.add('resolved');
-    badge.textContent = '✓ Terverifikasi AUCC';
-  } else if (status === 'needs_review') {
-    badge.classList.add('review');
-    badge.textContent = '⚠ Perlu Review Form';
-  } else {
-    badge.classList.add('awaiting');
-    badge.textContent = 'ℹ Menunggu Lookup';
-  }
-
-  idTag.textContent = idKegiatan2 ? `ID Kegiatan 2: ${idKegiatan2}` : 'ID Kegiatan 2: Belum Terpetakan';
-
-  // 2. Master Summary
-  const mf = masterResolution.fields || {};
-  const kelompokText = mf.kelompok_kegiatan?.label || selectedOptionLabel(el('kelompok_kegiatan')) || '-';
-  const jenisText = mf.jenis_kegiatan?.label || selectedOptionLabel(el('jenis_kegiatan')) || '-';
-  const tingkatText = mf.tingkat?.label || selectedOptionLabel(el('tingkat')) || '-';
-  const roleText = mf.prestasi_partisipasi_jabatan?.label || selectedOptionLabel(el('prestasi_partisipasi_jabatan')) || '-';
-
-  masterSummary.innerHTML = `<strong>${jenisText}</strong> (${kelompokText}) &bull; Tingkat: <strong>${tingkatText}</strong> &bull; Peran: <strong>${roleText}</strong>`;
-
-  // 3. Evidence Status
-  if (rule && rule.dasar_penilaian) {
-    const dasar = rule.dasar_penilaian;
-    const bukti = currentBuktiFisik || selectedOptionLabel(el('bukti_fisik')) || 'Sertifikat';
-    if (evidenceStatus === 'matched') {
-      evidenceSummary.innerHTML = `<span style="color:#12753a; font-weight:600;">✓ Sesuai Aturan:</span> Bukti fisik "<em>${bukti}</em>" memenuhi syarat aturan resmi [<strong>${dasar}</strong>].`;
-    } else if (evidenceStatus === 'not_allowed') {
-      evidenceSummary.innerHTML = `<span style="color:#b26a00; font-weight:600;">⚠ Peringatan Aturan:</span> Bukti fisik "<em>${bukti}</em>" tidak memenuhi ketentuan aturan resmi [<strong>${dasar}</strong>].`;
-    } else if (evidenceStatus === 'missing') {
-      evidenceSummary.innerHTML = `<span style="color:#b3261e; font-weight:600;">⚠ Bukti Kosong:</span> Aturan resmi mensyaratkan bukti [<strong>${dasar}</strong>].`;
+    const rawVal = item.value || '';
+    const value = normalizeDateForDisplay(fieldId, rawVal);
+    if (element.tagName === 'SELECT') {
+      ensureOptionAndSet(element, value);
     } else {
-      evidenceSummary.innerHTML = `Syarat aturan resmi: [<strong>${dasar}</strong>] (status: ${evidenceStatus}).`;
+      element.value = value;
     }
-  } else {
-    evidenceSummary.textContent = 'Kombinasi kegiatan_2 ini tidak memiliki batasan master rule khusus.';
-  }
-
-  // 4. Reasons Chips
-  if (reasons && reasons.length > 0) {
-    reasonsRow.classList.remove('hidden');
-    reasonsChips.innerHTML = '';
-    reasons.forEach(r => {
-      const chip = document.createElement('span');
-      chip.className = 'aucc-chip warn';
-      chip.textContent = humanizeReason(r);
-      reasonsChips.appendChild(chip);
-    });
-  } else {
-    reasonsRow.classList.add('hidden');
-  }
+  });
 }
 
-function humanizeReason(key) {
-  const map = {
-    'bukti_fisik_not_allowed': 'Bukti fisik tidak sesuai aturan penilaian',
-    'bukti_fisik_missing': 'Bukti fisik belum dipilih',
-    'kegiatan_2_not_found': 'Kombinasi kegiatan, tingkat, dan peran belum ada di master',
-    'kegiatan_2_ambiguous': 'Kombinasi kegiatan ambigu pada master data',
-    'master_rule_ambiguous': 'Aturan penilaian ganda pada master',
-    'ambiguous_master_label': 'Label kegiatan terdeteksi ganda',
-    'ambiguous_structural_anchor': 'Struktur teks ambigu',
-    'level_conflicts_with_raw_ocr': 'Tingkat perlu dicek ulang terhadap teks sertifikat',
-    'khp_master_resolution_pending': 'Verifikasi master KHP masih pending',
-  };
-  return map[key] || key;
-}
 
 function openMasterModal() {
   const modal = el('masterModal');
@@ -489,15 +390,28 @@ function normalizeDateForDisplay(fieldId, value) {
 
 function ensureOptionAndSet(select, value) {
   if (!select || value === null || value === undefined || value === '') return;
-  const target = String(value);
-  const exists = Array.from(select.options).some(option => option.value === target);
-  if (!exists) {
-    const option = document.createElement('option');
-    option.value = target;
-    option.textContent = target;
-    option.dataset.label = target;
-    select.appendChild(option);
+  const target = String(value).trim();
+  if (!target) return;
+
+  // 1. Coba cocokkan dengan value atau label teks option yang sudah ada
+  const options = Array.from(select.options);
+  const matchedOpt = options.find(
+    opt => opt.value === target ||
+           (opt.dataset.label && opt.dataset.label.toLowerCase() === target.toLowerCase()) ||
+           opt.textContent.trim().toLowerCase() === target.toLowerCase()
+  );
+
+  if (matchedOpt) {
+    select.value = matchedOpt.value;
+    return;
   }
+
+  // 2. Jika belum ada, buat option baru
+  const option = document.createElement('option');
+  option.value = target;
+  option.textContent = target;
+  option.dataset.label = target;
+  select.appendChild(option);
   select.value = target;
 }
 
@@ -515,7 +429,6 @@ function resetPage() {
   el('khpForm').reset();
   setInitialDefaults();
   filterJenisKegiatanByGroup('', '');
-  renderAuccResolution(null);
   el('afterUploadSection').classList.add('hidden');
   el('pdfPreview').src = '';
   setLoading(false);
