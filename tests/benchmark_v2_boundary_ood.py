@@ -222,6 +222,7 @@ def run(
         "scope": "boundary_only",
         "source": payload["source"],
     }
+    write_json(output_dir / "manifest.json", manifest)
     (output_dir / "summary.md").write_text(_summary(payload), encoding="utf-8")
     return payload
 
