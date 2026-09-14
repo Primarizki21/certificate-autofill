@@ -25,6 +25,7 @@ services:
     environment:
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ENABLE_TESSERACT_GEMINI=${ENABLE_TESSERACT_GEMINI:-true}
+      - ENABLE_COMBINED_V4_2=${ENABLE_COMBINED_V4_2:-true}
       - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-gemini-3.1-flash-lite}
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
     ports:
@@ -36,6 +37,7 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: cert_prometheus
+    profiles: ["monitoring"]
     ports:
       - "9090:9090"
     volumes:
@@ -46,6 +48,7 @@ services:
   grafana:
     image: grafana/grafana:latest
     container_name: cert_grafana
+    profiles: ["monitoring"]
     ports:
       - "3000:3000"
     environment:
@@ -57,12 +60,12 @@ services:
   loki:
     image: grafana/loki:2.9.8
     container_name: cert_loki
+    profiles: ["monitoring"]
     ports:
       - "3100:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
-
 volumes:
   postgres_data:
   grafana_data:

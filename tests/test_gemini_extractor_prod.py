@@ -1,16 +1,11 @@
-"""Production unit tests for Tesseract-to-Gemini (Option A) integration.
+"""Production tests for the scope-aware Tesseract-to-Gemini path.
 
-Verifies:
-  1. Graceful error return when API key is missing (no exception raised).
-  2. Date standardization and tingkat normalization in production service.
-  3. Pipeline execution when ENABLE_TESSERACT_GEMINI=false (offline path).
-  4. Graceful fallback to offline pipeline when Gemini encounters an error.
-  5. End-to-end execution of run_extraction_pipeline with Gemini enabled on real PDF bytes.
+Verifies prompt parity, normalization, primary Gemini extraction, structural
+boundaries, offline toggling, and Combined v4.2 fallback behavior.
 """
 
 import os
 import sys
-from dataclasses import replace
 from unittest.mock import patch
 import pytest
 
@@ -24,11 +19,14 @@ if BACKEND_DIR not in sys.path:
 from app.config import settings
 from app.services.field_extractor import ExtractedValue
 from app.services.gemini_extractor import (
+    SYSTEM_INSTRUCTION,
+    USER_PROMPT_TEMPLATE,
     extract_fields_with_gemini,
     normalize_llm_json,
     standardize_date,
 )
 from app.services.extraction_pipeline import run_extraction_pipeline
+from app.services.pdf_fast_path import FastPathResult
 
 
 class TestGeminiExtractorProduction:
@@ -102,6 +100,175 @@ class TestGeminiExtractorProduction:
             assert res is not None
             assert "nama_kegiatan_sertifikasi" in res.mapped_fields
             assert "gemini" not in res.parser_engine
+    def test_production_prompt_uses_scope_aware_v2_rules(self):
+        assert "Cakupan Sasaran Peserta" in SYSTEM_INSTRUCTION
+        assert "Jenjang Penyelenggara" in SYSTEM_INSTRUCTION
+        assert "MESKIPUN diselenggarakan oleh BEM Fakultas" in SYSTEM_INSTRUCTION
+        assert '"tingkat": "Internasional"|"Nasional"' in USER_PROMPT_TEMPLATE
+
+    def test_gemini_success_applies_production_boundaries(self, monkeypatch):
+        from app.services import extraction_pipeline
+
+        raw_text = (
+            "Dalam kegiatan MAIN SUMMIT 2025 pada perlombaan DATA TRACK "
+            "yang diselenggarakan oleh Primary Institute\n"
+            "Certificate of participation"
+        )
+        gemini_fields = {
+            "full_text": ExtractedValue(raw_text, 1.0, "tesseract_raw"),
+            "nama_kegiatan_sertifikasi": ExtractedValue(
+                "MAIN SUMMIT 2025 DATA TRACK", 0.90, "gemini_llm"
+            ),
+            "nomor_bukti_fisik_nomor_sertifikasi": ExtractedValue(
+                "01/DS/2025", 0.90, "gemini_llm"
+            ),
+            "penyelenggara_kegiatan": ExtractedValue(
+                "Primary Institute in collaboration with Partner University",
+                0.90,
+                "gemini_llm",
+            ),
+            "waktu_mulai_pelaksanaan": ExtractedValue(None, 0.0, "gemini_llm"),
+            "waktu_selesai_pelaksanaan": ExtractedValue(None, 0.0, "gemini_llm"),
+            "tingkat": ExtractedValue("Nasional", 0.90, "gemini_llm"),
+            "raw_role": ExtractedValue("Peserta", 0.90, "gemini_llm"),
+        }
+        calls: list[str] = []
+
+        monkeypatch.setattr(
+            extraction_pipeline,
+            "extract_text_with_pymupdf",
+            lambda _pdf: FastPathResult(raw_text, 1),
+        )
+        monkeypatch.setattr(
+            extraction_pipeline,
+            "extract_certificate_fields",
+            lambda text: {"full_text": ExtractedValue(text, 1.0, "pymupdf")},
+        )
+
+        def fake_gemini(text: str):
+            calls.append(text)
+            return gemini_fields, {"model": "gemini-test"}
+
+        monkeypatch.setattr(
+            "app.services.gemini_extractor.extract_fields_with_gemini",
+            fake_gemini,
+        )
+
+        original_flags = {
+            name: getattr(settings, name)
+            for name in (
+                "enable_ocr_fallback",
+                "enable_tesseract_gemini",
+                "enable_combined_v2",
+                "enable_combined_v3",
+                "enable_combined_v4",
+                "enable_combined_v4_1",
+                "enable_combined_v4_2",
+                "enable_organizer_normalization",
+            )
+        }
+        try:
+            object.__setattr__(settings, "enable_ocr_fallback", False)
+            object.__setattr__(settings, "enable_tesseract_gemini", True)
+            for name in original_flags:
+                if name.startswith("enable_combined_") or name == "enable_organizer_normalization":
+                    object.__setattr__(settings, name, False)
+            result = run_extraction_pipeline(
+                b"not-a-real-pdf",
+                "2024/2025",
+                "Sertifikat",
+            )
+        finally:
+            for name, value in original_flags.items():
+                object.__setattr__(settings, name, value)
+
+        assert calls == [raw_text]
+        assert result.parser_engine.endswith("+gemini-test")
+        assert result.mapped_fields["nama_kegiatan_sertifikasi"].value == "MAIN SUMMIT 2025"
+        assert result.mapped_fields["nama_kegiatan_sertifikasi"].source == "title_boundary"
+        assert result.mapped_fields["penyelenggara_kegiatan"].value == "Primary Institute"
+        assert result.mapped_fields["penyelenggara_kegiatan"].source == "organizer_boundary"
+
+    def test_gemini_failure_keeps_combined_v42_fallback(self, monkeypatch):
+        from app.services import combined_extractor, extraction_pipeline
+
+        raw_text = (
+            "Certificate for DATA TRACK 2025, held by Primary Institute. "
+            "Participant recognition issued by the organizing committee."
+        )
+        extracted = {
+            "full_text": ExtractedValue(raw_text, 1.0, "pymupdf"),
+            "nama_kegiatan_sertifikasi": ExtractedValue(
+                "DATA TRACK 2025", 0.90, "regex"
+            ),
+            "nomor_bukti_fisik_nomor_sertifikasi": ExtractedValue(
+                "01/DS/2025", 0.90, "regex"
+            ),
+            "penyelenggara_kegiatan": ExtractedValue(
+                "Primary Institute", 0.90, "regex"
+            ),
+            "waktu_mulai_pelaksanaan": ExtractedValue(None, 0.0, "regex"),
+            "waktu_selesai_pelaksanaan": ExtractedValue(None, 0.0, "regex"),
+            "tingkat": ExtractedValue("Nasional", 0.90, "regex"),
+            "raw_role": ExtractedValue("Peserta", 0.90, "regex"),
+        }
+        combined_calls: list[dict] = []
+
+        monkeypatch.setattr(
+            extraction_pipeline,
+            "extract_text_with_pymupdf",
+            lambda _pdf: FastPathResult(raw_text, 1),
+        )
+        monkeypatch.setattr(
+            extraction_pipeline,
+            "extract_certificate_fields",
+            lambda _text: dict(extracted),
+        )
+        monkeypatch.setattr(
+            "app.services.gemini_extractor.extract_fields_with_gemini",
+            lambda _text: (None, {"error": "API unavailable"}),
+        )
+
+        def fake_combined(fields, text):
+            combined_calls.append(fields)
+            assert text == raw_text
+            return fields
+
+        monkeypatch.setattr(combined_extractor, "apply_combined_v4_2", fake_combined)
+        original_flags = {
+            name: getattr(settings, name)
+            for name in (
+                "enable_ocr_fallback",
+                "enable_tesseract_gemini",
+                "enable_combined_v2",
+                "enable_combined_v3",
+                "enable_combined_v4",
+                "enable_combined_v4_1",
+                "enable_combined_v4_2",
+                "enable_organizer_normalization",
+            )
+        }
+        try:
+            object.__setattr__(settings, "enable_ocr_fallback", False)
+            for name in original_flags:
+                object.__setattr__(settings, name, False)
+            object.__setattr__(settings, "enable_tesseract_gemini", True)
+            object.__setattr__(settings, "enable_combined_v4_2", True)
+            result = run_extraction_pipeline(
+                b"not-a-real-pdf",
+                "2024/2025",
+                "Sertifikat",
+            )
+        finally:
+            for name, value in original_flags.items():
+                object.__setattr__(settings, name, value)
+
+        assert len(combined_calls) == 1
+        assert result.raw_json is not None
+        assert result.raw_json["fallback_engine"] == "combined_v4_2"
+        assert result.raw_json["fallback_reason"] == "gemini_error"
+        assert result.parser_engine.endswith("+combined_v4_2")
+
 
     def test_pipeline_option_a_live_smoke(self):
         """Smoke test live: ekstraksi nyata via run_extraction_pipeline dengan Gemini aktif."""

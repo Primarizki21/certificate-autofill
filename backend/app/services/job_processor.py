@@ -168,9 +168,23 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
         document.parser_engine = result.parser_engine
         db.query(ExtractedField).filter(ExtractedField.document_id == document_id).delete()
         any_review = False
+        semantic_review_fields = 0
+        confidence_review_fields = 0
+        review_annotations = getattr(result, "review_annotations", {})
         for field_name, extracted in result.mapped_fields.items():
             value = extracted.value
-            needs_review = field_needs_review(field_name, value, extracted.confidence)
+            semantic_annotation = review_annotations.get(field_name)
+            semantic_needs_review = bool(
+                semantic_annotation and semantic_annotation.needs_review
+            )
+            confidence_needs_review = field_needs_review(
+                field_name, value, extracted.confidence
+            )
+            if semantic_needs_review:
+                semantic_review_fields += 1
+            if confidence_needs_review:
+                confidence_review_fields += 1
+            needs_review = semantic_needs_review or confidence_needs_review
             any_review = any_review or needs_review
             db.add(
                 ExtractedField(
@@ -192,7 +206,17 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
         document.status = "needs_review" if any_review else "completed"
         db.commit()
         terminal_status = True
-        logger.info("Completed document_id=%s status=%s parser_engine=%s", document_id, document.status, document.parser_engine)
+        logger.info(
+            (
+                "Completed document_id=%s status=%s parser_engine=%s "
+                "semantic_review_fields=%d confidence_review_fields=%d"
+            ),
+            document_id,
+            document.status,
+            document.parser_engine,
+            semantic_review_fields,
+            confidence_review_fields,
+        )
     except Exception as exc:
         db.rollback()
         terminal_status = _mark_owned_job_failed(db, job_id, owner, str(exc))

@@ -77,6 +77,7 @@ CHANGELOG_RULES_*.md
 docs/handoff.md
 docs/handoff_v*.md
 docs/experiments_ledger.md
+docs/experiments_ledger_*.md
 
 # Private certificate data and labels
 Ground_Truth*.csv
@@ -84,6 +85,11 @@ tests/bio_labels/
 tests/benchmark_runs/
 Sertifikat_Ground_Truth/
 certs_test/
-
-# Private experiment reports
+certs_unified/
+data/
+# Private experiment reports & documentation
 docs/report
+docs/experiments/
+old_docs/
+# Agents Instructions and internal notes
+AGENTS.md

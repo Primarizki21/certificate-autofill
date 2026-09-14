@@ -32,12 +32,18 @@ GOOGLE_API_KEY=""  # Masukkan kunci Google AI Studio API Anda
 
 ---
 
-### 2. Menjalankan via Docker Compose (Full Stack — Rekomendasi)
+### 2. Menjalankan via Docker Compose
 
-Docker Compose akan menjalankan backend FastAPI, PostgreSQL 17, Prometheus, Grafana, dan Loki secara terpadu.
+Perintah default hanya menyalakan backend FastAPI dan PostgreSQL 17:
 
 ```bash
 docker compose up --build
+```
+
+Untuk menyalakan Prometheus, Grafana, dan Loki, gunakan profile `monitoring`:
+
+```bash
+docker compose --profile monitoring up --build
 ```
 
 Setelah container aktif:
@@ -45,9 +51,9 @@ Setelah container aktif:
 |---------|-----|------------|
 | **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
-| **Prometheus** | `http://localhost:9090` | Metrik sistem dan performa pipeline |
-| **Grafana** | `http://localhost:3000` | Dashboard visualisasi (`admin:admin`) |
-| **Loki** | `http://localhost:3100` | Agregator log sistem |
+| **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
+| **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
+| **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
 
 > Variabel `GOOGLE_API_KEY` dari file `.env` Anda akan otomatis diteruskan ke container backend oleh Docker Compose.
 
@@ -165,17 +171,17 @@ Evaluasi pembentukan teks input terhadap 74 dokumen sertifikat (49 pindaian/scan
 | PyMuPDF murni (Tanpa OCR) | 27.70% | 33.23% | 9.18% (collapse) | 64.00% | Gagal membaca dokumen scan tanpa layer teks |
 | Engine Lain (DocTR, LFM2.5-VL, Docling, PaddleOCR) | Gagal Gate | Gagal Gate | — | — | **Closed** di *ledger* (faktor kegagalan nomor, latensi ekstrem >70s, atau memory overhead) |
 
-### 4. Perbandingan Model Named Entity Recognition (NER)
+### 4. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
 |---|:---:|:---:|:---:|---|
-| **GLiNER v2.1 Multilingual Fine-Tuned** (`NER-GLINER-002`) | **54.52%** | **63.23%** | **0.00pt drop (Kebal)** | Model encoder/span terbaik; ekstraksi tanggal (63.6%) dan nomor (55.8%) tinggi |
 | IndoBERT-ner-gold Fine-Tuned (`NER-ENCODER-002`) | 44.52% | 57.10% | -4.2pt drop | Monolingual Indonesia 334M, 5-Fold Stratified OOF |
 | XLM-RoBERTa Large Fine-Tuned (`NER-ENCODER-001`) | 43.55% | 55.48% | -5.8pt drop | Multilingual 560M, kebutuhan VRAM tinggi (7.1 GB) |
 | mDeBERTa-v3-base Fine-Tuned (`NER-ENCODER-001`) | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
 | IndoBERT Pre-trained v1 (Zero-Shot) | 12.80% | 24.50% | — | Baseline tanpa penyesuaian domain sertifikat |
 
+> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Tesseract sebagai sumber OCR dan extractor produksi; GLiNER serta model NER tidak dipanggil.
 ---
 
 ### Penjelasan Metrik & Formula Evaluasi
@@ -227,7 +233,7 @@ GET  /healthz                    # Health check endpoint
 
 | Dokumen | Deskripsi |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Konvensi proyek, standar pengujian 4 lapis empiris, dan protokol keamanan rahasia |
+| [AGENTS.md](AGENTS.md) | Konvensi proyek, standar pengujian 3 lapis empiris, dan protokol keamanan rahasia |
 | [docs/experiments_ledger.md](docs/experiments_ledger.md) | Rekam jejak seluruh eksperimen aktif maupun tertutup (*closed/failed approaches*) |
 | [docs/report/runs_summary.md](docs/report/runs_summary.md) | Rekapitulasi metrik numerik seluruh run eksperimen |
 | [docs/report/production_input_matrix.md](docs/report/production_input_matrix.md) | Laporan komparasi empiris 6 varian teks input OCR/PyMuPDF (`PROD-INPUT-MATRIX-001`) |

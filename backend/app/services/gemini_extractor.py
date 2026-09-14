@@ -1,8 +1,8 @@
-"""Production service for Tesseract-to-Gemini Direct Extraction (Option A).
+"""Production service for Tesseract-to-Gemini Scope-Aware extraction.
 
 Extracts structured certificate metadata directly from raw OCR text using Google Gemini
-with strict JSON generationConfig, deterministic temperature 0.0, date standardization,
-and mandatory full_text injection for form_mapper compatibility.
+with the promoted V2 scope rules, strict JSON generationConfig, deterministic temperature
+0.0, date standardization, and mandatory full_text injection for form_mapper compatibility.
 """
 
 from __future__ import annotations
@@ -21,6 +21,151 @@ from app.master_data import FORM_OPTIONS
 from app.services.field_extractor import ExtractedValue
 
 logger = logging.getLogger(__name__)
+_MODEL_PRICING: dict[str, tuple[float, float, float]] = {
+    "gemini-2.5-flash": (0.30, 2.50, 0.03),
+    "gemini-2.5-flash-lite": (0.10, 0.40, 0.01),
+    "gemini-3.1-flash-lite": (0.25, 1.50, 0.025),
+}
+_DEFAULT_EXCHANGE_RATE_IDR = 17758.0
+
+
+def _usage_int(usage: dict[str, Any], key: str) -> int:
+    try:
+        return max(0, int(usage.get(key) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _calculate_cost(
+    model: str,
+    prompt_tokens: int,
+    candidates_tokens: int,
+    cached_tokens: int,
+    thoughts_tokens: int,
+) -> tuple[float, float]:
+    input_rate, output_rate, cache_rate = _MODEL_PRICING.get(
+        model, _MODEL_PRICING["gemini-2.5-flash"]
+    )
+    try:
+        exchange_rate = float(
+            os.getenv("EXCHANGE_RATE_IDR_PER_USD", str(_DEFAULT_EXCHANGE_RATE_IDR))
+        )
+    except ValueError:
+        exchange_rate = _DEFAULT_EXCHANGE_RATE_IDR
+    cost_usd = (
+        (prompt_tokens * input_rate)
+        + ((candidates_tokens + thoughts_tokens) * output_rate)
+        + (cached_tokens * cache_rate)
+    ) / 1_000_000.0
+    return round(cost_usd, 6), round(cost_usd * exchange_rate, 2)
+
+
+def _build_telemetry(
+    *,
+    model: str,
+    status: str,
+    latency_s: float,
+    fallback_reason: str | None = None,
+    prompt_tokens: int = 0,
+    candidates_tokens: int = 0,
+    cached_tokens: int = 0,
+    thoughts_tokens: int = 0,
+    total_tokens: int = 0,
+    calls_count: int = 0,
+    error_type: str | None = None,
+) -> dict[str, Any]:
+    total = total_tokens or (
+        prompt_tokens + candidates_tokens + thoughts_tokens
+    )
+    cost_usd, cost_idr = _calculate_cost(
+        model,
+        prompt_tokens,
+        candidates_tokens,
+        cached_tokens,
+        thoughts_tokens,
+    )
+    detail = {
+        "stage": "gemini_extract",
+        "status": status,
+        "fallback_reason": fallback_reason,
+        "model": model,
+        "prompt_tokens": prompt_tokens,
+        "candidates_tokens": candidates_tokens,
+        "cached_tokens": cached_tokens,
+        "thoughts_tokens": thoughts_tokens,
+        "total_tokens": total,
+        "cost_usd": cost_usd,
+        "cost_idr": cost_idr,
+        "latency_s": round(latency_s, 4),
+        "web_search_queries": [],
+        "error": error_type,
+    }
+    return {
+        "status": status,
+        "gemini_status": status,
+        "model": model,
+        "fallback_reason": fallback_reason,
+        "error_fallback": status != "success",
+        "error": error_type,
+        "error_type": error_type,
+        "latency_s": round(latency_s, 4),
+        "prompt_tokens": prompt_tokens,
+        "candidates_tokens": candidates_tokens,
+        "cached_tokens": cached_tokens,
+        "thoughts_tokens": thoughts_tokens,
+        "total_tokens": total,
+        "cost_usd": cost_usd,
+        "cost_idr": cost_idr,
+        "calls_count": calls_count,
+        "web_search_queries": [],
+        "calls_details": [detail] if calls_count else [],
+    }
+
+
+def _log_telemetry(meta: dict[str, Any], level: int = logging.INFO) -> None:
+    logger.log(
+        level,
+        (
+            "Gemini extraction status=%s model=%s fallback_reason=%s "
+            "latency_s=%.4f calls_count=%d prompt_tokens=%d "
+            "candidates_tokens=%d cached_tokens=%d thoughts_tokens=%d "
+            "total_tokens=%d cost_usd=%.6f cost_idr=%.2f error_type=%s"
+        ),
+        meta.get("status", "unknown"),
+        meta.get("model", "unknown"),
+        meta.get("fallback_reason"),
+        float(meta.get("latency_s", 0.0) or 0.0),
+        int(meta.get("calls_count", 0) or 0),
+        int(meta.get("prompt_tokens", 0) or 0),
+        int(meta.get("candidates_tokens", 0) or 0),
+        int(meta.get("cached_tokens", 0) or 0),
+        int(meta.get("thoughts_tokens", 0) or 0),
+        int(meta.get("total_tokens", 0) or 0),
+        float(meta.get("cost_usd", 0.0) or 0.0),
+        float(meta.get("cost_idr", 0.0) or 0.0),
+        meta.get("error_type"),
+    )
+
+
+def _error_meta(
+    *,
+    model: str,
+    started_at: float,
+    status: str,
+    fallback_reason: str,
+    error_type: str,
+) -> dict[str, Any]:
+    meta = _build_telemetry(
+        model=model,
+        status=status,
+        latency_s=time.perf_counter() - started_at,
+        fallback_reason=fallback_reason,
+        calls_count=1,
+        error_type=error_type,
+    )
+    _log_telemetry(meta, logging.WARNING)
+    return meta
+
 
 SYSTEM_INSTRUCTION = """Anda adalah asisten ekstraksi data sertifikat akademik resmi untuk pengisian form Kartu Hasil Prestasi (KHP).
 Tugas Anda: mengekstrak informasi faktual dari teks OCR mentah sertifikat ke dalam format JSON yang presisi.
@@ -41,14 +186,16 @@ Aturan Wajib:
 5. Tingkat (tingkat):
    - Wajib salah satu nilai enum berikut persis:
      ["Internasional", "Nasional", "Universitas", "Fakultas", "Departemen/Program Studi", "Lainnya"]
+   - Prinsip Utama: Cakupan Sasaran Peserta (Skala Nasional/Internasional) LEBIH UTAMA daripada Jenjang Penyelenggara.
    - Pedoman:
-     * Acara/organisasi tingkat BEM Fakultas (FEB/FKM/FTMM/FST/dsb) -> "Fakultas".
-     * HIMA / Himpunan Mahasiswa Departemen / Program Studi -> "Departemen/Program Studi".
-     * UKM / Ormawa universitas / BSO -> "Lainnya".
-     * Rektorat / BEM Universitas / Direktorat Kemahasiswaan Universitas -> "Universitas".
-     * Lomba / kompetisi / seminar tingkat nasional -> "Nasional".
-     * Konferensi / seminar / event internasional -> "Internasional".
-     * Jika tidak diketahui atau di luar kategori di atas -> "Lainnya".
+     * Lomba, kompetisi, hackathon, seminar, call for papers, atau event terbuka untuk mahasiswa umum lintas perguruan tinggi/nasional -> "Nasional" (MESKIPUN diselenggarakan oleh BEM Fakultas atau Himpunan Mahasiswa Departemen).
+     * Konferensi, symposium, atau event berskala global/lintas negara -> "Internasional".
+     * Kegiatan internal kemahasiswaan/organisasi kampus non-lomba terbuka, tentukan berdasarkan hierarki unit:
+       - Rektorat / BEM Universitas / Direktorat Kemahasiswaan Universitas -> "Universitas".
+       - Kepengurusan, raker, atau kepanitiaan BEM Fakultas / ormawa fakultas -> "Fakultas".
+       - Kepengurusan, raker, atau kepanitiaan Himpunan Mahasiswa / Program Studi -> "Departemen/Program Studi".
+       - UKM / Unit Kegiatan Mahasiswa / BSO -> "Lainnya".
+     * Jika tidak diketahui atau bukti tidak cukup untuk memastikan cakupan -> "Lainnya".
 6. Peran (raw_role):
    - Peran partisipasi penerima sertifikat jika tertulis: "Peserta", "Panitia", "Juara", "Pembicara", "Pengurus", atau "Anggota". Jika tidak tertulis, isi null.
 """
@@ -207,26 +354,29 @@ def extract_fields_with_gemini(
     model: str | None = None,
     timeout_s: float | None = None,
 ) -> tuple[dict[str, ExtractedValue] | None, dict[str, Any]]:
-    """Ekstraksi teks mentah via Gemini REST API.
-
-    Returns:
-        (extracted_dict, metadata_dict)
-        Jika gagal atau API key hilang, mengembalikan (None, {"error": ...})
-        sehingga pipeline produksi dapat melakukan graceful fallback tanpa crash.
-    """
+    """Ekstraksi teks mentah via Gemini REST API tanpa mencatat isi dokumen."""
+    target_model = model or settings.google_gemini_model
     effective_key = api_key or settings.google_api_key
     if not effective_key:
-        return None, {"error": "GOOGLE_API_KEY tidak dikonfigurasi"}
+        meta = _build_telemetry(
+            model=target_model,
+            status="skipped",
+            latency_s=0.0,
+            fallback_reason="missing_api_key",
+            calls_count=0,
+            error_type="MissingApiKey",
+        )
+        meta["error"] = "GOOGLE_API_KEY tidak dikonfigurasi"
+        _log_telemetry(meta)
+        return None, meta
 
-    target_model = model or settings.google_gemini_model
-    effective_timeout = timeout_s or settings.gemini_timeout_seconds
-
+    effective_timeout = (
+        settings.gemini_timeout_seconds if timeout_s is None else timeout_s
+    )
     endpoint_url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
     )
-
     prompt = USER_PROMPT_TEMPLATE.format(raw_ocr_text=raw_ocr_text)
-
     payload = {
         "contents": [
             {
@@ -242,21 +392,25 @@ def extract_fields_with_gemini(
             "responseMimeType": "application/json",
         },
     }
-
     headers = {
         "Content-Type": "application/json",
         "x-goog-api-key": effective_key,
     }
-
     data_bytes = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(endpoint_url, data=data_bytes, headers=headers)
-
     t_start = time.perf_counter()
     try:
         with urllib.request.urlopen(req, timeout=effective_timeout) as resp:
-            latency = time.perf_counter() - t_start
             raw_body = resp.read().decode("utf-8")
             res_json = json.loads(raw_body)
+            usage = res_json.get("usageMetadata") or {}
+            prompt_tokens = _usage_int(usage, "promptTokenCount")
+            candidates_tokens = _usage_int(usage, "candidatesTokenCount")
+            cached_tokens = _usage_int(usage, "cachedContentTokenCount")
+            thoughts_tokens = _usage_int(usage, "thoughtsTokenCount")
+            total_tokens = _usage_int(usage, "totalTokenCount") or (
+                prompt_tokens + candidates_tokens + thoughts_tokens
+            )
 
             cand_text = ""
             candidates = res_json.get("candidates") or []
@@ -264,16 +418,13 @@ def extract_fields_with_gemini(
                 cand_text = (
                     candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 )
-
             cleaned_json_text = clean_json_markdown(cand_text)
             parsed_data = json.loads(cleaned_json_text)
             norm_data = normalize_llm_json(parsed_data)
 
-            # Injeksi full_text untuk form_mapper produksi
             extracted: dict[str, ExtractedValue] = {
                 "full_text": ExtractedValue(raw_ocr_text, 1.0, "tesseract_raw"),
             }
-
             for fld in (
                 "nama_kegiatan_sertifikasi",
                 "nomor_bukti_fisik_nomor_sertifikasi",
@@ -289,26 +440,58 @@ def extract_fields_with_gemini(
                 else:
                     extracted[fld] = ExtractedValue(None, 0.0, "gemini_llm")
 
-            usage = res_json.get("usageMetadata") or {}
-            meta = {
-                "status": "success",
-                "model": target_model,
-                "latency_s": round(latency, 3),
-                "total_tokens": usage.get("totalTokenCount", 0),
-                "prompt_tokens": usage.get("promptTokenCount", 0),
-                "candidates_tokens": usage.get("candidatesTokenCount", 0),
-            }
+            meta = _build_telemetry(
+                model=target_model,
+                status="success",
+                latency_s=time.perf_counter() - t_start,
+                prompt_tokens=prompt_tokens,
+                candidates_tokens=candidates_tokens,
+                cached_tokens=cached_tokens,
+                thoughts_tokens=thoughts_tokens,
+                total_tokens=total_tokens,
+                calls_count=1,
+            )
+            _log_telemetry(meta)
             return extracted, meta
-
-    except Exception as e:
-        latency = time.perf_counter() - t_start
-        err_str = str(e)
-        if effective_key and effective_key in err_str:
-            err_str = err_str.replace(effective_key, "[REDACTED_API_KEY]")
-        logger.warning(f"Gemini extraction failed ({latency:.2f}s): {err_str}")
-        return None, {
-            "status": "error",
-            "model": target_model,
-            "latency_s": round(latency, 3),
-            "error": err_str,
-        }
+    except urllib.error.HTTPError as exc:
+        reason = "rate_limited" if exc.code == 429 else "http_error"
+        status = "rate_limited" if exc.code == 429 else "error"
+        return None, _error_meta(
+            model=target_model,
+            started_at=t_start,
+            status=status,
+            fallback_reason=reason,
+            error_type=f"HTTPError_{exc.code}",
+        )
+    except urllib.error.URLError as exc:
+        return None, _error_meta(
+            model=target_model,
+            started_at=t_start,
+            status="error",
+            fallback_reason="network_error",
+            error_type=type(exc).__name__,
+        )
+    except json.JSONDecodeError as exc:
+        return None, _error_meta(
+            model=target_model,
+            started_at=t_start,
+            status="error",
+            fallback_reason="invalid_response",
+            error_type=type(exc).__name__,
+        )
+    except (TypeError, ValueError) as exc:
+        return None, _error_meta(
+            model=target_model,
+            started_at=t_start,
+            status="error",
+            fallback_reason="invalid_response",
+            error_type=type(exc).__name__,
+        )
+    except Exception as exc:
+        return None, _error_meta(
+            model=target_model,
+            started_at=t_start,
+            status="error",
+            fallback_reason="unexpected_error",
+            error_type=type(exc).__name__,
+        )

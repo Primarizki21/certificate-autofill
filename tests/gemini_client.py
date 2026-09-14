@@ -54,7 +54,7 @@ class GeminiCallResult:
     model: str = ""
     status: str = "success"  # "success" | "rate_limited" | "error"
     error_message: str | None = None
-
+    web_search_queries: list[str] = field(default_factory=list)
     def to_dict(self) -> dict[str, Any]:
         return {
             "response_text": self.response_text,
@@ -70,6 +70,7 @@ class GeminiCallResult:
             "model": self.model,
             "status": self.status,
             "error_message": self.error_message,
+            "web_search_queries": list(self.web_search_queries),
         }
 
 
@@ -85,14 +86,18 @@ def get_exchange_rate() -> float:
 
 
 def load_google_api_key(env_path: str | Path | None = None) -> str | None:
-    """Membaca GOOGLE_API_KEY dari .env.google atau os.environ."""
+    """Membaca GOOGLE_API_KEY dari .env, .env.google, atau os.environ."""
     candidates = []
     if env_path:
         candidates.append(Path(env_path))
     else:
-        candidates.append(Path(".env.google"))
-        candidates.append(Path(__file__).resolve().parent.parent / ".env.google")
-
+        root = Path(__file__).resolve().parent.parent
+        candidates.extend([
+            Path(".env"),
+            root / ".env",
+            Path(".env.google"),
+            root / ".env.google",
+        ])
     for p in candidates:
         if p.exists() and p.is_file():
             try:
@@ -147,7 +152,7 @@ class GeminiClient:
     def __init__(
         self,
         api_key: str | None = None,
-        default_model: str = "gemini-2.5-flash",
+        default_model: str = "gemini-3.1-flash-lite",
         request_delay: float = 1.2,
         max_retries: int = 3,
         timeout_s: float = 60.0,
@@ -187,6 +192,7 @@ class GeminiClient:
         system_instruction: str | None = None,
         model: str | None = None,
         temperature: float = 0.0,
+        enable_grounding: bool = False,
     ) -> GeminiCallResult:
         """Panggil Gemini generateContent dengan ekspektasi JSON terstruktur."""
         target_model = model or self.default_model
@@ -207,11 +213,13 @@ class GeminiClient:
             },
         }
 
+        if enable_grounding:
+            payload["tools"] = [{"google_search": {}}]
+
         if system_instruction:
             payload["systemInstruction"] = {
                 "parts": [{"text": system_instruction}]
             }
-
         encoded_payload = json.dumps(payload).encode("utf-8")
 
         headers = {
@@ -268,6 +276,11 @@ class GeminiClient:
                         exchange_rate=self.exchange_rate,
                     )
 
+                    grounding = {}
+                    if candidates:
+                        grounding = candidates[0].get("groundingMetadata") or {}
+                    web_queries = list(grounding.get("webSearchQueries") or [])
+
                     return GeminiCallResult(
                         response_text=clean_text,
                         parsed_json=parsed,
@@ -282,6 +295,168 @@ class GeminiClient:
                         model=target_model,
                         status="success" if parsed is not None else "error",
                         error_message=None if parsed is not None else "JSON parse error from model response",
+                        web_search_queries=web_queries,
+                    )
+            except urllib.error.HTTPError as he:
+                latency = time.perf_counter() - t_start
+                status_code = he.code
+                error_body = ""
+                try:
+                    error_body = he.read().decode("utf-8", errors="replace")
+                except Exception:
+                    pass
+                clean_err = self._sanitize_error(f"HTTP {status_code}: {error_body[:300]}")
+
+                # Cek header Retry-After bila ada
+                retry_after_hdr = he.headers.get("Retry-After")
+                sleep_time = backoff_delay
+                if retry_after_hdr:
+                    try:
+                        sleep_time = max(float(retry_after_hdr), sleep_time)
+                    except ValueError:
+                        pass
+
+                # Handle Rate Limit (429) & Service Unavailable (503)
+                if status_code in (429, 503) and retries < self.max_retries:
+                    retries += 1
+                    sleep_time = max(sleep_time, 5.0 * retries)
+                    time.sleep(sleep_time)
+                    backoff_delay *= 2.0
+                    continue
+
+                return GeminiCallResult(
+                    response_text="",
+                    parsed_json=None,
+                    latency_s=round(latency, 4),
+                    model=target_model,
+                    status="rate_limited" if status_code == 429 else "error",
+                    error_message=clean_err,
+                )
+
+            except Exception as e:
+                latency = time.perf_counter() - t_start
+                clean_err = self._sanitize_error(str(e))
+                if retries < self.max_retries:
+                    retries += 1
+                    time.sleep(backoff_delay)
+                    backoff_delay *= 2.0
+                    continue
+
+                return GeminiCallResult(
+                    response_text="",
+                    parsed_json=None,
+                    latency_s=round(latency, 4),
+                    model=target_model,
+                    status="error",
+                    error_message=clean_err,
+                )
+
+        return GeminiCallResult(
+            response_text="",
+            parsed_json=None,
+            model=target_model,
+            status="error",
+            error_message="Max retries exceeded",
+        )
+
+    def generate_text(
+        self,
+        prompt: str,
+        system_instruction: str | None = None,
+        model: str | None = None,
+        temperature: float = 0.0,
+        enable_grounding: bool = False,
+    ) -> GeminiCallResult:
+        """Panggil Gemini generateContent untuk menghasilkan teks biasa (non-JSON)."""
+        target_model = model or self.default_model
+        endpoint_url = (
+            f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
+        )
+
+        payload: dict[str, Any] = {
+            "contents": [
+                {
+                    "role": "user",
+                    "parts": [{"text": prompt}],
+                }
+            ],
+            "generationConfig": {
+                "temperature": temperature,
+            },
+        }
+
+        if enable_grounding:
+            payload["tools"] = [{"google_search": {}}]
+
+        if system_instruction:
+            payload["systemInstruction"] = {
+                "parts": [{"text": system_instruction}]
+            }
+        encoded_payload = json.dumps(payload).encode("utf-8")
+        headers = {
+            "Content-Type": "application/json",
+            "x-goog-api-key": self.api_key,
+        }
+
+        retries = 0
+        backoff_delay = 2.0
+
+        while retries <= self.max_retries:
+            self._enforce_pacing()
+            req = urllib.request.Request(endpoint_url, data=encoded_payload, headers=headers)
+            t_start = time.perf_counter()
+
+            try:
+                with urllib.request.urlopen(req, timeout=self.timeout_s) as resp:
+                    latency = time.perf_counter() - t_start
+                    raw_body = resp.read().decode("utf-8")
+                    data = json.loads(raw_body)
+
+                    cand_text = ""
+                    candidates = data.get("candidates") or []
+                    if candidates:
+                        first_cand = candidates[0]
+                        content = first_cand.get("content") or {}
+                        parts = content.get("parts") or []
+                        if parts:
+                            cand_text = parts[0].get("text", "")
+
+                    usage = data.get("usageMetadata") or {}
+                    prompt_tokens = int(usage.get("promptTokenCount") or 0)
+                    cand_tokens = int(usage.get("candidatesTokenCount") or 0)
+                    cached_tokens = int(usage.get("cachedContentTokenCount") or 0)
+                    thoughts_tokens = int(usage.get("thoughtsTokenCount") or 0)
+                    total_tokens = int(usage.get("totalTokenCount") or (prompt_tokens + cand_tokens + thoughts_tokens))
+
+                    cost_usd, cost_idr = calculate_cost(
+                        model=target_model,
+                        prompt_tokens=prompt_tokens,
+                        candidates_tokens=cand_tokens,
+                        cached_tokens=cached_tokens,
+                        thoughts_tokens=thoughts_tokens,
+                        exchange_rate=self.exchange_rate,
+                    )
+
+                    grounding = {}
+                    if candidates:
+                        grounding = candidates[0].get("groundingMetadata") or {}
+                    web_queries = list(grounding.get("webSearchQueries") or [])
+
+                    return GeminiCallResult(
+                        response_text=cand_text.strip(),
+                        parsed_json=None,
+                        prompt_tokens=prompt_tokens,
+                        candidates_tokens=cand_tokens,
+                        cached_tokens=cached_tokens,
+                        thoughts_tokens=thoughts_tokens,
+                        total_tokens=total_tokens,
+                        cost_usd=cost_usd,
+                        cost_idr=cost_idr,
+                        latency_s=round(latency, 4),
+                        model=target_model,
+                        status="success",
+                        error_message=None,
+                        web_search_queries=web_queries,
                     )
 
             except urllib.error.HTTPError as he:

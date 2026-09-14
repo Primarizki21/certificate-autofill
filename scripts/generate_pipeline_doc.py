@@ -94,35 +94,24 @@ def build_blocks(d: dict) -> list[dict]:
     b.append({"t": "p", "x": f"MACRO exact {exp['macro_exact']} / fuzzy {exp['macro_fuzzy']}."})
 
     # ==========================================================================
-    # 4-Layer Empirical Robustness & Generalization Proof Section (WAJIB)
+    # 3-Layer Empirical Robustness & Generalization Proof Section (WAJIB)
     # ==========================================================================
     if "rigorous_validation" in d:
         rv = d["rigorous_validation"]
-        b.append({"t": "h2", "x": "Empirical Robustness & Generalization Proof (4 Lapis Pembuktian)"})
-        b.append({"t": "p", "x": "Untuk memastikan akurasi pipeline mampu melakukan generalisasi pada sertifikat di luar 74 dataset ground truth tanpa overfit, sistem divalidasi melalui 4 lapis pembuktian empiris ketat:"})
+        b.append({"t": "h2", "x": "Empirical Robustness & Generalization Proof (3 Lapis Pembuktian)"})
+        b.append({"t": "p", "x": "Pipeline diuji dengan tiga bukti yang sesuai untuk sistem deterministik: ketahanan terhadap perubahan input, penggunaan anchor struktural, dan safety net review."})
 
-        # Layer 1: 5-Fold Cross-Validation
-        b.append({"t": "h3", "x": "Lapis 1: Validasi Statistik (5-Fold Stratified Cross-Validation)"})
-        b.append({"t": "p", "x": "Seluruh 74 sertifikat dibagi menjadi 5 fold independen. Setiap rule router wajib mencapai Min-Fold Precision 100.0% pada holdout fold uji (0 false positive):"})
-        b.append({"t": "table", "x": {
-            "h": ["Fold", "Total Certs", "Routed Certs", "Correct Decisions", "Precision"],
-            "r": [[f["fold"], str(f["total_certs"]), str(f["routed"]), str(f["correct"]), f["precision"]] for f in rv["kfold_cv"]],
-        }})
-
-        # Layer 2: OOD Stress Testing
-        b.append({"t": "h3", "x": "Lapis 2: Uji Ketahanan Out-of-Distribution (Template Mutation & OCR Noise)"})
+        b.append({"t": "h3", "x": "Lapis 1: Uji Ketahanan Out-of-Distribution (Template Mutation & OCR Noise)"})
         b.append({"t": "p", "x": rv["ood_testing"]["mutation_summary"]})
         b.append({"t": "table", "x": {
             "h": ["Perturbasi / Tingkat Noise", "MACRO Exact", "Delta Degradasi"],
             "r": [[n["noise_level"], n["macro_exact"], n["drop_pt"]] for n in rv["ood_testing"]["noise_curve"]],
         }})
 
-        # Layer 3: Structural Semantic Anchors
-        b.append({"t": "h3", "x": "Lapis 3: Ekstraksi Berbasis Structural Semantic Anchors (Anti-Hardcoding)"})
+        b.append({"t": "h3", "x": "Lapis 2: Ekstraksi Berbasis Structural Semantic Anchors (Anti-Hardcoding)"})
         b.append({"t": "p", "x": "Pola ekstraksi memanfaatkan relasi posisi sintaksis (grammar formal sertifikat) dan standar penanggalan/penomoran surat dinas, bukan pencocokan string nama event statis."})
 
-        # Layer 4: Production Safety Net & Calibrated Review
-        b.append({"t": "h3", "x": "Lapis 4: Arsitektur Safety Net Produksi & Review Calibration (REVIEW-002)"})
+        b.append({"t": "h3", "x": "Lapis 3: Arsitektur Safety Net Produksi & Review Calibration (REVIEW-002)"})
         rsn = rv["review_safety_net"]
         b.append({"t": "table", "x": _kv_table([
             ("Target Recall Review", rsn["target_recall"]),
@@ -198,12 +187,6 @@ def render_xlsx(d: dict, path: str) -> None:
     if "rigorous_validation" in d:
         rv = d["rigorous_validation"]
         ws_val = wb.create_sheet("Generalization & OOD Proof")
-        ws_val.append(["5-Fold Cross-Validation"])
-        ws_val.append(["Fold", "Total Certs", "Routed", "Correct", "Precision"])
-        for f in rv["kfold_cv"]:
-            ws_val.append([f["fold"], f["total_certs"], f["routed"], f["correct"], f["precision"]])
-
-        ws_val.append([])
         ws_val.append(["OOD Noise Curve"])
         ws_val.append(["Noise Level", "MACRO Exact", "Delta"])
         for n in rv["ood_testing"]["noise_curve"]:

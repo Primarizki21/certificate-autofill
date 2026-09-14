@@ -7,7 +7,7 @@ Verifies:
   - Enum mapping for tingkat and role
   - Mandatory full_text injection for form_mapper compatibility
   - Evaluation metric aggregation and Matcher v2 compatibility
-  - 4-layer empirical proof functions (5-fold CV, Bootstrap CI, anti-hardcoding audit, safety net)
+  - 3-layer empirical proof functions (OOD, anti-hardcoding audit, safety net)
 """
 
 import os
@@ -44,11 +44,16 @@ from tests.benchmark_gemini_tesseract import (
 )
 from tests.validate_gemini_4layer import (
     run_anti_hardcoding_audit,
-    run_bootstrap_resampling,
     run_safety_net_calibration,
-    run_stratified_5fold_cv,
 )
 from tests.matchers import match_field
+
+def test_load_google_api_key_custom_path(tmp_path):
+    from tests.gemini_client import load_google_api_key
+    env_file = tmp_path / ".env.test"
+    env_file.write_text("GOOGLE_API_KEY=test_key_sample_123\n")
+    loaded = load_google_api_key(env_path=env_file)
+    assert loaded == "test_key_sample_123"
 
 
 class TestGeminiClientAccounting:
@@ -103,6 +108,63 @@ class TestGeminiClientAccounting:
         sanitized = client._sanitize_error(err_msg)
         assert "AIzaSySECRETKEYTEST12345" not in sanitized
         assert "[REDACTED_API_KEY]" in sanitized
+
+    def test_generate_text_mocked(self, monkeypatch):
+        """Uji generate_text dengan mock urllib response."""
+        import json
+        import urllib.request
+
+        mock_response_data = {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": "TINGKAT: Nasional\nLangkah 4: Nasional"}]
+                    }
+                }
+            ],
+            "usageMetadata": {
+                "promptTokenCount": 50,
+                "candidatesTokenCount": 10,
+                "totalTokenCount": 60,
+            }
+        }
+
+        class MockResp:
+            def read(self):
+                return json.dumps(mock_response_data).encode("utf-8")
+            def __enter__(self):
+                return self
+            def __exit__(self, *args):
+                pass
+
+        monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout: MockResp())
+        client = GeminiClient(api_key="mock_key_123", request_delay=0.0)
+        res = client.generate_text("Prompt test")
+        assert res.status == "success"
+        assert res.response_text == "TINGKAT: Nasional\nLangkah 4: Nasional"
+        assert res.prompt_tokens == 50
+        assert res.candidates_tokens == 10
+        assert res.parsed_json is None
+
+    def test_generate_text_http_error_sanitization(self, monkeypatch):
+        """Uji generate_text menangani HTTPError dengan sanitasi API key."""
+        import urllib.error
+        import urllib.request
+        from io import BytesIO
+
+        err_body = b"Secret AIzaSySECRETKEYTEST12345 leaked in body"
+        def mock_err(req, timeout):
+            raise urllib.error.HTTPError(
+                url="http://test", code=400, msg="Bad Request",
+                hdrs={}, fp=BytesIO(err_body)
+            )
+
+        monkeypatch.setattr(urllib.request, "urlopen", mock_err)
+        client = GeminiClient(api_key="AIzaSySECRETKEYTEST12345", request_delay=0.0, max_retries=0)
+        res = client.generate_text("Test prompt")
+        assert res.status == "error"
+        assert "AIzaSySECRETKEYTEST12345" not in res.error_message
+        assert "[REDACTED_API_KEY]" in res.error_message
 
 
 class TestGeminiFieldExtractor:
@@ -225,33 +287,7 @@ class TestBenchmarkAndEvaluation:
         assert agg["macro_avg"]["exact_pct"] == 75.0
 
 
-class TestEmpirical4LayerComponents:
-    def test_stratified_5fold_cv(self):
-        """Uji split 5-fold CV terstratifikasi."""
-        dummy_certs = []
-        for i in range(25):
-            dummy_certs.append({
-                "doc_type": "scan" if i < 15 else "embedded",
-                "evaluation": {f: {"exact": True} for f in ALL_EVAL_FIELDS},
-            })
-        cv_res = run_stratified_5fold_cv(dummy_certs, seed=42)
-        assert cv_res["k_folds"] == 5
-        assert len(cv_res["fold_results"]) == 5
-        assert cv_res["mean_macro_exact_pct"] == 100.0
-        assert cv_res["std_dev_pct"] == 0.0
-
-    def test_bootstrap_resampling(self):
-        """Uji Bootstrap 1000x resampling."""
-        dummy_certs = []
-        for i in range(20):
-            dummy_certs.append({
-                "evaluation": {f: {"exact": (i % 2 == 0)} for f in ALL_EVAL_FIELDS},
-            })
-        boot_res = run_bootstrap_resampling(dummy_certs, n_bootstraps=100, seed=42)
-        assert "macro_exact_95_ci" in boot_res
-        lower, upper = boot_res["macro_exact_95_ci"]
-        assert lower <= upper
-        assert 0.0 <= lower <= 100.0
+class TestEmpirical3LayerComponents:
 
     def test_anti_hardcoding_audit(self):
         """Uji deteksi anti-hardcoding kata kunci korpus."""
@@ -289,6 +325,29 @@ class TestEmpirical4LayerComponents:
         assert sn_res["confusion_matrix"]["true_positive"] == 1
         assert sn_res["confusion_matrix"]["true_negative"] == 1
         assert sn_res["review_recall_pct"] == 100.0
+    def test_safety_net_accepts_absent_optional_dates(self):
+        """Tanggal yang tidak ada tidak dihitung sebagai error atau alarm."""
+        date_fields = {
+            "waktu_mulai_pelaksanaan",
+            "waktu_selesai_pelaksanaan",
+        }
+        certificate = {
+            "evaluation": {
+                field_name: {
+                    "gt": "" if field_name in date_fields else "Val",
+                    "pred": "" if field_name in date_fields else "Val",
+                    "exact": field_name not in date_fields,
+                    "confidence": 0.0 if field_name in date_fields else 0.90,
+                }
+                for field_name in ALL_EVAL_FIELDS
+            }
+        }
+
+        result = run_safety_net_calibration([certificate])
+
+        assert result["ignored_optional_absences"] == 2
+        assert result["confusion_matrix"]["true_negative"] == 1
+        assert result["gate_recall_pass"] is True
 
 
 class TestDocumentModelSchema:
