@@ -140,7 +140,14 @@ def map_tingkat_v8(
             "penyelenggara_kegiatan": organizer,
             "raw_role": raw_role,
         }
-        llm_val = infer_tingkat(full_text or "", known)
+        if settings.enable_khp_master_staging:
+            llm_val = infer_tingkat(
+                full_text,
+                known,
+                khp_master_staging=True,
+            )
+        else:
+            llm_val = infer_tingkat(full_text, known)
         if llm_val:
             return llm_val, 0.85
 

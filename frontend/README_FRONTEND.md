@@ -38,6 +38,18 @@ POST /api/documents
 GET  /api/documents/{document_id}/result
 ```
 
+## Mode staging master KHP
+
+Aktifkan `ENABLE_KHP_MASTER_STAGING=true` hanya untuk uji staging. Endpoint
+`/api/options` kemudian mengirim opsi kegiatan, tingkat, dan jabatan sebagai
+objek `{id, label, group_id}`. Nilai dropdown tetap menampilkan `label`, sedangkan
+autofill memakai `id` dari `master_resolution`.
+
+Mode ini tidak melakukan insert AUCC. Saat startup staging, backend membuat tabel
+`khp_master_resolutions` untuk menyimpan hasil lookup. Jika data `KEGIATAN_2`
+belum dimuat, hasil menyimpan `lookup_status=not_loaded` dan tetap meminta
+pemeriksaan manual.
+
 ## Alur UI
 
 1. Tahun Akademik, Bukti Fisik, dan Upload Bukti tampil di atas.

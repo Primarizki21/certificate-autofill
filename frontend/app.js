@@ -58,7 +58,7 @@ function bindEvents() {
 }
 
 function applyStrictOrganizerRuleFromLevel() {
-  const tingkat = el('tingkat').value;
+  const tingkat = selectedOptionLabel(el('tingkat'));
   if (['Fakultas', 'Departemen/Program Studi', 'UKM'].includes(tingkat)) {
     ensureOptionAndSet(el('jenis_penyelenggara'), 'PTN di Indonesia');
   } else if (tingkat === 'Internasional') {
@@ -82,12 +82,25 @@ function fillSelect(selectId, values, selectedValue = '') {
   if (!select) return;
   select.innerHTML = '';
   values.forEach(value => {
+    const isMasterOption = value && typeof value === 'object';
+    if (isMasterOption && value.active === false) return;
+    const label = isMasterOption ? String(value.label || '') : String(value);
+    if (!label) return;
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
+    option.value = isMasterOption ? String(value.id) : label;
+    option.textContent = label;
+    option.dataset.label = label;
+    if (isMasterOption && value.group_id != null) {
+      option.dataset.groupId = String(value.group_id);
+    }
     select.appendChild(option);
   });
   if (selectedValue) ensureOptionAndSet(select, selectedValue);
+}
+
+function selectedOptionLabel(select) {
+  const selected = select?.selectedOptions?.[0];
+  return selected?.dataset?.label || selected?.textContent || select?.value || '';
 }
 
 function setInitialDefaults() {
@@ -187,12 +200,18 @@ function pollResult(documentId) {
 
 function applyResult(data) {
   const fields = data.fields || {};
+  const masterFields = data.master_resolution?.fields || {};
   fieldIds.forEach(fieldId => {
     const item = fields[fieldId];
     if (!item) return;
     const element = el(fieldId);
     if (!element) return;
-    const value = normalizeDateForDisplay(fieldId, item.value || '');
+    const masterField = masterFields[fieldId];
+    const selectedValue = masterField?.id ?? item.value ?? '';
+    const value = normalizeDateForDisplay(
+      fieldId,
+      element.tagName === 'SELECT' ? selectedValue : item.value || '',
+    );
     if (element.tagName === 'SELECT') ensureOptionAndSet(element, value);
     else element.value = value;
   });
@@ -206,15 +225,17 @@ function normalizeDateForDisplay(fieldId, value) {
 }
 
 function ensureOptionAndSet(select, value) {
-  if (!select || !value) return;
-  const exists = Array.from(select.options).some(option => option.value === value);
+  if (!select || value === null || value === undefined || value === '') return;
+  const target = String(value);
+  const exists = Array.from(select.options).some(option => option.value === target);
   if (!exists) {
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
+    option.value = target;
+    option.textContent = target;
+    option.dataset.label = target;
     select.appendChild(option);
   }
-  select.value = value;
+  select.value = target;
 }
 
 function renderDebug(data) {

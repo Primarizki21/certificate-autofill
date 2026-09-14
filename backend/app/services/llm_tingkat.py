@@ -14,7 +14,7 @@ import urllib.request
 from urllib.error import URLError
 
 from app.config import settings
-from app.master_data import FORM_OPTIONS
+from app.master_data import FORM_OPTIONS, KHP_TINGKAT_LABELS
 
 TINGKAT_OPTIONS = [o for o in FORM_OPTIONS["tingkat"] if o not in ("", "--")]
 _OLLAMA_HOST = settings.ollama_host
@@ -84,6 +84,20 @@ PETUNJUK:
 - skala internasional == Internasional
 - UNIVERSITAS AIRLANGGA = institusi induk, BUKAN penentu tingkat
 - Jika tidak yakin, pilih yang paling mendekati
+"""
+
+_KHP_STAGING_INSTR = """Tentukan tingkat kegiatan dari sertifikat berikut.
+
+Opsi yang diizinkan:
+{options}
+
+Aturan:
+- gunakan label master persis, tanpa penjelasan
+- cakupan eksplisit seperti nasional, regional, atau internasional mengalahkan nama unit
+- UKM atau Unit Kegiatan Mahasiswa harus tetap UKM
+- departemen, program studi, dan prodi -> Departemen/Program Studi
+- fakultas -> Fakultas; universitas atau rektorat -> Universitas
+- jika bukti tidak cukup, pilih Lainnya
 """
 
 # v8 Phase 2 f_bias: koreksi bias bahasa Inggris.
@@ -172,13 +186,30 @@ def _budget_for(difficulty: str) -> int:
     return {"strong": 140, "normal": 200, "poor_ocr": 300}[difficulty]
 
 
-def build_prompt_tingkat_bias(raw_text: str, known_fields: dict[str, str]) -> str:
-    """Prompt f_bias — sama struktur dengan tests build_prompt_tingkat_bias."""
+def build_prompt_tingkat_bias(
+    raw_text: str,
+    known_fields: dict[str, str],
+    *,
+    khp_master_staging: bool = False,
+) -> str:
+    """Prompt f_bias dengan opsi level sesuai profil pipeline."""
     organizer = (known_fields or {}).get("penyelenggara_kegiatan")
+    options = (
+        tuple(KHP_TINGKAT_LABELS)
+        if khp_master_staging
+        else tuple(TINGKAT_OPTIONS)
+    )
     if _needs_full_prompt(raw_text, organizer):
         minimized = minimize_text(raw_text)
+        instruction = (
+            _KHP_STAGING_INSTR.format(
+                options="\n".join(f"- {option}" for option in options)
+            )
+            if khp_master_staging
+            else _INSTR_FULL
+        )
         lines = [
-            _INSTR_FULL.strip(),
+            instruction.strip(),
             *("  " + b for b in _BIAS_LINES),
             "Teks sertifikat (bagian relevan):",
             minimized,
@@ -191,7 +222,7 @@ def build_prompt_tingkat_bias(raw_text: str, known_fields: dict[str, str]) -> st
         difficulty = _difficulty(raw_text)
         minimized = minimize_text(raw_text, max_chars=_budget_for(difficulty))
         lines = [
-            _INSTR.format(options=" / ".join(TINGKAT_OPTIONS)),
+            _INSTR.format(options=" / ".join(options)),
             *_BIAS_LINES,
             "Teks sertifikat (bagian relevan):",
             minimized,
@@ -203,19 +234,47 @@ def build_prompt_tingkat_bias(raw_text: str, known_fields: dict[str, str]) -> st
     return "\n".join(lines)
 
 
-def validate_tingkat(value: str | None) -> str | None:
+def validate_tingkat(
+    value: str | None,
+    *,
+    khp_master_staging: bool = False,
+) -> str | None:
     if not value:
         return None
     clean = value.strip().rstrip(".")
     if not clean:
         return None
+    options = (
+        tuple(KHP_TINGKAT_LABELS)
+        if khp_master_staging
+        else tuple(TINGKAT_OPTIONS)
+    )
     clean_upper = clean.upper()
-    valid_upper = [o.upper() for o in TINGKAT_OPTIONS]
+    valid_upper = [option.upper() for option in options]
     if clean_upper in valid_upper:
-        return TINGKAT_OPTIONS[valid_upper.index(clean_upper)]
-    for opt in TINGKAT_OPTIONS:
-        if opt.upper() in clean_upper or clean_upper in opt.upper():
-            return opt
+        return options[valid_upper.index(clean_upper)]
+    for option in options:
+        if option.upper() in clean_upper or clean_upper in option.upper():
+            return option
+    if khp_master_staging:
+        aliases = (
+            ("NASIONAL TIDAK TERAKREDITASI", "Nasional Tidak Ter-Akreditasi"),
+            ("NASIONAL TIDAK TER-AKREDITASI", "Nasional Tidak Ter-Akreditasi"),
+            ("NATIONAL NOT ACCREDITED", "Nasional Tidak Ter-Akreditasi"),
+            ("NON-ACCREDITED NATIONAL", "Nasional Tidak Ter-Akreditasi"),
+            ("NASIONAL TERAKREDITASI", "Nasional Ter-Akreditasi"),
+            ("NASIONAL TER-AKREDITASI", "Nasional Ter-Akreditasi"),
+            ("ACCREDITED NATIONAL", "Nasional Ter-Akreditasi"),
+            ("REGIONAL", "Regional"),
+            ("UKM", "UKM"),
+            ("UNIT KEGIATAN MAHASISWA", "UKM"),
+            ("LANJUT", "Lanjut"),
+            ("MENENGAH", "Menengah"),
+            ("DASAR", "Dasar"),
+        )
+        for needle, option in aliases:
+            if needle in clean_upper and option in options:
+                return option
     if "DEPARTEMEN" in clean_upper or "PRODI" in clean_upper:
         return "Departemen/Program Studi"
     if "NASIONAL" in clean_upper:
@@ -248,11 +307,20 @@ def call_ollama(prompt: str, timeout: float = 15.0) -> str | None:
         return None
 
 
-def infer_tingkat(raw_text: str, known_fields: dict[str, str]) -> str | None:
+def infer_tingkat(
+    raw_text: str,
+    known_fields: dict[str, str],
+    *,
+    khp_master_staging: bool = False,
+) -> str | None:
     """Infer tingkat via Ollama (f_bias). None bila gagal/invalid."""
     try:
-        prompt = build_prompt_tingkat_bias(raw_text, known_fields)
+        prompt = build_prompt_tingkat_bias(
+            raw_text,
+            known_fields,
+            khp_master_staging=khp_master_staging,
+        )
         response = call_ollama(prompt)
-        return validate_tingkat(response)
+        return validate_tingkat(response, khp_master_staging=khp_master_staging)
     except Exception:
         return None

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Collection
 from dataclasses import dataclass
 from typing import Mapping
 
@@ -74,6 +75,40 @@ _LEVEL_PATTERNS = {
     "Lainnya": (r"\bukm\b", r"\bbs[o0]\b", r"\bstudent\s+association\b"),
 }
 
+_KHP_LEVEL_PATTERNS = {
+    "Internasional": (r"\binternasional\b", r"\binternational\b"),
+    "Nasional Ter-Akreditasi": (
+        r"\bnasional\s+ter[\s-]?\s*akreditasi\b",
+        r"\baccredited\s+national\b",
+    ),
+    "Nasional Tidak Ter-Akreditasi": (
+        r"\bnasional\s+tidak\s+ter[\s-]?\s*akreditasi\b",
+        r"\bnational\s+not[\s-]?\s*accredited\b",
+        r"\bnon[\s-]?accredited\s+national\b",
+    ),
+    "Nasional": (
+        r"\bnasional\b(?!\s+(?:ter\s*[- ]?\s*akreditasi|"
+        r"tidak\s+ter\s*[- ]?\s*akreditasi)\b)",
+        r"\bnational\b(?!\s+(?:non[\s-]?\s*accredited|"
+        r"not\s+accredited)\b)",
+    ),
+    "Regional": (r"\bregional\b",),
+    "Universitas": (r"\buniversitas\b", r"\buniversity\b"),
+    "Fakultas": (r"\bfakultas\b", r"\bfaculty\b"),
+    "Departemen/Program Studi": (
+        r"\bdepartemen\b",
+        r"\bdepartment\b",
+        r"\bprogram\s+studi\b",
+        r"\bprodi\b",
+        r"\bstudy\s+program\b",
+    ),
+    "UKM": (r"\bukm\b", r"\bbs[o0]\b", r"\bstudent\s+activity\s+unit\b"),
+    "Lanjut": (r"\btingkat lanjut\b", r"\badvanced level\b"),
+    "Menengah": (r"\btingkat menengah\b", r"\bintermediate level\b"),
+    "Dasar": (r"\btingkat dasar\b", r"\bbasic level\b"),
+    "Lainnya": (r"\blainnya\b", r"\bother\b"),
+}
+
 
 def _value_and_confidence(value: object) -> tuple[str | None, float]:
     if isinstance(value, ExtractedValue):
@@ -136,11 +171,15 @@ def _number_seen(raw_text: str, value: str | None) -> bool:
     return bool(compact_value and compact_value in _compact(raw_text))
 
 
-def _level_evidence(raw_text: str) -> set[str]:
+def _level_evidence(
+    raw_text: str,
+    patterns: Mapping[str, tuple[str, ...]] | None = None,
+) -> set[str]:
     text = raw_text or ""
     evidence: set[str] = set()
-    for level, patterns in _LEVEL_PATTERNS.items():
-        term = "(?:" + "|".join(patterns) + ")"
+    active_patterns = _LEVEL_PATTERNS if patterns is None else patterns
+    for level, level_patterns in active_patterns.items():
+        term = "(?:" + "|".join(level_patterns) + ")"
         before_label = (
             rf"\b(?:tingkat|level|scope|skala|jenjang|cakupan)\b"
             rf"\s*(?:kegiatan|acara|event|competition)?\s*[:\-]?\s*{term}"
@@ -156,8 +195,18 @@ def _level_evidence(raw_text: str) -> set[str]:
 def build_semantic_review(
     raw_text: str,
     fields: Mapping[str, object],
+    *,
+    valid_tingkat_options: Collection[str] | None = None,
 ) -> dict[str, SemanticReviewAnnotation]:
     """Bangun flag review tanpa mengubah nilai hasil ekstraksi."""
+    valid_levels = frozenset(
+        VALID_TINGKAT if valid_tingkat_options is None else valid_tingkat_options
+    )
+    level_patterns = (
+        _LEVEL_PATTERNS
+        if valid_tingkat_options is None
+        else _KHP_LEVEL_PATTERNS
+    )
     reasons: dict[str, list[str]] = {
         field_name: [] for field_name in fields if field_name in SEMANTIC_FIELDS
     }
@@ -207,10 +256,10 @@ def build_semantic_review(
         add(number_field, "number_value_not_verified_in_raw_ocr")
 
     level = values.get("tingkat")
-    if not level or level not in VALID_TINGKAT:
+    if not level or level not in valid_levels:
         add("tingkat", "unmapped_level_enum")
     else:
-        evidence = _level_evidence(raw_text)
+        evidence = _level_evidence(raw_text, level_patterns)
         if not evidence:
             add("tingkat", "level_evidence_unverified")
         elif len(evidence) > 1:

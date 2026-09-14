@@ -60,6 +60,8 @@ class Settings:
     enable_llm_tingkat: bool = os.getenv("ENABLE_LLM_TINGKAT", "false").lower() == "true"
     ollama_host: str = os.getenv("OLLAMA_HOST", "http://127.0.0.1:11434")
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
+    # KHP master-aware pipeline stays isolated until explicit promotion.
+    enable_khp_master_staging: bool = os.getenv("ENABLE_KHP_MASTER_STAGING", "false").lower() == "true"
     # Production Tesseract-to-Gemini path: V2 scope-aware prompt plus
     # structural title/organizer boundaries. Default true; disable to route
     # documents directly through offline extraction.

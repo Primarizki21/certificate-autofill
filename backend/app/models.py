@@ -22,6 +22,12 @@ class Document(Base):
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
     jobs = relationship("ExtractionJob", back_populates="document", cascade="all, delete-orphan")
+    khp_master_resolution = relationship(
+        "KHPMasterResolution",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan",
+    )
 
 
 class ExtractionJob(Base):
@@ -55,3 +61,19 @@ class ExtractedField(Base):
     source = Column(String(100), nullable=False)
     needs_review = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class KHPMasterResolution(Base):
+    __tablename__ = "khp_master_resolutions"
+
+    id = Column(String(36), primary_key=True)
+    document_id = Column(
+        UUID(as_uuid=False),
+        ForeignKey("documents.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    resolution_json = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    document = relationship("Document", back_populates="khp_master_resolution")

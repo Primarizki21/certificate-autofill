@@ -14,10 +14,11 @@ import re
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Collection
 from typing import Any
 
 from app.config import settings
-from app.master_data import FORM_OPTIONS
+from app.master_data import FORM_OPTIONS, KHP_TINGKAT_LABELS
 from app.services.field_extractor import ExtractedValue
 
 logger = logging.getLogger(__name__)
@@ -216,6 +217,35 @@ Ekstrak 7 field berikut dalam format JSON:
   "raw_role": string atau null
 }}
 """
+KHP_STAGING_SYSTEM_INSTRUCTION = f"""Anda adalah ekstraktor fakta sertifikat untuk staging KHP yang memakai master data resmi.
+Ekstrak hanya teks OCR. Jangan mengarang nilai atau mengubah nama kegiatan bebas.
+
+Tanggal harus "DD/MM/YYYY" atau null. Nomor sertifikat harus dipertahankan utuh.
+Penyelenggara hanya organisasi atau institusi, bukan nama penerima atau penandatangan.
+Untuk tingkat, pilih tepat satu label master berdasarkan cakupan yang tertulis:
+[{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
+Jangan mengganti tingkat UKM dengan Universitas atau Lainnya bila teks menyebut UKM secara eksplisit.
+raw_role harus memuat peran atau capaian faktual selengkap yang tertulis, misalnya "Juara II",
+"Peserta Terpilih", "Pembicara", "Panitia", atau "Brevet A/B/C". Jika tidak tertulis, isi null.
+"""
+
+KHP_STAGING_USER_PROMPT_TEMPLATE = f"""Berikut teks OCR mentah dokumen sertifikat:
+--- TEKS OCR AWAL ---
+{{raw_ocr_text}}
+--- TEKS OCR AKHIR ---
+
+Ekstrak 7 field berikut dalam format JSON. Field tingkat wajib memakai enum master berikut:
+[{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
+{{{{
+  "nama_kegiatan_sertifikasi": string atau null,
+  "nomor_bukti_fisik_nomor_sertifikasi": string atau null,
+  "penyelenggara_kegiatan": string atau null,
+  "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "tingkat": string dari enum master atau null,
+  "raw_role": string atau null
+}}}}
+"""
 
 VALID_TINGKAT_OPTIONS = set(FORM_OPTIONS.get("tingkat", [
     "Internasional",
@@ -287,7 +317,11 @@ def standardize_date(date_str: str | None) -> str | None:
     return raw
 
 
-def normalize_llm_json(data: dict[str, Any] | None) -> dict[str, str | None]:
+def normalize_llm_json(
+    data: dict[str, Any] | None,
+    *,
+    valid_tingkat_options: Collection[str] | None = None,
+) -> dict[str, str | None]:
     """Normalisasi dictionary JSON hasil ekstraksi LLM."""
     out: dict[str, str | None] = {
         "nama_kegiatan_sertifikasi": None,
@@ -323,13 +357,49 @@ def normalize_llm_json(data: dict[str, Any] | None) -> dict[str, str | None]:
     tingkat_raw = data.get("tingkat")
     if tingkat_raw and isinstance(tingkat_raw, str):
         t_clean = tingkat_raw.strip()
+        valid_options = tuple(
+            VALID_TINGKAT_OPTIONS
+            if valid_tingkat_options is None
+            else valid_tingkat_options
+        )
         matched = None
-        for opt in VALID_TINGKAT_OPTIONS:
+        for opt in valid_options:
             if opt.lower() == t_clean.lower():
                 matched = opt
                 break
         if matched:
             out["tingkat"] = matched
+        elif valid_tingkat_options is not None:
+            t_low = t_clean.lower()
+            stage_fallbacks = (
+                (
+                    r"nasional\s+tidak\s+ter[\s-]?\s*akreditasi|"
+                    r"national\s+not[\s-]?\s*accredited|"
+                    r"non[\s-]?\s*accredited\s+national",
+                    "Nasional Tidak Ter-Akreditasi",
+                ),
+                (
+                    r"nasional\s+ter[\s-]?\s*akreditasi|"
+                    r"accredited\s+national",
+                    "Nasional Ter-Akreditasi",
+                ),
+                (r"internasional|international", "Internasional"),
+                (r"regional", "Regional"),
+                (r"departemen|department|prodi|study program", "Departemen/Program Studi"),
+                (r"fakultas|faculty", "Fakultas"),
+                (r"universitas|university", "Universitas"),
+                (r"\bukm\b|unit kegiatan mahasiswa|student activity unit", "UKM"),
+                (r"nasional|national", "Nasional"),
+                (r"lanjut|advanced", "Lanjut"),
+                (r"menengah|intermediate", "Menengah"),
+                (r"dasar|basic", "Dasar"),
+            )
+            for pattern, label in stage_fallbacks:
+                if re.search(pattern, t_low) and label in valid_options:
+                    out["tingkat"] = label
+                    break
+            else:
+                out["tingkat"] = "Lainnya"
         else:
             t_low = t_clean.lower()
             if "internasional" in t_low or "international" in t_low:
@@ -353,6 +423,7 @@ def extract_fields_with_gemini(
     api_key: str | None = None,
     model: str | None = None,
     timeout_s: float | None = None,
+    khp_master_staging: bool = False,
 ) -> tuple[dict[str, ExtractedValue] | None, dict[str, Any]]:
     """Ekstraksi teks mentah via Gemini REST API tanpa mencatat isi dokumen."""
     target_model = model or settings.google_gemini_model
@@ -376,7 +447,17 @@ def extract_fields_with_gemini(
     endpoint_url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
     )
-    prompt = USER_PROMPT_TEMPLATE.format(raw_ocr_text=raw_ocr_text)
+    prompt_template = (
+        KHP_STAGING_USER_PROMPT_TEMPLATE
+        if khp_master_staging
+        else USER_PROMPT_TEMPLATE
+    )
+    system_instruction = (
+        KHP_STAGING_SYSTEM_INSTRUCTION
+        if khp_master_staging
+        else SYSTEM_INSTRUCTION
+    )
+    prompt = prompt_template.format(raw_ocr_text=raw_ocr_text)
     payload = {
         "contents": [
             {
@@ -385,7 +466,7 @@ def extract_fields_with_gemini(
             }
         ],
         "systemInstruction": {
-            "parts": [{"text": SYSTEM_INSTRUCTION}]
+            "parts": [{"text": system_instruction}]
         },
         "generationConfig": {
             "temperature": 0.0,
@@ -420,7 +501,12 @@ def extract_fields_with_gemini(
                 )
             cleaned_json_text = clean_json_markdown(cand_text)
             parsed_data = json.loads(cleaned_json_text)
-            norm_data = normalize_llm_json(parsed_data)
+            norm_data = normalize_llm_json(
+                parsed_data,
+                valid_tingkat_options=(
+                    KHP_TINGKAT_LABELS if khp_master_staging else None
+                ),
+            )
 
             extracted: dict[str, ExtractedValue] = {
                 "full_text": ExtractedValue(raw_ocr_text, 1.0, "tesseract_raw"),
