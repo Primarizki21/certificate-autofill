@@ -192,11 +192,11 @@ async function uploadAndParse(event) {
 
     const uploaded = await response.json();
     state.currentDocumentId = uploaded.document_id;
-    setStatus('PDF berhasil diupload. Menunggu hasil parsing extraction...');
+    setStatus('PDF berhasil diunggah. Sedang memproses dokumen...');
     pollResult(uploaded.document_id);
   } catch (error) {
     setLoading(false);
-    setStatus(error.message || String(error));
+    setStatus('Gagal mengunggah dokumen. Silakan coba kembali.');
   }
 }
 
@@ -223,7 +223,7 @@ function pollResult(documentId) {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
         setLoading(false);
-        setStatus('Parsing gagal. Cek terminal backend untuk detail error.');
+        setStatus('Ekstraksi dokumen tidak berhasil. Silakan coba kembali.');
         return;
       }
 
@@ -235,13 +235,13 @@ function pollResult(documentId) {
         setLoading(false);
         setStatus(data.needs_review ? 'Pengisian form selesai otomatis. Silakan periksa kembali isian sebelum menyimpan.' : 'Pengisian form selesai otomatis.');
       } else {
-        setStatus(`Status parsing: ${data.status}. Menunggu...`);
+        setStatus('Sedang memproses dokumen...');
       }
     } catch (error) {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
       setLoading(false);
-      setStatus(error.message || String(error));
+      setStatus('Terjadi kendala saat memproses dokumen. Silakan coba kembali.');
     }
   }, 1200);
 }
@@ -458,4 +458,4 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-init().catch(error => setStatus(`Frontend gagal inisialisasi: ${error.message || error}`));
+init().catch(() => setStatus('Frontend gagal memuat opsi form. Silakan refresh halaman.'));

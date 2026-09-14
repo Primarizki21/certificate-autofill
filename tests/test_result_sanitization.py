@@ -39,6 +39,9 @@ def test_html_and_js_contain_no_internal_review_panel() -> None:
         content = js_path.read_text(encoding="utf-8")
         assert "renderAuccResolution" not in content, f"renderAuccResolution found in {js_path}"
         assert "humanizeReason" not in content, f"humanizeReason found in {js_path}"
+        assert "error.message" not in content, f"error.message leaked in {js_path}"
+        assert "Cek terminal backend" not in content, f"Internal terminal reference leaked in {js_path}"
+        assert "Status parsing:" not in content, f"Raw status parsing string leaked in {js_path}"
 
 
 def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(monkeypatch) -> None:
