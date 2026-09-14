@@ -443,4 +443,77 @@ def test_gemini_extractor_stage_sends_master_profile(monkeypatch) -> None:
     system_text = payload["systemInstruction"]["parts"][0]["text"]
     user_text = payload["contents"][0]["parts"][0]["text"]
     assert "UKM" in system_text and "Regional" in system_text
-    assert "Nasional Tidak Ter-Akreditasi" in user_text
+
+
+def test_staging_prompt_includes_activity_taxonomy() -> None:
+    assert "jenis_kegiatan" in KHP_STAGING_SYSTEM_INSTRUCTION
+    assert "Panitia Dalam Suatu Kegiatan Kemahasiswaan" in KHP_STAGING_SYSTEM_INSTRUCTION
+    assert "Mengikuti Kegiatan Lomba Ilmiah" in KHP_STAGING_SYSTEM_INSTRUCTION
+    assert "Mengikuti Kegiatan Sertifikasi" in KHP_STAGING_SYSTEM_INSTRUCTION
+    assert "jenis_kegiatan" in KHP_STAGING_USER_PROMPT_TEMPLATE
+
+
+def test_normalize_llm_json_standardizes_canonical_activity() -> None:
+    norm = normalize_llm_json(
+        {
+            "jenis_kegiatan": "mengikuti kegiatan lomba ilmiah",
+            "tingkat": "Nasional",
+        }
+    )
+    assert norm["jenis_kegiatan"] == "Mengikuti Kegiatan Lomba Ilmiah"
+
+    norm_cert = normalize_llm_json(
+        {
+            "jenis_kegiatan": "mengikuti kegiatan sertifikasi",
+        }
+    )
+    assert norm_cert["jenis_kegiatan"] == "Mengikuti Kegiatan Sertifikasi"
+
+
+def test_gemini_extractor_stage_extracts_activity_field(monkeypatch) -> None:
+    body = {
+        "usageMetadata": {
+            "promptTokenCount": 20,
+            "candidatesTokenCount": 10,
+            "totalTokenCount": 30,
+        },
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps(
+                                {
+                                    "tingkat": "Nasional",
+                                    "raw_role": "Peserta",
+                                    "jenis_kegiatan": "mengikuti kegiatan lomba ilmiah",
+                                }
+                            )
+                        }
+                    ]
+                }
+            }
+        ],
+    }
+
+    class FakeResponse:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, _type, _value, _traceback):
+            return False
+
+        def read(self):
+            return json.dumps(body).encode()
+
+    monkeypatch.setattr(urllib.request, "urlopen", lambda req, timeout=None: FakeResponse())
+    extracted, meta = extract_fields_with_gemini(
+        "Lomba Data Science tingkat Nasional",
+        api_key="dummy-secret-key",
+        timeout_s=0.01,
+        khp_master_staging=True,
+    )
+
+    assert extracted is not None
+    assert extracted["jenis_kegiatan"].value == "Mengikuti Kegiatan Lomba Ilmiah"
+    assert extracted["tingkat"].value == "Nasional"

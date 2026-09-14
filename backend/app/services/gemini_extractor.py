@@ -227,6 +227,23 @@ Untuk tingkat, pilih tepat satu label master berdasarkan cakupan yang tertulis:
 Jangan mengganti tingkat UKM dengan Universitas atau Lainnya bila teks menyebut UKM secara eksplisit.
 raw_role harus memuat peran atau capaian faktual selengkap yang tertulis, misalnya "Juara II",
 "Peserta Terpilih", "Pembicara", "Panitia", atau "Brevet A/B/C". Jika tidak tertulis, isi null.
+
+Untuk jenis_kegiatan, pilih label kegiatan resmi berikut yang paling sesuai jika teridentifikasi jelas:
+- Kepanitiaan -> 'Panitia Dalam Suatu Kegiatan Kemahasiswaan'
+- Peserta Lomba/Kompetisi ilmiah -> 'Mengikuti Kegiatan Lomba Ilmiah'
+- Prestasi/Juara Lomba ilmiah -> 'Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Entrepreneurship/Business Plan'
+- Seminar/Workshop/Webinar/Lokakarya/Forum Ilmiah -> 'Mengikuti kegiatan/forum ilmiah (seminar, lokakarya, workshop, pameran)'
+- Kuliah Tamu -> 'Mengikuti kuliah tamu'
+- Sertifikasi Kompetensi/Profesi -> 'Mengikuti Kegiatan Sertifikasi'
+- PKKMB -> 'PKKMB'
+- KKN -> 'KKN-BBM'
+- Kepengurusan Organisasi/BEM/HIMA -> 'Pengurus Organisasi'
+- Anggota Organisasi -> 'Anggota Aktif Organisasi'
+- Pelatihan Kepemimpinan -> 'Mengikuti Pelatihan Kepemimpinan LKMM' atau 'Latihan Kepemimpinan Lainnya'
+- Bakti Sosial -> 'Mengikuti Pelaksanaan Bakti Sosial'
+- Kegiatan Minat/Bakat/Olahraga/Seni -> 'Mengikuti kegiatan Minat dan Bakat (Olahraga, Seni dan Kerohanian)' atau 'Memperoleh prestasi dalam kegiatan Minat dan Bakat (Olahraga, Seni,Kerohanian dan IT)'
+- Magang -> 'Magang Kerja' atau 'Magang UKM'
+Jika tidak yakin atau belum jelas, isi null.
 """
 
 KHP_STAGING_USER_PROMPT_TEMPLATE = f"""Berikut teks OCR mentah dokumen sertifikat:
@@ -234,7 +251,7 @@ KHP_STAGING_USER_PROMPT_TEMPLATE = f"""Berikut teks OCR mentah dokumen sertifika
 {{raw_ocr_text}}
 --- TEKS OCR AKHIR ---
 
-Ekstrak 7 field berikut dalam format JSON. Field tingkat wajib memakai enum master berikut:
+Ekstrak 8 field berikut dalam format JSON. Field tingkat wajib memakai enum master berikut:
 [{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
 {{{{
   "nama_kegiatan_sertifikasi": string atau null,
@@ -243,7 +260,8 @@ Ekstrak 7 field berikut dalam format JSON. Field tingkat wajib memakai enum mast
   "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
   "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
   "tingkat": string dari enum master atau null,
-  "raw_role": string atau null
+  "raw_role": string atau null,
+  "jenis_kegiatan": string kategori resmi atau null
 }}}}
 """
 
@@ -331,8 +349,8 @@ def normalize_llm_json(
         "waktu_selesai_pelaksanaan": None,
         "tingkat": None,
         "raw_role": None,
+        "jenis_kegiatan": None,
     }
-
     if not data or not isinstance(data, dict):
         return out
 
@@ -414,6 +432,18 @@ def normalize_llm_json(
                 out["tingkat"] = "Universitas"
             else:
                 out["tingkat"] = "Lainnya"
+
+    jenis_raw = data.get("jenis_kegiatan")
+    if jenis_raw and isinstance(jenis_raw, str):
+        j_clean = jenis_raw.strip()
+        if j_clean.lower() not in ("null", "none", "-", ""):
+            from app.master_data import KHP_ACTIVITY_MASTER
+            canonical_labels = {item[1] for item in KHP_ACTIVITY_MASTER}
+            matched_j = next(
+                (lbl for lbl in canonical_labels if lbl.lower() == j_clean.lower()),
+                None,
+            )
+            out["jenis_kegiatan"] = matched_j or j_clean
 
     return out
 
@@ -525,6 +555,10 @@ def extract_fields_with_gemini(
                     extracted[fld] = ExtractedValue(val, 0.90, "gemini_llm")
                 else:
                     extracted[fld] = ExtractedValue(None, 0.0, "gemini_llm")
+            if khp_master_staging and norm_data.get("jenis_kegiatan"):
+                extracted["jenis_kegiatan"] = ExtractedValue(
+                    norm_data["jenis_kegiatan"], 0.90, "gemini_llm"
+                )
 
             meta = _build_telemetry(
                 model=target_model,
