@@ -277,15 +277,6 @@ def run_extraction_pipeline(
 
         staging_fields = dict(extracted)
         staging_fields.update(mapped)
-        if (
-            extracted.get("jenis_kegiatan")
-            and extracted["jenis_kegiatan"].value
-            and (
-                not mapped.get("jenis_kegiatan")
-                or mapped["jenis_kegiatan"].value in (None, "", "--")
-            )
-        ):
-            staging_fields["jenis_kegiatan"] = extracted["jenis_kegiatan"]
         resolution = resolve_khp_master_fields(raw_text, staging_fields)
         mapped = apply_khp_master_mapping(mapped, resolution)
         master_resolution = resolution.as_dict()
