@@ -56,6 +56,10 @@ async def _storage_cleanup_loop() -> None:
 @app.on_event("startup")
 async def on_startup() -> None:
     init_db()
+    if settings.enable_khp_master_staging:
+        from app.services.aucc_catalog import warm_aucc_catalog
+
+        warm_aucc_catalog()
     cleanup_expired_jobs_and_uploads()
     app.state.storage_cleanup_task = asyncio.create_task(_storage_cleanup_loop())
 

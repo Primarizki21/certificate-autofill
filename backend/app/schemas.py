@@ -33,6 +33,8 @@ class MasterResolution(BaseModel):
     status: str
     id_kegiatan_2: int | None = None
     lookup_status: str
+    master_rule: dict[str, object] | None = None
+    rule_status: str = "not_loaded"
     reasons: list[str] = Field(default_factory=list)
 
 class ExtractionResult(BaseModel):

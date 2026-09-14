@@ -14,6 +14,7 @@ from app.services.gemini_extractor import (
 )
 from app.services.khp_master_staging import (
     Kegiatan2LookupRow,
+    MasterKegiatanRule,
     apply_khp_master_mapping,
     lookup_kegiatan_2,
     resolve_khp_master_fields,
@@ -96,7 +97,11 @@ def test_normalized_catalog_keeps_reference_ids_and_labels() -> None:
     assert KHP_MASTER_OPTIONS["prestasi_partisipasi_jabatan"][20]["label"] == "Panitia"
 
 
-def test_staging_resolver_splits_pkkmb_activity_from_role() -> None:
+def test_staging_resolver_splits_pkkmb_activity_from_role(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "app.services.khp_master_staging.get_default_aucc_catalog",
+        lambda: None,
+    )
     fields = {
         "jenis_kegiatan": _field("Peserta PKKMB"),
         "tingkat": _field("Universitas"),
@@ -162,6 +167,36 @@ def test_staging_resolver_accepts_explicitly_nullable_dimensions() -> None:
     assert resolution.id_kegiatan_2 == 9002
     assert resolution.fields["tingkat"].status == "unspecified"
     assert mapped["tingkat"].value is None
+
+
+def test_staging_resolver_attaches_matching_master_rule() -> None:
+    fields = {
+        "jenis_kegiatan": _field("PKKMB"),
+        "tingkat": _field("Universitas"),
+        "prestasi_partisipasi_jabatan": _field("Peserta"),
+        "raw_role": _field("Peserta"),
+    }
+    rule = MasterKegiatanRule(
+        source_no=26,
+        id_kelompok_kegiatan=1,
+        id_kegiatan_1=41,
+        id_tingkat=4,
+        id_jabatan_prestasi=6,
+        dasar_penilaian="Sert/SK/SP",
+        id_kegiatan_2=9001,
+    )
+
+    resolution = resolve_khp_master_fields(
+        "Sertifikat PKKMB tingkat universitas",
+        fields,
+        [Kegiatan2LookupRow(9001, 41, 4, 6)],
+        [rule],
+    )
+
+    assert resolution.status == "resolved"
+    assert resolution.rule_status == "matched"
+    assert resolution.master_rule == rule
+    assert resolution.as_dict()["master_rule"]["dasar_penilaian"] == "Sert/SK/SP"
 
 
 def test_staging_resolver_keeps_explicit_ukm_level() -> None:
@@ -258,6 +293,10 @@ def test_semantic_review_accepts_ukm_in_staging_profile() -> None:
 
 def test_pipeline_attaches_master_resolution_only_when_staging_enabled(monkeypatch) -> None:
     raw_text = "Magang UKM tingkat UKM, diselenggarakan oleh Unit Kegiatan Mahasiswa"
+    monkeypatch.setattr(
+        "app.services.khp_master_staging.get_default_aucc_catalog",
+        lambda: None,
+    )
     gemini_fields = {
         "full_text": _field(raw_text),
         "nama_kegiatan_sertifikasi": _field("Magang UKM"),

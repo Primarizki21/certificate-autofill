@@ -6,7 +6,11 @@ from dataclasses import dataclass
 from typing import Any
 
 from app.master_data import KHP_MASTER_OPTIONS
-from app.services.aucc_catalog import Kegiatan2LookupRow
+from app.services.aucc_catalog import (
+    Kegiatan2LookupRow,
+    MasterKegiatanRule,
+    get_default_aucc_catalog,
+)
 from app.services.field_extractor import ExtractedValue
 
 ACTIVITY_FIELD = "jenis_kegiatan"
@@ -128,6 +132,8 @@ class KHPMasterResolution:
     id_kegiatan_2: int | None
     lookup_status: str
     reasons: tuple[str, ...]
+    master_rule: MasterKegiatanRule | None = None
+    rule_status: str = "not_loaded"
 
     def as_dict(self) -> dict[str, object]:
         return {
@@ -138,6 +144,8 @@ class KHPMasterResolution:
             "status": self.status,
             "id_kegiatan_2": self.id_kegiatan_2,
             "lookup_status": self.lookup_status,
+            "master_rule": self.master_rule.as_dict() if self.master_rule else None,
+            "rule_status": self.rule_status,
             "reasons": list(self.reasons),
         }
 
@@ -333,11 +341,45 @@ def lookup_kegiatan_2(
     return None, "not_found"
 
 
+def _lookup_master_rule(
+    rules: Iterable[MasterKegiatanRule] | None,
+    *,
+    id_kelompok_kegiatan: int,
+    id_kegiatan_1: int,
+    id_tingkat: int | None,
+    id_jabatan_prestasi: int | None,
+) -> tuple[MasterKegiatanRule | None, str]:
+    if rules is None:
+        return None, "not_loaded"
+    matches = [
+        rule
+        for rule in rules
+        if rule.is_active
+        and rule.id_kelompok_kegiatan == id_kelompok_kegiatan
+        and rule.id_kegiatan_1 == id_kegiatan_1
+        and rule.id_tingkat == id_tingkat
+        and rule.id_jabatan_prestasi == id_jabatan_prestasi
+    ]
+    if len(matches) == 1:
+        return matches[0], "matched"
+    if len(matches) > 1:
+        return None, "ambiguous"
+    return None, "not_found"
+
+
 def resolve_khp_master_fields(
     raw_text: str,
     mapped_fields: Mapping[str, Any],
     kegiatan2_rows: Iterable[Kegiatan2LookupRow] | None = None,
+    master_rules: Iterable[MasterKegiatanRule] | None = None,
 ) -> KHPMasterResolution:
+    use_default_rows = kegiatan2_rows is None
+    catalog = get_default_aucc_catalog() if use_default_rows else None
+    if use_default_rows:
+        kegiatan2_rows = catalog.kegiatan2_rows if catalog else None
+    if master_rules is None and use_default_rows:
+        master_rules = catalog.master_rules if catalog else None
+
     activity = _resolve_activity(raw_text, mapped_fields)
     level = _resolve_level(raw_text, mapped_fields)
     role = _resolve_role(raw_text, mapped_fields)
@@ -369,7 +411,21 @@ def resolve_khp_master_fields(
         )
         if lookup_status != "matched":
             reasons.append(f"kegiatan_2_{lookup_status}")
-    if field_reasons:
+
+    master_rule = None
+    rule_status = "not_loaded"
+    if id_kegiatan_2 is not None and lookup_status == "matched":
+        master_rule, rule_status = _lookup_master_rule(
+            master_rules,
+            id_kelompok_kegiatan=group.id if group.id is not None else -1,
+            id_kegiatan_1=activity.id,
+            id_tingkat=level.id,
+            id_jabatan_prestasi=role.id,
+        )
+        if rule_status == "ambiguous":
+            reasons.append("master_rule_ambiguous")
+
+    if field_reasons or rule_status == "ambiguous":
         status = "needs_review"
     elif id_kegiatan_2 is not None and lookup_status == "matched":
         status = "resolved"
@@ -383,6 +439,8 @@ def resolve_khp_master_fields(
         id_kegiatan_2=id_kegiatan_2,
         lookup_status=lookup_status,
         reasons=tuple(reasons),
+        master_rule=master_rule,
+        rule_status=rule_status,
     )
 
 

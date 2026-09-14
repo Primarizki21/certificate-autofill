@@ -62,6 +62,7 @@ class Settings:
     ollama_model: str = os.getenv("OLLAMA_MODEL", "llama3.1:8b")
     # KHP master-aware pipeline stays isolated until explicit promotion.
     enable_khp_master_staging: bool = os.getenv("ENABLE_KHP_MASTER_STAGING", "false").lower() == "true"
+    khp_aucc_sql_path: str = os.getenv("KHP_AUCC_SQL_PATH", "khp/aucc.sql")
     # Production Tesseract-to-Gemini path: V2 scope-aware prompt plus
     # structural title/organizer boundaries. Default true; disable to route
     # documents directly through offline extraction.
