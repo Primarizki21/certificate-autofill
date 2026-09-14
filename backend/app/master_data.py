@@ -69,7 +69,7 @@ FORM_OPTIONS = {
         "Daftar Nilai",
     ],
 }
-# Group labels reuse existing form labels because source workbook exposes IDs only.
+# Group labels mirror `aucc.kelompok_kegiatan` reference IDs.
 def _khp_option(option_id: int, label: str, group_id: int | None = None) -> dict[str, object]:
     option: dict[str, object] = {"id": option_id, "label": label, "active": True}
     if group_id is not None:
@@ -126,6 +126,17 @@ KHP_ACTIVITY_MASTER = (
     (121, "PKL", 1),
     (127, "Magang UKM", 1),
     (129, "Mengikuti Kegiatan Sertifikasi", 3),
+    (130, "Latihan Kepemimpinan Mahasiswa", 2),
+    (131, "Mengikuti Kegiatan Kewirausahaan", 3),
+    (132, "Menghasilkan karya yang tidak dipublikasikan dalam bentuk buku", 3),
+    (133, "Melakukan studi banding", 6),
+    (134, "Penanganan bencana", 5),
+    (135, "Memberikan pembimbingan dalam penyusunan karya tulis", 3),
+    (
+        136,
+        "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Entrepreneurship/Business Plan",
+        3,
+    ),
 )
 
 KHP_LEVEL_MASTER = (
@@ -166,16 +177,16 @@ KHP_ROLE_MASTER = (
     (19, "Mandiri"),
     (20, "Kemitraan"),
     (21, "Panitia"),
-    (27, "Juara Harapan III"),
-    (29, "Best"),
     (25, "Juara Harapan I"),
     (26, "Juara Harapan II"),
-    (31, "Completion"),
-    (34, "LSP UNAIR"),
-    (35, "Fakultas/Prodi"),
+    (27, "Juara Harapan III"),
+    (29, "Best"),
     (30, "Kompetensi"),
+    (31, "Completion"),
     (32, "BNSP"),
     (33, "Brevet A/B/C"),
+    (34, "LSP UNAIR"),
+    (35, "Fakultas/Prodi"),
 )
 
 KHP_MASTER_OPTIONS = {

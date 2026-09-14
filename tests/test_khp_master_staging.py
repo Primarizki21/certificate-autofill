@@ -27,15 +27,71 @@ def _field(value: str | None) -> ExtractedValue:
 
 
 def test_normalized_catalog_keeps_reference_ids_and_labels() -> None:
-    assert len(KHP_MASTER_OPTIONS["jenis_kegiatan"]) == 44
+    activities = KHP_MASTER_OPTIONS["jenis_kegiatan"]
+    assert len(activities) == 51
+    assert {int(option["id"]) for option in activities} == {
+        41,
+        42,
+        67,
+        68,
+        69,
+        70,
+        71,
+        72,
+        73,
+        74,
+        83,
+        84,
+        85,
+        86,
+        87,
+        88,
+        89,
+        90,
+        91,
+        92,
+        93,
+        98,
+        99,
+        100,
+        101,
+        102,
+        103,
+        104,
+        105,
+        106,
+        107,
+        108,
+        109,
+        110,
+        111,
+        112,
+        113,
+        114,
+        115,
+        116,
+        117,
+        121,
+        127,
+        129,
+        130,
+        131,
+        132,
+        133,
+        134,
+        135,
+        136,
+    }
     assert len(KHP_MASTER_OPTIONS["tingkat"]) == 13
     assert len(KHP_MASTER_OPTIONS["prestasi_partisipasi_jabatan"]) == 31
-    assert KHP_MASTER_OPTIONS["jenis_kegiatan"][0] == {
+    assert activities[0] == {
         "id": 41,
         "label": "PKKMB",
         "active": True,
         "group_id": 1,
     }
+    assert activities[-1]["id"] == 136
+    assert activities[-1]["label"].endswith("Entrepreneurship/Business Plan")
     assert KHP_MASTER_OPTIONS["tingkat"][6]["label"] == "UKM"
     assert KHP_MASTER_OPTIONS["prestasi_partisipasi_jabatan"][20]["label"] == "Panitia"
 
