@@ -80,14 +80,15 @@ def main() -> None:
         help="Confirm all API instances and workers are stopped before applying the migration.",
     )
     args = parser.parse_args()
-    engine = create_engine(args.database_url, pool_pre_ping=True)
-    before = inspect_cutover(engine)
-
     if not args.apply:
+        engine = create_engine(args.database_url, pool_pre_ping=True)
+        before = inspect_cutover(engine)
         print(json.dumps({"mode": "dry-run", **before}, indent=2, sort_keys=True))
         return
     if not args.confirm_maintenance_window:
         parser.error("Stop every API instance and worker, then add --confirm-maintenance-window.")
+    engine = create_engine(args.database_url, pool_pre_ping=True)
+    before = inspect_cutover(engine)
     if before["legacy_tables"] and not args.confirm_delete_legacy_storage:
         parser.error("Legacy PDF/OCR tables detected; add --confirm-delete-legacy-storage after verified backup.")
 

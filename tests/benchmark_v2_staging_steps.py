@@ -417,6 +417,8 @@ def _write_step(
     *,
     step: str,
     output_dir: Path,
+    campaign_id: str,
+    commit: str | None,
     corpus: dict[str, dict[str, Any]],
     baseline_rows: list[dict[str, Any]],
     candidate_rows: list[dict[str, Any]],
@@ -444,7 +446,7 @@ def _write_step(
     _attach_metadata(candidate_rows, corpus, decisions=decisions)
     generated_at = _utc_now()
     manifest = {
-        "campaign_id": "EXP-PROD-V2-CAMPAIGN-001",
+        "campaign_id": campaign_id,
         "experiment_id": experiment_id,
         "parent_experiment_id": None,
         "related_experiment_ids": [],
@@ -457,7 +459,7 @@ def _write_step(
         "immutable": True,
         "production_promotion": False,
         "source": source,
-        "commit": source["git_sha"],
+        "commit": commit or source["git_sha"],
         "input_artifacts": {
             "source_run_dir": source["path"],
             "raw_text_dir": source["raw_text_dir"],
@@ -789,6 +791,8 @@ def run_step(
     model: str,
     request_delay: float,
     skip_gemini: bool,
+    campaign_id: str = "EXP-PROD-V2-CAMPAIGN-001",
+    commit: str | None = None,
     source_run_dir: Path = SOURCE_RUN_DIR,
     raw_text_dir: Path | None = None,
     gt_path: Path = GT_PATH,
@@ -800,6 +804,8 @@ def run_step(
         return _write_step(
             step=step,
             output_dir=output_dir,
+            campaign_id=campaign_id,
+            commit=commit,
             corpus=corpus,
             baseline_rows=baseline_rows,
             candidate_rows=baseline_rows,
@@ -846,6 +852,8 @@ def run_step(
         proof = _write_step(
             step=step,
             output_dir=output_dir,
+            campaign_id=campaign_id,
+            commit=commit,
             corpus=corpus,
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
@@ -892,6 +900,8 @@ def run_step(
         return _write_step(
             step=step,
             output_dir=output_dir,
+            campaign_id=campaign_id,
+            commit=commit,
             corpus=corpus,
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
@@ -918,6 +928,8 @@ def run_step(
         proof = _write_step(
             step=step,
             output_dir=output_dir,
+            campaign_id=campaign_id,
+            commit=commit,
             corpus=corpus,
             baseline_rows=baseline_rows,
             candidate_rows=candidate_rows,
@@ -992,11 +1004,13 @@ def main() -> None:
     parser.add_argument("--step", choices=tuple(STEP_DIRECTORIES), required=True)
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--source-run-dir", type=Path, default=SOURCE_RUN_DIR)
+    parser.add_argument("--commit")
     parser.add_argument("--raw-text-dir", type=Path)
     parser.add_argument("--gt-path", type=Path, default=GT_PATH)
     parser.add_argument("--model", default="gemini-3.1-flash-lite")
     parser.add_argument("--request-delay", type=float, default=1.2)
     parser.add_argument("--skip-gemini", action="store_true")
+    parser.add_argument("--campaign-id", default="EXP-PROD-V2-CAMPAIGN-001")
     args = parser.parse_args()
     output_dir = args.output_dir or (
         REPO_ROOT / "docs/experiments" / STEP_DIRECTORIES[args.step]
@@ -1007,6 +1021,8 @@ def main() -> None:
         model=args.model,
         request_delay=args.request_delay,
         skip_gemini=args.skip_gemini,
+        campaign_id=args.campaign_id,
+        commit=args.commit,
         source_run_dir=args.source_run_dir,
         raw_text_dir=args.raw_text_dir,
         gt_path=args.gt_path,
