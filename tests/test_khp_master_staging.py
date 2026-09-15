@@ -378,7 +378,7 @@ def test_pipeline_attaches_master_resolution_only_when_staging_enabled(monkeypat
         for name, value in original_flags.items():
             object.__setattr__(settings, name, value)
 
-    assert calls == [{"text": raw_text, "khp_master_staging": True}]
+    assert calls == [{"text": raw_text}]
     assert result.mapped_fields["jenis_kegiatan"].value == "Magang UKM"
     assert result.mapped_fields["tingkat"].value == "UKM"
     assert result.master_resolution is not None

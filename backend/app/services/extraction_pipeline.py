@@ -167,13 +167,7 @@ def run_extraction_pipeline(
     raw_json = gemini_meta
     if settings.enable_tesseract_gemini:
         from app.services.gemini_extractor import extract_fields_with_gemini
-        if settings.enable_khp_master_staging:
-            gemini_extracted, meta = extract_fields_with_gemini(
-                raw_text,
-                khp_master_staging=True,
-            )
-        else:
-            gemini_extracted, meta = extract_fields_with_gemini(raw_text)
+        gemini_extracted, meta = extract_fields_with_gemini(raw_text)
         gemini_meta = _complete_gemini_meta(
             meta,
             model=settings.google_gemini_model,
