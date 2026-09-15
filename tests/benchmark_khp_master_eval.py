@@ -338,8 +338,11 @@ def run_khp_evaluation(
     total_docs = len(df_gt)
 
     # Compile metrics
+    exp_id = out_dir.name
+    # Compile metrics
     metrics: dict[str, Any] = {
-        "campaign_id": "EXP-KHP-MASTER-EVAL-001",
+        "campaign_id": exp_id,
+        "experiment_id": exp_id,
         "started_at": t_start.isoformat(),
         "finished_at": t_end.isoformat(),
         "total_documents": total_docs,
@@ -475,13 +478,21 @@ def run_khp_evaluation(
         df_details.to_excel(writer, sheet_name="Details", index=False)
 
     # 5. manifest.json
+    import subprocess
+    commit_sha = "unknown"
+    try:
+        commit_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+    except Exception:
+        pass
+
     manifest = {
-        "campaign_id": "EXP-KHP-MASTER-EVAL-001",
-        "experiment_id": "EXP-KHP-MASTER-EVAL-001",
+        "campaign_id": exp_id,
+        "experiment_id": exp_id,
         "role": "master_data_evaluator",
         "dataset": str(gt_path),
         "total_documents": total_docs,
-        "status": "PASS",
+        "status": "STAGING_ONLY",
+        "commit": commit_sha,
         "started_at": t_start.isoformat(),
         "finished_at": t_end.isoformat(),
         "timezone": "Asia/Jakarta",
@@ -490,10 +501,10 @@ def run_khp_evaluation(
         json.dump(manifest, f, indent=2, ensure_ascii=False)
 
     # 6. summary.md
-    summary_md = f"""# Campaign EXP-KHP-MASTER-EVAL-001
+    summary_md = f"""# Campaign {exp_id}
 
 ## 1. Ringkasan Eksekutif
-Evaluasi pertama terhadap integrasi **Katalog Master Data KHP & AUCC** menggunakan Ground Truth baru berlabel 10-field (`Ground_Truth_Unified_AUCC.csv`, N={total_docs}).
+Evaluasi KHP Master Data Staging Pipeline menggunakan Ground Truth terpadu (`{gt_path}`, N={total_docs}).
 
 Pengujian ini mengevaluasi 6 field ekstraksi dasar dan 3 dimensi taksonomi master data KHP:
 1. **Kelompok Kegiatan**
