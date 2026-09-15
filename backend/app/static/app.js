@@ -95,6 +95,13 @@ function fillSelect(selectId, values, selectedValue = '') {
   const select = el(selectId);
   if (!select) return;
   select.innerHTML = '';
+  if (['kelompok_kegiatan', 'jenis_kegiatan', 'prestasi_partisipasi_jabatan'].includes(selectId)) {
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '-- Pilih --';
+    emptyOption.dataset.label = '';
+    select.appendChild(emptyOption);
+  }
   values.forEach(value => {
     const isMasterOption = value && typeof value === 'object';
     if (isMasterOption && value.active === false) return;
@@ -254,6 +261,9 @@ function applyResult(data) {
   const kelVal = kelItem?.value ?? '';
   if (kelVal) {
     ensureOptionAndSet(el('kelompok_kegiatan'), kelVal);
+  } else {
+    const kelEl = el('kelompok_kegiatan');
+    if (kelEl) kelEl.value = '';
   }
 
   // 2. Filter jenis_kegiatan based on kelompok_kegiatan, then set it
@@ -263,19 +273,25 @@ function applyResult(data) {
   filterJenisKegiatanByGroup(currentGroupId, jenVal);
   if (jenVal) {
     ensureOptionAndSet(el('jenis_kegiatan'), jenVal);
+  } else {
+    const jenEl = el('jenis_kegiatan');
+    if (jenEl) jenEl.value = '';
   }
 
   // 3. Set remaining fields
   fieldIds.forEach(fieldId => {
     if (['kelompok_kegiatan', 'jenis_kegiatan'].includes(fieldId)) return;
     const item = fields[fieldId];
-    if (!item) return;
     const element = el(fieldId);
     if (!element) return;
-    const rawVal = item.value || '';
+    const rawVal = item ? (item.value || '') : '';
     const value = normalizeDateForDisplay(fieldId, rawVal);
     if (element.tagName === 'SELECT') {
-      ensureOptionAndSet(element, value);
+      if (value) {
+        ensureOptionAndSet(element, value);
+      } else {
+        element.value = '';
+      }
     } else {
       element.value = value;
     }

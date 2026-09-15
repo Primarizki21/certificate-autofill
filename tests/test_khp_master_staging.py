@@ -615,3 +615,73 @@ def test_social_campaign_resolves_to_bakti_sosial() -> None:
     activity_match = _resolve_activity(raw_text, fields)
     assert activity_match.id == 106
     assert activity_match.label == "Mengikuti Pelaksanaan Bakti Sosial"
+
+
+def test_gemastik_competition_and_winner_resolves_to_id74() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT Nomor: 962/KMH01/KMH/2025 Diberikan Kepada: Dyah Ayu Retnoningsih "
+        "atas partisipasinya sebagai Juara 3 pada Pagelaran Mahasiswa Tingkat Nasional "
+        "Bidang Teknologi Informasi dan Komunikasi (GEMASTIK) XVIII Tahun 2025 "
+        "Kementerian Pendidikan Tinggi, Sains, dan Teknologi Republik Indonesia"
+    )
+    fields = {
+        "raw_role": "Juara 3",
+        "nama_kegiatan_sertifikasi": "Pagelaran Mahasiswa Tingkat Nasional Bidang Teknologi Informasi dan Komunikasi (GEMASTIK) XVIII",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 9
+    assert role_match.label == "Juara III"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 74
+    assert "Lomba" in act_match.label
+
+
+def test_bare_juara_with_ordinal_winner_in_text_resolves_rank() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = "CERTIFICATE OF ACHIEVEMENT Presented To Elzandi as 3rd Winner of Data Science Competition MCF ITB 2024"
+    fields = {
+        "raw_role": "Juara",
+        "nama_kegiatan_sertifikasi": "Data Science Competition MCF ITB 2024",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 9
+    assert role_match.label == "Juara III"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 74
+
+
+def test_kementerian_text_does_not_falsely_match_menteri_role() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    raw_text = "Diselenggarakan oleh Kementerian Pendidikan Tinggi, Riset, dan Teknologi RI. Sebagai Juara 1."
+    fields = {"raw_role": "Juara 1"}
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 7
+    assert role_match.label == "Juara I"
+    assert role_match.status == "matched"
+
+
+def test_competition_division_with_ormawa_context_does_not_become_pengurus_organisasi() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "KEMENTERIAN PENDIDIKAN DAN KEBUDAYAAN UNIVERSITAS NEGERI SURABAYA "
+        "HIMPUNAN MAHASISWA SAINS DATA Kompleks Ormawa FMIPA Unesa "
+        "ATAS PRESTASINYA SEBAGAI JUARA 1 Divisi Data Mining pada Academic Competition of Data Science 2024"
+    )
+    fields = {
+        "raw_role": "JUARA 1 Divisi Data Mining",
+        "nama_kegiatan_sertifikasi": "Academic Competition of Data Science 2024",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 7
+    assert role_match.label == "Juara I"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 74
+    assert act_match.id != 67
