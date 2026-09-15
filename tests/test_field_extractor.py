@@ -77,3 +77,16 @@ def test_missing_dates_do_not_require_review() -> None:
     assert field_needs_review("waktu_mulai_pelaksanaan", None, 0.0) is False
     assert field_needs_review("waktu_selesai_pelaksanaan", "", 0.0) is False
     assert field_needs_review("nomor_bukti_fisik_nomor_sertifikasi", None, 0.0) is True
+
+def test_extract_role_kementerian_header_does_not_extract_menteri():
+    from app.services.field_extractor import extract_role
+    text = "KEMENTERIAN PENDIDIKAN, KEBUDAYAAN, RISET DAN TEKNOLOGI UNIVERSITAS NEGERI SURABAYA"
+    assert extract_role(text) is None
+
+def test_extract_role_juara_and_menteri():
+    from app.services.field_extractor import extract_role
+    text_juara = "DIBERIKAN KEPADA FAZIL ATAS PRESTASINYA SEBAGAI JUARA 1 LOMBA DATA SCIENCE"
+    assert extract_role(text_juara) == "Juara 1"
+
+    text_menteri = "DIBERIKAN KEPADA ATAS PENGABDIANNYA SEBAGAI MENTERI KOORDINATOR BEM"
+    assert extract_role(text_menteri) == "MENTERI KOORDINATOR BEM"
