@@ -14,6 +14,8 @@ services:
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
     ports:
       - "8001:8000"
+    volumes:
+      - ./khp:/app/khp:ro
     depends_on:
       postgres:
         condition: service_healthy
