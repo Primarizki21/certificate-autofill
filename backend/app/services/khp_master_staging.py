@@ -203,8 +203,8 @@ _ROLE_PATTERNS = (
     (25, (r"juara harapan i\b", r"harapan i\b")),
     (26, (r"juara harapan ii", r"harapan ii")),
     (7, (r"juara i\b", r"juara 1\b", r"first winner")),
-    (8, (r"juara ii\b", r"juara 2\b", r"second winner")),
-    (9, (r"juara iii\b", r"juara 3\b", r"third winner")),
+    (8, (r"juara ii\b", r"juara 2\b", r"juara ll\b", r"second winner")),
+    (9, (r"juara iii\b", r"juara 3\b", r"juara lll\b", r"third winner")),
     (29, (r"\bbest\b", r"terbaik")),
     (10, (r"finalis", r"finalist")),
     (11, (r"peserta terpilih", r"selected participant")),
@@ -286,7 +286,11 @@ def _unspecified(reason: str) -> KHPFieldMatch:
     return KHPFieldMatch(id=None, label=None, status="unspecified", reasons=(reason,))
 
 
-def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMatch:
+def _resolve_activity(
+    raw_text: str,
+    mapped_fields: Mapping[str, Any],
+    role_match: KHPFieldMatch | None = None,
+) -> KHPFieldMatch:
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     mapped = _match_label(ACTIVITY_FIELD, mapped_value)
     if mapped is not None:
@@ -294,23 +298,43 @@ def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFie
     if _fold(mapped_value) == "peserta pkkmb":
         return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
 
+    if role_match is None:
+        role_match = _resolve_role(raw_text, mapped_fields)
+
     role = _field_value(mapped_fields, "raw_role") or ""
-    role_label = _field_value(mapped_fields, ROLE_FIELD) or ""
+    role_label = role_match.label or ""
     role_combined = f"{role} {role_label}".lower()
     activity_name = _field_value(mapped_fields, "nama_kegiatan_sertifikasi") or ""
     text = f"{activity_name} {raw_text}".lower()
 
-    # 1. Panitia
-    if re.search(r"panitia|organizing committee|steering committee", role_combined) or re.search(r"\bpanitia\b", raw_text.lower()):
+    # 0. MAWAPRES (before generic lomba)
+    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
+        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
+        if mawapres_match is not None:
+            return mawapres_match
+
+    # 1. KKN / BBK
+    if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", text):
+        kkn_match = _match_label(ACTIVITY_FIELD, "KKN-BBM")
+        if kkn_match is not None:
+            return kkn_match
+
+    # 2. Panitia
+    if (
+        "panitia" in role_label.lower()
+        or re.search(r"\bpanitia\b|organizing committee|steering committee", role_combined)
+        or re.search(r"\bpanitia\b", raw_text.lower())
+    ):
         panitia_match = _match_label(ACTIVITY_FIELD, "Panitia Dalam Suatu Kegiatan Kemahasiswaan")
         if panitia_match is not None:
             return panitia_match
 
-    # 2. Pengurus Organisasi
+    # 3. Pengurus Organisasi (guarded against competition context)
     is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
     is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))
-    is_competition = bool(re.search(r"\blomba\b|\bkompetisi\b|\bcompetition\b|\bcontest\b|\bchampionship\b", text))
-    if is_not_team and not (is_competition and not is_ormawa_context) and (
+    is_competition = bool(re.search(r"\blomba\b|\bkompetisi\b|\bcompetition\b|\bcontest\b|\bchampionship\b|\bquest\b|\bchallenge\b", text))
+    has_explicit_pengurus_role = bool(re.search(r"\bpengurus\b|\bdivisi\b|\bbph\b|\bbidang\b|\bkoordinator\b", role_combined))
+    if is_not_team and not (is_competition and not has_explicit_pengurus_role) and (
         ("pengurus" in role_combined and not re.search(r"\btim\b|\bteam\b", role_combined))
         or any(k in text for k in ["kepengurusan", "masa bakti"])
         or (
@@ -321,35 +345,42 @@ def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFie
         pengurus_match = _match_label(ACTIVITY_FIELD, "Pengurus Organisasi")
         if pengurus_match is not None:
             return pengurus_match
-    # 3. PKKMB
-    if re.search(r"\bpkkmb\b|pengenalan kehidupan kampus", text):
+
+    # 4. PKKMB / Orientasi Mahasiswa Baru
+    if re.search(r"\bpkkmb\b|pengenalan kehidupan kampus|freshman\s+(?:solidarity|orientation)|orientasi\s+(?:mahasiswa|studi|kampus)", text):
         pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")
         if pkkmb_match is not None:
             return pkkmb_match
 
-    # 4. Magang UKM
+    # 5. Magang UKM
     if re.search(r"\bmagang\b", text) and re.search(r"\bukm\b", text):
         magang_match = _match_label(ACTIVITY_FIELD, "Magang UKM")
         if magang_match is not None:
             return magang_match
 
-    # 5. Bakti Sosial
-    if re.search(r"bakti sosial|social service", text):
+    # 6. Bakti Sosial / Campaign Sosial / Pengabdian Masyarakat
+    if re.search(r"bakti sosial|social service|social action|campaign|pengabdian masyarakat", text):
         baksos_match = _match_label(ACTIVITY_FIELD, "Mengikuti Pelaksanaan Bakti Sosial")
         if baksos_match is not None:
             return baksos_match
 
-    # 6. KIM
+    # 7. Latihan Kepemimpinan / Regenerasi
+    if re.search(r"lkmm|latihan\s+keterampilan\s+manajemen\s+mahasiswa|latihan\s+kepemimpinan|leadership\s+training|regenerasi|sekolah\s+bem|sekolah\s+kader", text):
+        lkm_match = _match_label(ACTIVITY_FIELD, "Latihan Kepemimpinan Lainnya")
+        if lkm_match is not None:
+            return lkm_match
+
+    # 8. KIM
     if re.search(r"\bkim\b|kompetisi ilmiah mahasiswa", text):
         kim_match = _match_label(ACTIVITY_FIELD, "Kompetisi Ilmiah Mahasiswa (KIM) tingkat Fakultas")
         if kim_match is not None:
             return kim_match
 
-    # 7. Lomba / Kompetisi
-    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|hackathon|challenge|fest", text))
+    # 9. Lomba / Kompetisi
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|hackathon|challenge|fest|fair", text))
     is_winner = bool(re.search(r"juara|winner|finalis|finalist|best", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b", raw_text.lower()))
 
-    if is_lomba and is_winner:
+    if (is_lomba and is_winner) or (is_winner and role_match.id in (7, 8, 9, 10, 25, 26, 27, 29)):
         lomba_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Interpreneurship/Business Plan")
         if lomba_win is not None:
             return lomba_win
@@ -358,8 +389,8 @@ def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFie
         if lomba_peserta is not None:
             return lomba_peserta
 
-    # 8. Seminar / Forum Ilmiah
-    if re.search(r"seminar|workshop|lokakarya|webinar|talkshow|forum|kuliah tamu|pameran|guest lecture", text):
+    # 10. Seminar / Forum Ilmiah / Pelatihan
+    if re.search(r"seminar|workshop|lokakarya|webinar|talkshow|forum|kuliah tamu|pameran|guest lecture|conference|symposium|simposium|training|pelatihan|webcast|course|bootcamp|coaching|mentoring|job preparation|career track|literasi digital", text):
         forum_match = _match_label(ACTIVITY_FIELD, "Mengikuti kegiatan/forum ilmiah (seminar, lokakarya, workshop, pameran)")
         if forum_match is not None:
             return forum_match
@@ -403,37 +434,34 @@ def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMa
     role_value = _field_value(mapped_fields, "raw_role")
     mapped_value = _field_value(mapped_fields, ROLE_FIELD)
 
-    if role_value and re.search(
-        r"supervisor|divisi|bidang|seksi|biro|bendahara|bph", role_value, re.I
-    ) and not re.search(r"panitia|committee", role_value, re.I):
-        match = _match_patterns(ROLE_FIELD, role_value, _ROLE_PATTERNS)
-        if match is not None:
-            return match
+    if role_value:
+        if re.search(
+            r"supervisor|divisi|bidang|seksi|biro|bendahara|bph", role_value, re.I
+        ) and not re.search(r"panitia|committee", role_value, re.I):
+            match = _match_patterns(ROLE_FIELD, role_value, _ROLE_PATTERNS)
+            if match is not None and match.status == "matched":
+                return match
+        role_match = _match_patterns(ROLE_FIELD, role_value, _ROLE_PATTERNS)
+        if role_match is not None and role_match.status == "matched":
+            return role_match
 
     direct = _match_label(ROLE_FIELD, role_value) or _match_label(ROLE_FIELD, mapped_value)
     if direct is not None:
         if direct.id == 1 and role_value and re.search(r"divisi|bidang|seksi|departemen|biro", role_value, re.I):
             sub_match = _match_patterns(ROLE_FIELD, role_value, _ROLE_PATTERNS)
-            if sub_match is not None:
+            if sub_match is not None and sub_match.status == "matched":
                 return sub_match
         return direct
 
-    role_text = role_value or ""
-    mapped_text = mapped_value or ""
-    text = f"{role_text} {mapped_text} {raw_text}"
-    match = _match_patterns(ROLE_FIELD, text, _ROLE_PATTERNS)
-    if match is not None:
-        return match
-
     # Fallback to direct word presence in raw text
     upper = raw_text.upper()
-    if re.search(r"\bPANITIA\b|\bORGANIZING COMMITTEE\b|\bSTEERING COMMITTEE\b", upper):
+    if re.search(r"\bPANITIA\b|\bORGANIZING COMMITTEE\b|\bSTEERING COMMITTEE\b|\bAS\s+COMMITTEE\b", upper):
         panitia_match = _match_label(ROLE_FIELD, "Panitia")
         if panitia_match is not None:
             return panitia_match
     if re.search(r"\bJUARA\s+(?:I{1,3}|1|2|3|HARAPAN)\b|\bFIRST WINNER\b|\bSECOND WINNER\b|\bTHIRD WINNER\b|\bBEST\b|\bFINALIS\b", upper):
         juara_match = _match_patterns(ROLE_FIELD, upper, _ROLE_PATTERNS)
-        if juara_match is not None:
+        if juara_match is not None and juara_match.status == "matched":
             return juara_match
     if re.search(r"\bPESERTA\b|\bPARTICIPANT\b", upper):
         peserta_match = _match_label(ROLE_FIELD, "Peserta")
@@ -560,9 +588,9 @@ def resolve_khp_master_fields(
     if master_rules is None and use_default_rows:
         master_rules = catalog.master_rules if catalog else None
 
-    activity = _resolve_activity(raw_text, mapped_fields)
-    level = _resolve_level(raw_text, mapped_fields)
     role = _resolve_role(raw_text, mapped_fields)
+    activity = _resolve_activity(raw_text, mapped_fields, role)
+    level = _resolve_level(raw_text, mapped_fields)
     group = _group_match(activity)
     fields = {
         ACTIVITY_FIELD: activity,

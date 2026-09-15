@@ -554,3 +554,64 @@ def test_gelar_rasa_unresolved_activity_triggers_needs_review() -> None:
     assert res.fields["jenis_kegiatan"].status == "unresolved"
     assert res.status == "needs_review"
     assert "jenis_kegiatan_activity_not_in_master" in res.reasons
+
+def test_kkn_bbk_resolves_to_id42() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan kepada mahasiswa atas partisipasinya dalam Belajar Bersama Komunitas (BBK) Periode 5"
+    fields = {"nama_kegiatan_sertifikasi": "Belajar Bersama Komunitas (BBK) Periode 5"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 42
+    assert activity_match.label == "KKN-BBM"
+
+def test_arabic_numeral_winner_role_resolves_to_roman_master_label() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    match_j1 = _resolve_role("raw text", {"raw_role": "Juara 1"})
+    assert match_j1.id == 7
+    assert match_j1.label == "Juara I"
+
+    match_j2 = _resolve_role("raw text", {"raw_role": "Juara 2"})
+    assert match_j2.id == 8
+    assert match_j2.label == "Juara II"
+
+    match_j3 = _resolve_role("raw text", {"raw_role": "Juara 3"})
+    assert match_j3.id == 9
+    assert match_j3.label == "Juara III"
+
+    match_fin = _resolve_role("raw text", {"raw_role": "Finalist"})
+    assert match_fin.id == 10
+    assert match_fin.label == "Finalis"
+
+def test_training_and_workshop_resolves_to_forum_ilmiah() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan kepada mahasiswa sebagai peserta dalam Training Meeting Internal Vol. 1"
+    fields = {"nama_kegiatan_sertifikasi": "Training Meeting Internal Vol. 1"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 84
+    assert "forum ilmiah" in activity_match.label.lower()
+def test_leadership_regenerasi_resolves_to_latihan_kepemimpinan() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Atas partisipasinya dalam rangkaian acara REGTER (REGENERASI TERPADU) 2023"
+    fields = {"nama_kegiatan_sertifikasi": "REGTER (REGENERASI TERPADU) 2023"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 70
+    assert activity_match.label == "Latihan Kepemimpinan Lainnya"
+def test_freshman_solidarity_resolves_to_pkkmb() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan kepada mahasiswa baru dalam acara BINARY (Building Freshman Solidarity and Character Development)"
+    fields = {"nama_kegiatan_sertifikasi": "BINARY 3.0 (Building Freshman Solidarity and Character Development)"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 41
+    assert activity_match.label == "PKKMB"
+def test_social_campaign_resolves_to_bakti_sosial() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan atas partisipasinya dalam Digital Campaign 2023"
+    fields = {"nama_kegiatan_sertifikasi": "Digital Campaign 2023"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 106
+    assert activity_match.label == "Mengikuti Pelaksanaan Bakti Sosial"
