@@ -444,3 +444,57 @@ def test_gemini_extractor_stage_sends_master_profile(monkeypatch) -> None:
     user_text = payload["contents"][0]["parts"][0]["text"]
     assert "UKM" in system_text and "Regional" in system_text
     assert "Nasional Tidak Ter-Akreditasi" in user_text
+
+def test_hima_internal_level_resolves_to_departemen_prodi() -> None:
+    from app.services.khp_master_staging import _resolve_level
+
+    hima_raw = "Himpunan Mahasiswa S-1 Akuntansi Fakultas Ekonomi dan Bisnis Universitas Airlangga"
+    fields_internal = {
+        "penyelenggara_kegiatan": "Himpunan Mahasiswa S-1 Akuntansi",
+        "nama_kegiatan_sertifikasi": "Pengabdian ORMAWA masa bakti 2025",
+        "tingkat": "Fakultas",
+    }
+    match_internal = _resolve_level(hima_raw, fields_internal)
+    assert match_internal.id == 6
+    assert match_internal.label == "Departemen/Program Studi"
+
+    fields_national = {
+        "penyelenggara_kegiatan": "Himpunan Mahasiswa S-1 Akuntansi",
+        "nama_kegiatan_sertifikasi": "National Accounting Competition 2025",
+        "tingkat": "Nasional",
+    }
+    match_national = _resolve_level(hima_raw, fields_national)
+    assert match_national.id == 2
+    assert match_national.label == "Nasional"
+
+
+def test_hima_division_and_supervisor_roles_resolve_to_pengurus_inti_lain() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    supervisor_fields = {"raw_role": "Supervisor Divisi Komunikasi", "prestasi_partisipasi_jabatan": "Ketua"}
+    match_supervisor = _resolve_role("", supervisor_fields)
+    assert match_supervisor.id == 4
+    assert match_supervisor.label == "Pengurus Inti Lain"
+
+    ketua_divisi_fields = {"raw_role": "Ketua Divisi Hubungan Masyarakat", "prestasi_partisipasi_jabatan": "Ketua"}
+    match_kadiv = _resolve_role("", ketua_divisi_fields)
+    assert match_kadiv.id == 4
+    assert match_kadiv.label == "Pengurus Inti Lain"
+
+    ketua_hima_fields = {"raw_role": "Ketua Himpunan Mahasiswa S-1 Akuntansi"}
+    match_ketua = _resolve_role("", ketua_hima_fields)
+    assert match_ketua.id == 1
+    assert match_ketua.label == "Ketua"
+
+
+def test_hima_kepengurusan_activity_inference() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _group_match
+
+    raw_text = "Atas partisipasi dan pengabdiannya dalam Kepengurusan Himpunan Mahasiswa masa bakti 2025"
+    fields = {"nama_kegiatan_sertifikasi": "Piagam Penghargaan Pengurus HIMA"}
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 67
+    assert activity_match.label == "Pengurus Organisasi"
+    group_match = _group_match(activity_match)
+    assert group_match.id == 2
+    assert group_match.label == "Kegiatan Bidang Organisasi dan Kepemimpinan"

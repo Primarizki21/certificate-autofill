@@ -223,12 +223,12 @@ def map_jabatan(raw_role: str | None) -> str | None:
         return "Peserta"
     if "WAKIL" in role and "KETUA" in role:
         return "Wakil Ketua"
+    if any(k in role for k in ("KETUA DIVISI", "KETUA BIDANG", "KETUA SEKSI", "KETUA DEPARTEMEN", "KEPALA", "MENTERI", "KOORDINATOR", "MINISTER", "SUPERVISOR", "BENDAHARA", "BPH", "PENGURUS INTI")):
+        return "Pengurus Inti Lain"
     if "KETUA" in role:
         return "Ketua"
     if "SEKRETARIS" in role:
         return "Sekretaris"
-    if "MENTERI" in role or "KOORDINATOR" in role or "KEPALA" in role or "MINISTER" in role:
-        return "Pengurus Inti Lain"
     if "ANGGOTA" in role:
         return "Anggota Pengurus"
     return raw_role.title()

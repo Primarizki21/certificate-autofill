@@ -225,8 +225,9 @@ Penyelenggara hanya organisasi atau institusi, bukan nama penerima atau penandat
 Untuk tingkat, pilih tepat satu label master berdasarkan cakupan yang tertulis:
 [{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
 Jangan mengganti tingkat UKM dengan Universitas atau Lainnya bila teks menyebut UKM secara eksplisit.
+Bila kegiatan ormawa internal/kepengurusan diselenggarakan oleh HIMA (Himpunan Mahasiswa Program Studi/Departemen), gunakan tingkat "Departemen/Program Studi".
 raw_role harus memuat peran atau capaian faktual selengkap yang tertulis, misalnya "Juara II",
-"Peserta Terpilih", "Pembicara", "Panitia", atau "Brevet A/B/C". Jika tidak tertulis, isi null.
+"Peserta Terpilih", "Pembicara", "Panitia", "Supervisor Divisi", "Ketua Divisi", atau "Brevet A/B/C". Jangan menyingkat jabatan divisi menjadi "Ketua". Jika tidak tertulis, isi null.
 """
 
 KHP_STAGING_USER_PROMPT_TEMPLATE = f"""Berikut teks OCR mentah dokumen sertifikat:
