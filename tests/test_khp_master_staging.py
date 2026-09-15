@@ -525,3 +525,32 @@ def test_pengurus_tim_lomba_does_not_become_pengurus_organisasi() -> None:
     activity_match = _resolve_activity(raw_text, fields)
     assert activity_match.id != 67
     assert activity_match.id == 83
+
+def test_action_competition_winner_resolves_to_id74() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "ATAS PRESTASINYA SEBAGAI JUARA 1 pada Academic Competition of Data Science 2024 Tingkat Nasional"
+    fields = {
+        "raw_role": "Juara 1",
+        "nama_kegiatan_sertifikasi": "Academic Competition of Data Science 2024",
+        "penyelenggara_kegiatan": "Himpunan Mahasiswa Program Studi Sains Data FMIPA Unesa",
+    }
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id == 74
+    assert "Lomba" in activity_match.label
+
+
+def test_gelar_rasa_unresolved_activity_triggers_needs_review() -> None:
+    from app.services.khp_master_staging import resolve_khp_master_fields
+
+    raw_text = "DIBERIKAN KEPADA FAZIL ATAS PARTISIPASINYA SEBAGAI PESERTA DALAM ACARA GELAR RASA 2024"
+    fields = {
+        "raw_role": "Peserta",
+        "nama_kegiatan_sertifikasi": "GELAR RASA 2024",
+        "penyelenggara_kegiatan": "Himasada, Fakultas Ilmu Komputer",
+        "tingkat": "Nasional",
+    }
+    res = resolve_khp_master_fields(raw_text, fields)
+    assert res.fields["jenis_kegiatan"].status == "unresolved"
+    assert res.status == "needs_review"
+    assert "jenis_kegiatan_activity_not_in_master" in res.reasons
