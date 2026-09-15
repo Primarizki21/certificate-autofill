@@ -307,11 +307,20 @@ def _resolve_activity(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFie
             return panitia_match
 
     # 2. Pengurus Organisasi
-    if any(k in role_combined for k in ["pengurus", "ketua", "sekretaris", "bendahara", "supervisor"]) or any(k in text for k in ["kepengurusan", "masa bakti"]):
+    is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
+    is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))
+    is_competition = bool(re.search(r"\blomba\b|\bkompetisi\b|\bcompetition\b|\bcontest\b|\bchampionship\b", text))
+    if is_not_team and not (is_competition and not is_ormawa_context) and (
+        ("pengurus" in role_combined and not re.search(r"\btim\b|\bteam\b", role_combined))
+        or any(k in text for k in ["kepengurusan", "masa bakti"])
+        or (
+            any(k in role_combined for k in ["ketua", "sekretaris", "bendahara", "supervisor"])
+            and is_ormawa_context
+        )
+    ):
         pengurus_match = _match_label(ACTIVITY_FIELD, "Pengurus Organisasi")
         if pengurus_match is not None:
             return pengurus_match
-
     # 3. PKKMB
     if re.search(r"\bpkkmb\b|pengenalan kehidupan kampus", text):
         pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")

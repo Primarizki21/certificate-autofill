@@ -498,3 +498,30 @@ def test_hima_kepengurusan_activity_inference() -> None:
     group_match = _group_match(activity_match)
     assert group_match.id == 2
     assert group_match.label == "Kegiatan Bidang Organisasi dan Kepemimpinan"
+
+def test_ketua_tim_lomba_does_not_become_pengurus_organisasi() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan kepada Ketua Tim atas partisipasinya dalam Data Science Competition 2025"
+    fields = {
+        "raw_role": "Ketua Tim",
+        "nama_kegiatan_sertifikasi": "Data Science Competition 2025",
+        "penyelenggara_kegiatan": "Universitas Indonesia",
+    }
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id != 67
+    assert activity_match.id == 83
+    assert activity_match.label == "Mengikuti Kegiatan Lomba Ilmiah"
+
+def test_pengurus_tim_lomba_does_not_become_pengurus_organisasi() -> None:
+    from app.services.khp_master_staging import _resolve_activity
+
+    raw_text = "Diberikan kepada Pengurus Tim atas keikutsertaannya dalam Lomba Inovasi Nasional 2025"
+    fields = {
+        "raw_role": "Pengurus Tim",
+        "nama_kegiatan_sertifikasi": "Lomba Inovasi Nasional 2025",
+        "penyelenggara_kegiatan": "Kementerian Riset dan Teknologi",
+    }
+    activity_match = _resolve_activity(raw_text, fields)
+    assert activity_match.id != 67
+    assert activity_match.id == 83
