@@ -685,3 +685,48 @@ def test_competition_division_with_ormawa_context_does_not_become_pengurus_organ
     act_match = _resolve_activity(raw_text, fields, role_match)
     assert act_match.id == 74
     assert act_match.id != 67
+
+
+def test_panitia_karsa_pkkmb_resolves_to_panitia_id71() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT Nomor: 1944/UN3.FTMM/TM.00.02/2023 Diberikan kepada: VENEDICT "
+        "atas partisipasinya sebagai: PANITIA dalam Kegiatan Pengenalan Kehidupan Kampus "
+        "bagi Mahasiswa Baru Fakultas (KARSA) 2023 yang diselenggarakan oleh Fakultas Teknologi Maju dan Multidisiplin"
+    )
+    fields = {
+        "raw_role": "Panitia",
+        "nama_kegiatan_sertifikasi": "KARSA FTMM 2024",
+        "tingkat": "Fakultas",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 21
+    assert role_match.label == "Panitia"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 71
+    assert act_match.label == "Panitia Dalam Suatu Kegiatan Kemahasiswaan"
+
+
+def test_peserta_binary_freshman_orientation_resolves_to_pkkmb_id41() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT DIBERIKAN KEPADA Venedict atas partisipasinya sebagai PESERTA "
+        "Dalam rangkaian acara BINARY (Building Freshman Solidarity and Character Development) "
+        "yang diselenggarakan oleh Program Studi S1 Teknologi Sains Data"
+    )
+    fields = {
+        "raw_role": "Peserta",
+        "nama_kegiatan_sertifikasi": "BINARY 2022 (Building Freshman Solidarity and Character Development)",
+        "tingkat": "Departemen/Program Studi",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 6
+    assert role_match.label == "Peserta"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 41
+    assert act_match.label == "PKKMB"
+    assert act_match.id != 67

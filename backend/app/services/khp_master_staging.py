@@ -291,10 +291,6 @@ def _resolve_activity(
     mapped_fields: Mapping[str, Any],
     role_match: KHPFieldMatch | None = None,
 ) -> KHPFieldMatch:
-    mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
-    if _fold(mapped_value) == "peserta pkkmb":
-        return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
-
     if role_match is None:
         role_match = _resolve_role(raw_text, mapped_fields)
 
@@ -304,43 +300,27 @@ def _resolve_activity(
     activity_name = _field_value(mapped_fields, "nama_kegiatan_sertifikasi") or ""
     text = f"{activity_name} {raw_text}".lower()
 
-    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa", text))
-    is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
-
-    # If already a mapped label, check if valid unless it was falsely mapped to Pengurus Organisasi during a competition
-    mapped = _match_label(ACTIVITY_FIELD, mapped_value)
-    if mapped is not None:
-        if not (mapped.id == 67 and (is_lomba or is_winner)):
-            return mapped
-
-    # 0. MAWAPRES (before generic lomba)
-    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
-        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
-        if mawapres_match is not None:
-            return mawapres_match
-
-    # 1. KKN / BBK
-    if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", text):
-        kkn_match = _match_label(ACTIVITY_FIELD, "KKN-BBM")
-        if kkn_match is not None:
-            return kkn_match
-
-    # 2. Panitia
-    if (
-        "panitia" in role_label.lower()
-        or re.search(r"\bpanitia\b|organizing committee|steering committee", role_combined)
-        or re.search(r"\bpanitia\b", raw_text.lower())
-    ):
+    # 1. ATURAN EMAS PANITIA: Seluruh kepanitiaan diarahkan ke ID 71
+    is_panitia = (
+        role_match.id == 21
+        or "panitia" in role_label.lower()
+        or bool(re.search(r"\bpanitia\b|organizing committee|steering committee", role_combined))
+        or bool(re.search(r"\bpanitia\b|\bsteering committee\b|\borganizing committee\b", raw_text.lower()))
+    )
+    if is_panitia:
         panitia_match = _match_label(ACTIVITY_FIELD, "Panitia Dalam Suatu Kegiatan Kemahasiswaan")
         if panitia_match is not None:
             return panitia_match
 
-    # Ormawa context flags
+    mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
+    if _fold(mapped_value) == "peserta pkkmb":
+        return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa", text))
+    is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
     is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
     is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))
     has_explicit_pengurus_role = bool(re.search(r"\bpengurus\b|\bbph\b|\bbidang\b|\bkoordinator\b", role_combined))
 
-    # 3. LOMBA / KOMPETISI / PRESTASI (Prioritas tinggi sebelum Pengurus Organisasi)
     if (is_lomba and is_winner) or is_winner or (role_match.id in (7, 8, 9, 10, 25, 26, 27, 29)):
         lomba_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Interpreneurship/Business Plan")
         if lomba_win is not None:
@@ -350,8 +330,55 @@ def _resolve_activity(
         if lomba_peserta is not None:
             return lomba_peserta
 
-    # 4. Pengurus Organisasi (guarded against competition context)
-    if is_not_team and not (is_lomba and not has_explicit_pengurus_role) and (
+    # 3. PKKMB / ORIENTASI MAHASISWA BARU (Peserta)
+    is_pkkmb = bool(re.search(
+        r"\bpkkmb\b|pengenalan\s+kehidupan\s+kampus|freshman\s+(?:solidarity|orientation|welcome|induction)|"
+        r"orientasi\s+(?:mahasiswa|studi|kampus|akademik)|penerimaan\s+mahasiswa\s+baru|new\s+student\s+orientation",
+        text,
+    ))
+    if is_pkkmb:
+        pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")
+        if pkkmb_match is not None:
+            return pkkmb_match
+
+    # 4. MAWAPRES
+    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
+        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
+        if mawapres_match is not None:
+            return mawapres_match
+
+    # 5. KKN / BBK
+    if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", text):
+        kkn_match = _match_label(ACTIVITY_FIELD, "KKN-BBM")
+        if kkn_match is not None:
+            return kkn_match
+
+    # 6. Magang UKM
+    if re.search(r"\bmagang\b", text) and re.search(r"\bukm\b", text):
+        magang_match = _match_label(ACTIVITY_FIELD, "Magang UKM")
+        if magang_match is not None:
+            return magang_match
+
+    # 7. Bakti Sosial / Campaign Sosial / Pengabdian Masyarakat
+    if re.search(r"bakti sosial|social service|social action|campaign|pengabdian masyarakat", text):
+        baksos_match = _match_label(ACTIVITY_FIELD, "Mengikuti Pelaksanaan Bakti Sosial")
+        if baksos_match is not None:
+            return baksos_match
+
+    # 8. Latihan Kepemimpinan / Regenerasi
+    if re.search(r"lkmm|latihan\s+keterampilan\s+manajemen\s+mahasiswa|latihan\s+kepemimpinan|leadership\s+training|regenerasi|sekolah\s+bem|sekolah\s+kader", text):
+        lkm_match = _match_label(ACTIVITY_FIELD, "Latihan Kepemimpinan Lainnya")
+        if lkm_match is not None:
+            return lkm_match
+
+    # 9. KIM
+    if re.search(r"\bkim\b|kompetisi ilmiah mahasiswa", text):
+        kim_match = _match_label(ACTIVITY_FIELD, "Kompetisi Ilmiah Mahasiswa (KIM) tingkat Fakultas")
+        if kim_match is not None:
+            return kim_match
+
+    # 10. Pengurus Organisasi (guarded against competition and orientation context)
+    if is_not_team and not (is_lomba and not has_explicit_pengurus_role) and not is_pkkmb and (
         ("pengurus" in role_combined and not re.search(r"\btim\b|\bteam\b", role_combined))
         or any(k in text for k in ["kepengurusan", "masa bakti"])
         or (
@@ -362,38 +389,6 @@ def _resolve_activity(
         pengurus_match = _match_label(ACTIVITY_FIELD, "Pengurus Organisasi")
         if pengurus_match is not None:
             return pengurus_match
-    # 4. PKKMB / Orientasi Mahasiswa Baru
-    if re.search(r"\bpkkmb\b|pengenalan kehidupan kampus|freshman\s+(?:solidarity|orientation)|orientasi\s+(?:mahasiswa|studi|kampus)", text):
-        pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")
-        if pkkmb_match is not None:
-            return pkkmb_match
-
-    # 5. Magang UKM
-    if re.search(r"\bmagang\b", text) and re.search(r"\bukm\b", text):
-        magang_match = _match_label(ACTIVITY_FIELD, "Magang UKM")
-        if magang_match is not None:
-            return magang_match
-
-    # 6. Bakti Sosial / Campaign Sosial / Pengabdian Masyarakat
-    if re.search(r"bakti sosial|social service|social action|campaign|pengabdian masyarakat", text):
-        baksos_match = _match_label(ACTIVITY_FIELD, "Mengikuti Pelaksanaan Bakti Sosial")
-        if baksos_match is not None:
-            return baksos_match
-
-    # 7. Latihan Kepemimpinan / Regenerasi
-    if re.search(r"lkmm|latihan\s+keterampilan\s+manajemen\s+mahasiswa|latihan\s+kepemimpinan|leadership\s+training|regenerasi|sekolah\s+bem|sekolah\s+kader", text):
-        lkm_match = _match_label(ACTIVITY_FIELD, "Latihan Kepemimpinan Lainnya")
-        if lkm_match is not None:
-            return lkm_match
-
-    # 8. KIM
-    if re.search(r"\bkim\b|kompetisi ilmiah mahasiswa", text):
-        kim_match = _match_label(ACTIVITY_FIELD, "Kompetisi Ilmiah Mahasiswa (KIM) tingkat Fakultas")
-        if kim_match is not None:
-            return kim_match
-
-    # 9. Lomba / Kompetisi
-    # (Lomba / Kompetisi sudah diproses di prioritas 3 sebelum Pengurus Organisasi)
     # 10. Seminar / Forum Ilmiah / Pelatihan
     if re.search(r"seminar|workshop|lokakarya|webinar|talkshow|forum|kuliah tamu|pameran|guest lecture|conference|symposium|simposium|training|pelatihan|webcast|course|bootcamp|coaching|mentoring|job preparation|career track|literasi digital", text):
         forum_match = _match_label(ACTIVITY_FIELD, "Mengikuti kegiatan/forum ilmiah (seminar, lokakarya, workshop, pameran)")

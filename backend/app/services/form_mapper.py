@@ -57,13 +57,12 @@ def map_kelompok_dan_jenis(upper: str, role_upper: str, activity: str, organizer
     activity_upper = (activity or "").upper()
     organizer_upper = (organizer or "").upper()
 
-    if "PKKMB" in upper or "PENGENALAN KEHIDUPAN KAMPUS" in upper:
-        return "Kegiatan Wajib Universitas", "Peserta PKKMB"
-
-    # Panitia/committee harus diprioritaskan sebelum keyword organisasi, karena sertifikat
-    # panitia sering memuat BEM/HIMA/Student Association sebagai penyelenggara.
+    # Panitia/committee harus diprioritaskan sebelum keyword kegiatan/organisasi
     if any(k in role_upper for k in ["PANITIA", "COMMITTEE"]):
         return "Kegiatan Bidang Organisasi dan Kepemimpinan", "Panitia Dalam Suatu Kegiatan Kemahasiswaan"
+
+    if "PKKMB" in upper or "PENGENALAN KEHIDUPAN KAMPUS" in upper:
+        return "Kegiatan Wajib Universitas", "Peserta PKKMB"
 
     if any(k in role_upper for k in ["MENTERI", "KETUA", "SEKRETARIS", "ANGGOTA", "PENGURUS"]):
         return "Kegiatan Bidang Organisasi dan Kepemimpinan", "Pengurus Organisasi"
