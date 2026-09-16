@@ -19,4 +19,11 @@ def get_db():
 def init_db() -> None:
     from app import models  # noqa: F401
 
-    Base.metadata.create_all(bind=engine)
+    tables = None
+    if not settings.enable_khp_master_staging:
+        tables = [
+            table
+            for name, table in Base.metadata.tables.items()
+            if name != "khp_master_resolutions"
+        ]
+    Base.metadata.create_all(bind=engine, tables=tables)

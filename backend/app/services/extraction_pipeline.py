@@ -29,7 +29,21 @@ class PipelineResult:
     review_annotations: dict[str, SemanticReviewAnnotation] = field(
         default_factory=dict
     )
+    master_resolution: dict[str, Any] | None = None
 
+def _build_semantic_review(
+    raw_text: str,
+    fields: dict[str, Any],
+) -> dict[str, SemanticReviewAnnotation]:
+    if settings.enable_khp_master_staging:
+        from app.master_data import KHP_TINGKAT_LABELS
+
+        return build_semantic_review(
+            raw_text,
+            fields,
+            valid_tingkat_options=KHP_TINGKAT_LABELS,
+        )
+    return build_semantic_review(raw_text, fields)
 
 def _disabled_gemini_meta() -> dict[str, Any]:
     return {
@@ -125,6 +139,7 @@ def run_extraction_pipeline(
     raw_markdown = None
     raw_json: dict[str, Any] | None = None
     review_annotations: dict[str, SemanticReviewAnnotation] = {}
+    master_resolution: dict[str, Any] | None = None
 
     extracted = extract_certificate_fields(raw_text)
     date_missing = not (
@@ -152,7 +167,6 @@ def run_extraction_pipeline(
     raw_json = gemini_meta
     if settings.enable_tesseract_gemini:
         from app.services.gemini_extractor import extract_fields_with_gemini
-
         gemini_extracted, meta = extract_fields_with_gemini(raw_text)
         gemini_meta = _complete_gemini_meta(
             meta,
@@ -161,7 +175,7 @@ def run_extraction_pipeline(
         )
         raw_json = gemini_meta
         if gemini_extracted is not None:
-            review_annotations = build_semantic_review(raw_text, gemini_extracted)
+            review_annotations = _build_semantic_review(raw_text, gemini_extracted)
             extracted = gemini_extracted
             parser_engine = f"{parser_engine}+{gemini_meta.get('model', 'gemini')}"
             gemini_used = True
@@ -248,9 +262,34 @@ def run_extraction_pipeline(
     mapped = map_fields_to_form(
         extracted, tahun_akademik=tahun_akademik, bukti_fisik=bukti_fisik
     )
+
+    if settings.enable_khp_master_staging:
+        from app.services.khp_master_staging import (
+            apply_khp_master_mapping,
+            resolve_khp_master_fields,
+        )
+
+        staging_fields = dict(extracted)
+        staging_fields.update(mapped)
+        resolution = resolve_khp_master_fields(raw_text, staging_fields)
+        mapped = apply_khp_master_mapping(mapped, resolution)
+        master_resolution = resolution.as_dict()
+        parser_engine = f"{parser_engine}+khp_master_staging"
+        if resolution.status != "resolved":
+            existing = review_annotations.get("tingkat")
+            existing_reasons = existing.reasons if existing else ()
+            review_annotations["tingkat"] = SemanticReviewAnnotation(
+                True,
+                tuple(
+                    dict.fromkeys(
+                        (*existing_reasons, "khp_master_resolution_pending")
+                    )
+                ),
+            )
+
     review_annotations = merge_semantic_reviews(
         review_annotations,
-        build_semantic_review(raw_text, mapped),
+        _build_semantic_review(raw_text, mapped),
     )
     return PipelineResult(
         parser_engine=parser_engine,
@@ -259,4 +298,5 @@ def run_extraction_pipeline(
         raw_json=raw_json,
         mapped_fields=mapped,
         review_annotations=review_annotations,
+        master_resolution=master_resolution,
     )

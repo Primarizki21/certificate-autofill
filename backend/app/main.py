@@ -9,6 +9,7 @@ if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 
 import hashlib
+import json
 import uuid
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,9 +19,15 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, init_db
-from app.master_data import FORM_OPTIONS
-from app.models import Document, ExtractionJob, ExtractedField
-from app.schemas import ExtractionResult, FieldResult, OptionsResponse, UploadResponse
+from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
+from app.models import Document, ExtractionJob, ExtractedField, KHPMasterResolution
+from app.schemas import (
+    ExtractionResult,
+    FieldResult,
+    OptionsResponse,
+    PublicExtractionResult,
+    UploadResponse,
+)
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 from app.services.temporary_upload_store import upload_store
 
@@ -55,6 +62,10 @@ async def _storage_cleanup_loop() -> None:
 @app.on_event("startup")
 async def on_startup() -> None:
     init_db()
+    if settings.enable_khp_master_staging:
+        from app.services.aucc_catalog import warm_aucc_catalog
+
+        warm_aucc_catalog()
     cleanup_expired_jobs_and_uploads()
     app.state.storage_cleanup_task = asyncio.create_task(_storage_cleanup_loop())
 
@@ -87,7 +98,8 @@ def metrics() -> Response:
 @app.get("/api/options", response_model=OptionsResponse)
 def get_options() -> OptionsResponse:
     REQUEST_COUNT.labels(endpoint="/api/options").inc()
-    return OptionsResponse(options=FORM_OPTIONS)
+    options = KHP_MASTER_OPTIONS if settings.enable_khp_master_staging else FORM_OPTIONS
+    return OptionsResponse(options=options)
 
 
 @app.post("/api/documents", response_model=UploadResponse)
@@ -160,8 +172,8 @@ def upload_document(
     return UploadResponse(document_id=document_id, job_id=job_id, status=response_status)
 
 
-@app.get("/api/documents/{document_id}/result", response_model=ExtractionResult)
-def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionResult:
+@app.get("/api/documents/{document_id}/result", response_model=PublicExtractionResult)
+def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtractionResult:
     REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/result").inc()
     document = db.get(Document, document_id)
     if not document:
@@ -178,13 +190,28 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> ExtractionRes
         )
         for f in fields
     }
-    needs_review = any(item.needs_review for item in field_dict.values()) or document.status == "needs_review"
+    master_needs_review = False
+    if settings.enable_khp_master_staging:
+        resolution_row = (
+            db.query(KHPMasterResolution)
+            .filter(KHPMasterResolution.document_id == document_id)
+            .one_or_none()
+        )
+        if resolution_row is not None:
+            try:
+                master_res = json.loads(resolution_row.resolution_json)
+                master_needs_review = bool(master_res and master_res.get("status") != "resolved")
+            except json.JSONDecodeError:
+                master_needs_review = True
 
-    return ExtractionResult(
+    needs_review = (
+        any(item.needs_review for item in field_dict.values())
+        or document.status == "needs_review"
+        or master_needs_review
+    )
+    return PublicExtractionResult(
         document_id=document_id,
         status=document.status,
         needs_review=needs_review,
         fields=field_dict,
-        raw_text_preview=None,
-        parser_engine=document.parser_engine,
     )
