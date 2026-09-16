@@ -315,7 +315,7 @@ def _resolve_activity(
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     if _fold(mapped_value) == "peserta pkkmb":
         return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
-    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa", text))
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest|cup|league|liga|slayer|datathon|ideathon", text))
     is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
     is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
     is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))

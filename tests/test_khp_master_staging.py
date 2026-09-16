@@ -730,3 +730,25 @@ def test_peserta_binary_freshman_orientation_resolves_to_pkkmb_id41() -> None:
     assert act_match.id == 41
     assert act_match.label == "PKKMB"
     assert act_match.id != 67
+
+
+def test_dataquest_peserta_resolves_to_mengikuti_lomba_id83() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT No. 3978/B/UN3.FTMM/KM.06.02/2025 Peserta Objective Quest ELZANDI IRFAN ZIKRA "
+        "Dalam kegiatan Dataquest 4.0 part of Airnology 4.0 untuk kategori SMA/Sederajat dan Mahasiswa "
+        "yang diselenggarakan oleh BEM FTMM bekerja sama dengan Himpunan Mahasiswa Teknologi Sains Data"
+    )
+    fields = {
+        "raw_role": "Peserta",
+        "nama_kegiatan_sertifikasi": "Dataquest 4.0",
+        "tingkat": "Nasional",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 6
+    assert role_match.label == "Peserta"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 83
+    assert act_match.label == "Mengikuti Kegiatan Lomba Ilmiah"
