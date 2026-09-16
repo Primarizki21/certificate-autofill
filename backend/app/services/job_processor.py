@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 import socket
@@ -8,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
-from app.models import Document, ExtractionJob, ExtractedField
+from app.models import Document, ExtractionJob, ExtractedField, KHPMasterResolution
 from app.services.extraction_pipeline import run_extraction_pipeline
 from app.services.form_mapper import field_needs_review
 from app.services.temporary_upload_store import upload_store
@@ -167,6 +168,23 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
 
         document.parser_engine = result.parser_engine
         db.query(ExtractedField).filter(ExtractedField.document_id == document_id).delete()
+        if settings.enable_khp_master_staging:
+            db.query(KHPMasterResolution).filter(
+                KHPMasterResolution.document_id == document_id
+            ).delete()
+            resolution_payload = getattr(result, "master_resolution", None)
+            if resolution_payload:
+                db.add(
+                    KHPMasterResolution(
+                        id=str(uuid.uuid4()),
+                        document_id=document_id,
+                        resolution_json=json.dumps(
+                            resolution_payload,
+                            ensure_ascii=False,
+                            separators=(",", ":"),
+                        ),
+                    )
+                )
         any_review = False
         semantic_review_fields = 0
         confidence_review_fields = 0
@@ -199,6 +217,13 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
                 )
             )
 
+
+        if settings.enable_khp_master_staging:
+            resolution_payload = getattr(result, "master_resolution", None)
+            any_review = any_review or bool(
+                resolution_payload
+                and resolution_payload.get("status") != "resolved"
+            )
         job.status = "completed"
         job.finished_at = utcnow()
         job.worker_id = None

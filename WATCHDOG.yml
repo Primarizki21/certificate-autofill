@@ -7,7 +7,7 @@ instructions: |2
   See WATCHDOG.md for full review priorities.
 advisors:
   - name: Architecture
-    model: openai-codex/gpt-5.6-luna
+    model: openai-codex/gpt-5.6-luna:low
     tools:
       - read
       - grep
@@ -23,7 +23,7 @@ advisors:
       Reject hardcoding event names in regex — prefer structural semantic anchors.
     enabled: true
   - name: ExperimentSafety
-    model: openai-codex/gpt-5.6-luna
+    model: openai-codex/gpt-5.6-luna:low
     tools:
       - read
       - grep
@@ -39,7 +39,7 @@ advisors:
       Validate that benchmarks use GT_CSV_PATH=Ground_Truth_Sertifikat_v9.csv.
     enabled: true
   - name: CodeQuality
-    model: openai-codex/gpt-5.6-luna
+    model: openai-codex/gpt-5.6-luna:low
     tools:
       - read
       - grep

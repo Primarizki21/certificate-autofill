@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Input Kartu Hasil Prestasi</title>
-  <link rel="stylesheet" href="./styles.css" />
+  <link rel="stylesheet" href="./styles.css?v=20260914" />
 </head>
 <body>
   <div class="page-wrap">
@@ -138,16 +138,49 @@
               <div class="hint">Dapat diisi alamat laman website publikasi kegiatan, atau laman berita/media sosial terkait kegiatan</div>
             </div>
           </div>
+
         </section>
 
         <div class="footer-actions">
-          <button type="button" class="btn yellow">MASTER KEGIATAN</button>
+          <button type="button" id="masterKegiatanBtn" class="btn yellow">MASTER KEGIATAN</button>
           <button type="button" id="saveBtn" class="btn cyan">SIMPAN</button>
         </div>
       </form>
     </main>
   </div>
 
-  <script src="./app.js"></script>
+  <div id="masterModal" class="modal-overlay hidden" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h2 id="modalTitle">Katalog Master Kegiatan AUCC</h2>
+        <button type="button" id="closeModalBtn" class="modal-close" aria-label="Tutup">&times;</button>
+      </div>
+      <div class="modal-toolbar">
+        <input type="text" id="modalSearchInput" placeholder="Cari nama kegiatan (mis. PKKMB, Lomba, Seminar, Organisasi)..." />
+        <select id="modalGroupFilter">
+          <option value="">Semua Kelompok Kegiatan</option>
+        </select>
+      </div>
+      <div class="modal-table-wrap">
+        <table class="modal-table">
+          <thead>
+            <tr>
+              <th style="width: 50px;">ID</th>
+              <th style="width: 170px;">Kelompok</th>
+              <th>Nama Jenis Kegiatan</th>
+              <th style="width: 80px; text-align: center;">Aksi</th>
+            </tr>
+          </thead>
+          <tbody id="modalTableBody"></tbody>
+        </table>
+      </div>
+      <div class="modal-footer">
+        <span id="modalItemCount" class="modal-count">Menampilkan 0 kegiatan</span>
+        <button type="button" id="closeModalBtn2" class="btn gray">TUTUP</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="./app.js?v=20260914"></script>
 </body>
 </html>

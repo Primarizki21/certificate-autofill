@@ -55,10 +55,24 @@ function bindEvents() {
   });
 
   el('tingkat').addEventListener('change', applyStrictOrganizerRuleFromLevel);
-}
+  el('kelompok_kegiatan')?.addEventListener('change', onKelompokKegiatanChange);
+  el('jenis_kegiatan')?.addEventListener('change', onJenisKegiatanChange);
 
+  // Modal Master Kegiatan
+  el('masterKegiatanBtn')?.addEventListener('click', openMasterModal);
+  el('closeModalBtn')?.addEventListener('click', closeMasterModal);
+  el('closeModalBtn2')?.addEventListener('click', closeMasterModal);
+  el('masterModal')?.addEventListener('click', (e) => {
+    if (e.target === el('masterModal')) closeMasterModal();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeMasterModal();
+  });
+  el('modalSearchInput')?.addEventListener('input', filterAndRenderModalTable);
+  el('modalGroupFilter')?.addEventListener('change', filterAndRenderModalTable);
+}
 function applyStrictOrganizerRuleFromLevel() {
-  const tingkat = el('tingkat').value;
+  const tingkat = selectedOptionLabel(el('tingkat'));
   if (['Fakultas', 'Departemen/Program Studi', 'UKM'].includes(tingkat)) {
     ensureOptionAndSet(el('jenis_penyelenggara'), 'PTN di Indonesia');
   } else if (tingkat === 'Internasional') {
@@ -81,13 +95,68 @@ function fillSelect(selectId, values, selectedValue = '') {
   const select = el(selectId);
   if (!select) return;
   select.innerHTML = '';
+  if (['kelompok_kegiatan', 'jenis_kegiatan', 'prestasi_partisipasi_jabatan'].includes(selectId)) {
+    const emptyOption = document.createElement('option');
+    emptyOption.value = '';
+    emptyOption.textContent = '-- Pilih --';
+    emptyOption.dataset.label = '';
+    select.appendChild(emptyOption);
+  }
   values.forEach(value => {
+    const isMasterOption = value && typeof value === 'object';
+    if (isMasterOption && value.active === false) return;
+    const label = isMasterOption ? String(value.label || '') : String(value);
+    if (!label) return;
     const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
+    option.value = isMasterOption ? String(value.id) : label;
+    option.textContent = label;
+    option.dataset.label = label;
+    if (isMasterOption && value.group_id != null) {
+      option.dataset.groupId = String(value.group_id);
+    }
     select.appendChild(option);
   });
   if (selectedValue) ensureOptionAndSet(select, selectedValue);
+}
+
+function onKelompokKegiatanChange() {
+  const selectedGroup = el('kelompok_kegiatan').value;
+  const currentJenisVal = el('jenis_kegiatan').value;
+  filterJenisKegiatanByGroup(selectedGroup, currentJenisVal);
+}
+
+function filterJenisKegiatanByGroup(groupId, preserveValue = '') {
+  const jenisSelect = el('jenis_kegiatan');
+  if (!jenisSelect) return;
+  const allActivities = state.options.jenis_kegiatan || [];
+  let filtered = allActivities;
+  if (groupId && groupId !== '--' && groupId !== '') {
+    filtered = allActivities.filter(item => {
+      if (typeof item === 'object' && item.group_id != null) {
+        return String(item.group_id) === String(groupId);
+      }
+      return true;
+    });
+  }
+  fillSelect('jenis_kegiatan', filtered, preserveValue);
+}
+
+function onJenisKegiatanChange() {
+  const jenisSelect = el('jenis_kegiatan');
+  const selectedOption = jenisSelect?.selectedOptions?.[0];
+  const groupId = selectedOption?.dataset?.groupId;
+  if (groupId) {
+    const kelompokSelect = el('kelompok_kegiatan');
+    if (kelompokSelect && kelompokSelect.value !== String(groupId)) {
+      ensureOptionAndSet(kelompokSelect, String(groupId));
+      filterJenisKegiatanByGroup(groupId, jenisSelect.value);
+    }
+  }
+}
+
+function selectedOptionLabel(select) {
+  const selected = select?.selectedOptions?.[0];
+  return selected?.dataset?.label || selected?.textContent || select?.value || '';
 }
 
 function setInitialDefaults() {
@@ -130,11 +199,11 @@ async function uploadAndParse(event) {
 
     const uploaded = await response.json();
     state.currentDocumentId = uploaded.document_id;
-    setStatus('PDF berhasil diupload. Menunggu hasil parsing extraction...');
+    setStatus('PDF berhasil diunggah. Sedang memproses dokumen...');
     pollResult(uploaded.document_id);
   } catch (error) {
     setLoading(false);
-    setStatus(error.message || String(error));
+    setStatus('Gagal mengunggah dokumen. Silakan coba kembali.');
   }
 }
 
@@ -161,7 +230,7 @@ function pollResult(documentId) {
         clearInterval(state.pollTimer);
         state.pollTimer = null;
         setLoading(false);
-        setStatus('Parsing gagal. Cek terminal backend untuk detail error.');
+        setStatus('Ekstraksi dokumen tidak berhasil. Silakan coba kembali.');
         return;
       }
 
@@ -171,31 +240,161 @@ function pollResult(documentId) {
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
         setLoading(false);
-        const engineTag = data.parser_engine ? ` [${data.parser_engine}]` : '';
-        setStatus(data.needs_review ? `Parsing selesai${engineTag}. Form sudah terisi, tetapi beberapa field perlu dicek ulang.` : `Parsing selesai${engineTag}. Form sudah terisi otomatis.`);
+        setStatus(data.needs_review ? 'Pengisian form selesai otomatis. Silakan periksa kembali isian sebelum menyimpan.' : 'Pengisian form selesai otomatis.');
       } else {
-        setStatus(`Status parsing: ${data.status}. Menunggu...`);
+        setStatus('Sedang memproses dokumen...');
       }
     } catch (error) {
       clearInterval(state.pollTimer);
       state.pollTimer = null;
       setLoading(false);
-      setStatus(error.message || String(error));
+      setStatus('Terjadi kendala saat memproses dokumen. Silakan coba kembali.');
     }
   }, 1200);
 }
 
 function applyResult(data) {
   const fields = data.fields || {};
+
+  // 1. Set kelompok_kegiatan first
+  const kelItem = fields['kelompok_kegiatan'];
+  const kelVal = kelItem?.value ?? '';
+  if (kelVal) {
+    ensureOptionAndSet(el('kelompok_kegiatan'), kelVal);
+  } else {
+    const kelEl = el('kelompok_kegiatan');
+    if (kelEl) kelEl.value = '';
+  }
+
+  // 2. Filter jenis_kegiatan based on kelompok_kegiatan, then set it
+  const jenItem = fields['jenis_kegiatan'];
+  const jenVal = jenItem?.value ?? '';
+  const currentGroupId = el('kelompok_kegiatan')?.value || '';
+  filterJenisKegiatanByGroup(currentGroupId, jenVal);
+  if (jenVal) {
+    ensureOptionAndSet(el('jenis_kegiatan'), jenVal);
+  } else {
+    const jenEl = el('jenis_kegiatan');
+    if (jenEl) jenEl.value = '';
+  }
+
+  // 3. Set remaining fields
   fieldIds.forEach(fieldId => {
+    if (['kelompok_kegiatan', 'jenis_kegiatan'].includes(fieldId)) return;
     const item = fields[fieldId];
-    if (!item) return;
     const element = el(fieldId);
     if (!element) return;
-    const value = normalizeDateForDisplay(fieldId, item.value || '');
-    if (element.tagName === 'SELECT') ensureOptionAndSet(element, value);
-    else element.value = value;
+    const rawVal = item ? (item.value || '') : '';
+    const value = normalizeDateForDisplay(fieldId, rawVal);
+    if (element.tagName === 'SELECT') {
+      if (value) {
+        ensureOptionAndSet(element, value);
+      } else {
+        element.value = '';
+      }
+    } else {
+      element.value = value;
+    }
   });
+}
+
+
+function openMasterModal() {
+  const modal = el('masterModal');
+  if (!modal) return;
+  modal.classList.remove('hidden');
+
+  const groupFilter = el('modalGroupFilter');
+  if (groupFilter && groupFilter.options.length <= 1) {
+    const groups = state.options.kelompok_kegiatan || [];
+    groups.forEach(g => {
+      const opt = document.createElement('option');
+      opt.value = typeof g === 'object' ? String(g.id) : String(g);
+      opt.textContent = typeof g === 'object' ? String(g.label) : String(g);
+      groupFilter.appendChild(opt);
+    });
+  }
+
+  filterAndRenderModalTable();
+  el('modalSearchInput')?.focus();
+}
+
+function closeMasterModal() {
+  const modal = el('masterModal');
+  if (modal) modal.classList.add('hidden');
+}
+
+function filterAndRenderModalTable() {
+  const tbody = el('modalTableBody');
+  const countEl = el('modalItemCount');
+  if (!tbody) return;
+
+  const searchQuery = (el('modalSearchInput')?.value || '').toLowerCase().trim();
+  const groupFilter = el('modalGroupFilter')?.value || '';
+
+  const allActivities = state.options.jenis_kegiatan || [];
+  const groups = state.options.kelompok_kegiatan || [];
+  const groupMap = {};
+  groups.forEach(g => {
+    if (typeof g === 'object') groupMap[g.id] = g.label;
+  });
+
+  const filtered = allActivities.filter(act => {
+    const isObj = typeof act === 'object';
+    const id = isObj ? String(act.id) : '';
+    const label = isObj ? String(act.label || '') : String(act);
+    const groupId = isObj && act.group_id != null ? String(act.group_id) : '';
+
+    if (groupFilter && groupId !== groupFilter) return false;
+    if (searchQuery) {
+      const matchText = `${id} ${label}`.toLowerCase();
+      if (!matchText.includes(searchQuery)) return false;
+    }
+    return true;
+  });
+
+  tbody.innerHTML = '';
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; color:#829ab1; padding:18px;">Tidak ada kegiatan yang cocok dengan pencarian.</td></tr>';
+  } else {
+    filtered.forEach(act => {
+      const isObj = typeof act === 'object';
+      const id = isObj ? act.id : '-';
+      const label = isObj ? act.label : String(act);
+      const groupId = isObj ? act.group_id : '';
+      const groupName = groupMap[groupId] || (groupId ? `Kelompok ${groupId}` : '-');
+
+      const tr = document.createElement('tr');
+      tr.innerHTML = `
+        <td style="font-family:monospace; font-weight:700; color:#1d5280;">${id}</td>
+        <td style="color:#486581; font-size:11px;">${groupName}</td>
+        <td style="color:#102a43; font-weight:500;">${label}</td>
+        <td style="text-align:center;">
+          <button type="button" class="btn-select" data-id="${id}" data-group-id="${groupId}">PILIH</button>
+        </td>
+      `;
+      tr.querySelector('.btn-select').addEventListener('click', () => {
+        selectActivityFromModal(id, groupId);
+      });
+      tbody.appendChild(tr);
+    });
+  }
+
+  if (countEl) {
+    countEl.textContent = `Menampilkan ${filtered.length} dari ${allActivities.length} kegiatan`;
+  }
+}
+
+function selectActivityFromModal(activityId, groupId) {
+  if (groupId) {
+    ensureOptionAndSet(el('kelompok_kegiatan'), String(groupId));
+    filterJenisKegiatanByGroup(groupId, String(activityId));
+  } else {
+    ensureOptionAndSet(el('jenis_kegiatan'), String(activityId));
+  }
+  ensureOptionAndSet(el('jenis_kegiatan'), String(activityId));
+  closeMasterModal();
+  el('jenis_kegiatan')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
 }
 
 function normalizeDateForDisplay(fieldId, value) {
@@ -206,15 +405,30 @@ function normalizeDateForDisplay(fieldId, value) {
 }
 
 function ensureOptionAndSet(select, value) {
-  if (!select || !value) return;
-  const exists = Array.from(select.options).some(option => option.value === value);
-  if (!exists) {
-    const option = document.createElement('option');
-    option.value = value;
-    option.textContent = value;
-    select.appendChild(option);
+  if (!select || value === null || value === undefined || value === '') return;
+  const target = String(value).trim();
+  if (!target) return;
+
+  // 1. Coba cocokkan dengan value atau label teks option yang sudah ada
+  const options = Array.from(select.options);
+  const matchedOpt = options.find(
+    opt => opt.value === target ||
+           (opt.dataset.label && opt.dataset.label.toLowerCase() === target.toLowerCase()) ||
+           opt.textContent.trim().toLowerCase() === target.toLowerCase()
+  );
+
+  if (matchedOpt) {
+    select.value = matchedOpt.value;
+    return;
   }
-  select.value = value;
+
+  // 2. Jika belum ada, buat option baru
+  const option = document.createElement('option');
+  option.value = target;
+  option.textContent = target;
+  option.dataset.label = target;
+  select.appendChild(option);
+  select.value = target;
 }
 
 function renderDebug(data) {
@@ -230,6 +444,7 @@ function resetPage() {
 
   el('khpForm').reset();
   setInitialDefaults();
+  filterJenisKegiatanByGroup('', '');
   el('afterUploadSection').classList.add('hidden');
   el('pdfPreview').src = '';
   setLoading(false);
@@ -259,4 +474,4 @@ function escapeHtml(value) {
     .replaceAll("'", '&#039;');
 }
 
-init().catch(error => setStatus(`Frontend gagal inisialisasi: ${error.message || error}`));
+init().catch(() => setStatus('Frontend gagal memuat opsi form. Silakan refresh halaman.'));

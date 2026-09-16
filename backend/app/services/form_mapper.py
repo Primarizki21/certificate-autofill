@@ -57,13 +57,12 @@ def map_kelompok_dan_jenis(upper: str, role_upper: str, activity: str, organizer
     activity_upper = (activity or "").upper()
     organizer_upper = (organizer or "").upper()
 
-    if "PKKMB" in upper or "PENGENALAN KEHIDUPAN KAMPUS" in upper:
-        return "Kegiatan Wajib Universitas", "Peserta PKKMB"
-
-    # Panitia/committee harus diprioritaskan sebelum keyword organisasi, karena sertifikat
-    # panitia sering memuat BEM/HIMA/Student Association sebagai penyelenggara.
+    # Panitia/committee harus diprioritaskan sebelum keyword kegiatan/organisasi
     if any(k in role_upper for k in ["PANITIA", "COMMITTEE"]):
         return "Kegiatan Bidang Organisasi dan Kepemimpinan", "Panitia Dalam Suatu Kegiatan Kemahasiswaan"
+
+    if "PKKMB" in upper or "PENGENALAN KEHIDUPAN KAMPUS" in upper:
+        return "Kegiatan Wajib Universitas", "Peserta PKKMB"
 
     if any(k in role_upper for k in ["MENTERI", "KETUA", "SEKRETARIS", "ANGGOTA", "PENGURUS"]):
         return "Kegiatan Bidang Organisasi dan Kepemimpinan", "Pengurus Organisasi"
@@ -140,7 +139,14 @@ def map_tingkat_v8(
             "penyelenggara_kegiatan": organizer,
             "raw_role": raw_role,
         }
-        llm_val = infer_tingkat(full_text or "", known)
+        if settings.enable_khp_master_staging:
+            llm_val = infer_tingkat(
+                full_text,
+                known,
+                khp_master_staging=True,
+            )
+        else:
+            llm_val = infer_tingkat(full_text, known)
         if llm_val:
             return llm_val, 0.85
 
@@ -216,12 +222,12 @@ def map_jabatan(raw_role: str | None) -> str | None:
         return "Peserta"
     if "WAKIL" in role and "KETUA" in role:
         return "Wakil Ketua"
+    if any(k in role for k in ("KETUA DIVISI", "KETUA BIDANG", "KETUA SEKSI", "KETUA DEPARTEMEN", "KEPALA", "MENTERI", "KOORDINATOR", "MINISTER", "SUPERVISOR", "BENDAHARA", "BPH", "PENGURUS INTI")):
+        return "Pengurus Inti Lain"
     if "KETUA" in role:
         return "Ketua"
     if "SEKRETARIS" in role:
         return "Sekretaris"
-    if "MENTERI" in role or "KOORDINATOR" in role or "KEPALA" in role or "MINISTER" in role:
-        return "Pengurus Inti Lain"
     if "ANGGOTA" in role:
         return "Anggota Pengurus"
     return raw_role.title()

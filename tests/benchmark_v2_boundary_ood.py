@@ -6,6 +6,7 @@ import argparse
 import json
 import random
 import re
+from datetime import datetime, timezone
 import sys
 from pathlib import Path
 from typing import Any
@@ -154,8 +155,13 @@ def _summary(payload: dict[str, Any]) -> str:
     )
     return "\n".join(lines) + "\n"
 
-
-def run(output_dir: Path) -> dict[str, Any]:
+def run(
+    output_dir: Path,
+    *,
+    campaign_id: str = "EXP-PROD-V2-CAMPAIGN-001",
+    parent_experiment_id: str | None = None,
+    commit: str | None = None,
+) -> dict[str, Any]:
     ensure_fresh_directory(output_dir)
     source = load_cached_corpus()
     conditions: dict[str, dict[str, Any]] = {
@@ -175,8 +181,11 @@ def run(output_dir: Path) -> dict[str, Any]:
             condition["gate"] = name == "clean" or drop >= -2.0
         else:
             condition["gate"] = True
+    generated_at = datetime.now(timezone.utc).isoformat()
     payload = {
         "experiment_id": output_dir.name,
+        "campaign_id": campaign_id,
+        "parent_experiment_id": parent_experiment_id,
         "source": "docs/experiments/EXP-PROD-V2-SCOPE-001/run_full_74",
         "gt_csv": "Ground_Truth_Sertifikat_v9.csv",
         "matcher": "tests/matchers.py",
@@ -193,20 +202,27 @@ def run(output_dir: Path) -> dict[str, Any]:
         },
         "conditions": conditions,
         "all_gates_pass": all(condition["gate"] for condition in conditions.values()),
+        "status": "STAGING_ONLY",
     }
     write_json(output_dir / "results.json", payload)
-    write_json(
-        output_dir / "manifest.json",
-        {
-            "experiment_id": output_dir.name,
-            "step": "boundary_ood",
-            "immutable": True,
-            "n_documents": 74,
-            "production_promotion": False,
-            "scope": "boundary_only",
-            "source": payload["source"],
-        },
-    )
+    manifest = {
+        "campaign_id": campaign_id,
+        "experiment_id": output_dir.name,
+        "parent_experiment_id": parent_experiment_id,
+        "related_experiment_ids": [],
+        "role": "boundary_only_ood",
+        "step": "boundary_ood",
+        "status": "STAGING_ONLY",
+        "started_at": generated_at,
+        "finished_at": datetime.now(timezone.utc).isoformat(),
+        "immutable": True,
+        "commit": commit,
+        "n_documents": 74,
+        "production_promotion": False,
+        "scope": "boundary_only",
+        "source": payload["source"],
+    }
+    write_json(output_dir / "manifest.json", manifest)
     (output_dir / "summary.md").write_text(_summary(payload), encoding="utf-8")
     return payload
 
@@ -218,8 +234,16 @@ def main() -> None:
         type=Path,
         default=REPO_ROOT / "docs/experiments/EXP-PROD-V2-OOD-BOUNDARY-001",
     )
+    parser.add_argument("--campaign-id", default="EXP-PROD-V2-CAMPAIGN-001")
+    parser.add_argument("--parent-experiment-id")
+    parser.add_argument("--commit")
     args = parser.parse_args()
-    payload = run(args.output_dir)
+    payload = run(
+        args.output_dir,
+        campaign_id=args.campaign_id,
+        parent_experiment_id=args.parent_experiment_id,
+        commit=args.commit,
+    )
     print(json.dumps({"output_dir": str(args.output_dir), "pass": payload["all_gates_pass"]}))
 
 

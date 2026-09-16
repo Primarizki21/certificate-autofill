@@ -28,8 +28,11 @@ services:
       - ENABLE_COMBINED_V4_2=${ENABLE_COMBINED_V4_2:-true}
       - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-gemini-3.1-flash-lite}
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
+      - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
     ports:
       - "8000:8000"
+    volumes:
+      - ./khp:/app/khp:ro
     depends_on:
       postgres:
         condition: service_healthy

@@ -127,9 +127,35 @@ def extract_certificate_number(text: str) -> str | None:
 def extract_role(text: str) -> str | None:
     upper = text.upper()
 
+    m_juara = re.search(
+        r"\bJUARA\s+(?:HARAPAN\s+)?(?:I{1,3}|[1-3]|IV|V|VI|VII|VIII|IX|X)\b|\bFIRST\s+WINNER\b|\bSECOND\s+WINNER\b|\bTHIRD\s+WINNER\b|\bFINALIS\b|\bFINALIST\b",
+        upper,
+    )
+    if m_juara:
+        return m_juara.group(0).title()
+
+    patterns = [
+        r"(?:ATAS\s*PARTISIPASI(?:NYA)?\s*SEBAGAI|ATAS\s*PRESTASI(?:NYA)?\s*SEBAGAI|\bSEBAGAI)\s*:?\s*\n?\s*([A-Za-z0-9][A-Za-z0-9\s/\-]{2,50})",
+        r"\bsebagai\s*:?\s*\n?\s*([A-Za-z][A-Za-z\s/\-]{2,50})",
+        r"Atas\s+Partisipasinya\s+sebagai\s*:?\s*\n?\s*([A-Za-z][A-Za-z\s/\-]{2,50})",
+    ]
+    stop_words = ["DALAM", "ATAS", "PENGENALAN", "UNIVERSITAS", "SURABAYA", "MASA", "PADA", "WHICH", "LOMBA", "KOMPETISI", "ACARA", "EVENT", "DEKAN", "FAKULTAS", "KETUA"]
+    for pattern in patterns:
+        match = re.search(pattern, text, flags=re.IGNORECASE)
+        if match:
+            first_line = match.group(1).splitlines()[0] if match.group(1) else ""
+            role = clean_inline_phrase(first_line)
+            for stop in stop_words:
+                idx = role.upper().find(stop)
+                if idx > 0:
+                    role = role[:idx].strip()
+            if 2 <= len(role) <= 50:
+                if "COMMITTEE" in role.upper():
+                    return "Panitia"
+                return title_keep_acronym(role)
+
     english_patterns = [
-        r"\bas\s+a\s+([A-Za-z][A-Za-z\s/\-]{2,80})",
-        r"\bas\s+([A-Za-z][A-Za-z\s/\-]{2,80})",
+        r"\bas\s+(?:a|an)\s+([A-Za-z][A-Za-z\s/\-]{2,50})",
         r"\bOF\s+PARTICIPATION\b",
         r"\bPARTICIPATION\b",
     ]
@@ -138,7 +164,12 @@ def extract_role(text: str) -> str | None:
         if match:
             if "PARTICIPATION" in pattern:
                 return "Peserta"
-            role = clean_inline_phrase(match.group(1))
+            first_line = match.group(1).splitlines()[0] if match.group(1) else ""
+            role = clean_inline_phrase(first_line)
+            for stop in stop_words:
+                idx = role.upper().find(stop)
+                if idx > 0:
+                    role = role[:idx].strip()
             role_upper = role.upper()
             if "COMMITTEE" in role_upper:
                 return "Panitia"
@@ -146,32 +177,16 @@ def extract_role(text: str) -> str | None:
                 return "Peserta"
             if "MINISTER" in role_upper or "MENTERI" in role_upper:
                 return "Menteri"
-            if role:
+            if 2 <= len(role) <= 50:
                 return title_keep_acronym(role)
-
-    patterns = [
-        r"\bSEBAGAI\s*:?\s*\n?\s*([A-Z][A-Z\s/\-]{2,80})",
-        r"\bsebagai\s*:?\s*\n?\s*([A-Za-z][A-Za-z\s/\-]{2,80})",
-        r"Atas\s+Partisipasinya\s+sebagai\s*:?\s*\n?\s*([A-Za-z][A-Za-z\s/\-]{2,80})",
-    ]
-    stop_words = ["DALAM", "ATAS", "PENGENALAN", "UNIVERSITAS", "SURABAYA", "MASA", "PADA", "WHICH"]
-    for pattern in patterns:
-        match = re.search(pattern, text, flags=re.IGNORECASE)
-        if match:
-            role = clean_inline_phrase(match.group(1))
-            for stop in stop_words:
-                idx = role.upper().find(stop)
-                if idx > 0:
-                    role = role[:idx].strip()
-            if 2 <= len(role) <= 80:
-                if "COMMITTEE" in role.upper():
-                    return "Panitia"
-                return title_keep_acronym(role)
-    for keyword in ["PANITIA", "PESERTA", "MENTERI", "KETUA", "SEKRETARIS", "ANGGOTA"]:
-        if keyword in upper:
+    fallback_keywords = ["PANITIA", "PESERTA", "KETUA", "SEKRETARIS", "BENDAHARA", "ANGGOTA"]
+    for keyword in fallback_keywords:
+        if re.search(r"\b" + keyword + r"\b", upper):
             return title_keep_acronym(keyword)
-    return None
 
+    if re.search(r"(?<!KE)\bMENTERI\b", upper) and not re.search(r"\bMENTERI\s+(?:PENDIDIKAN|AGAMA|KEUANGAN|KESEHATAN|HUKUM|RISET)\b", upper):
+        return "Menteri"
+    return None
 
 def extract_activity_name(text: str) -> str | None:
     upper = text.upper()
