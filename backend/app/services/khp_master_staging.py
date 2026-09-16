@@ -315,11 +315,26 @@ def _resolve_activity(
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     if _fold(mapped_value) == "peserta pkkmb":
         return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
-    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest|cup|league|liga|slayer|datathon|ideathon", text))
+    is_minat_bakat = bool(re.search(
+        r"olahraga|futsal|basket|badminton|bulutangkis|voli|catur|esport|e-sport|atletik|"
+        r"seni\s+tari|vokal|menyanyi|musik|band\b|teater|fotografi|puisi|lukis|mtq|tartil|tahfidz|"
+        r"pekan\s+olahraga|sport\s*fest",
+        text,
+    ))
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest\b|dataquest|slayer|datathon|ideathon", text))
     is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
     is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
     is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))
     has_explicit_pengurus_role = bool(re.search(r"\bpengurus\b|\bbph\b|\bbidang\b|\bkoordinator\b", role_combined))
+
+    if is_minat_bakat and not bool(re.search(r"dataquest|quest\b|datathon|hackathon|gemastik|pimnas|data\s+science", text)):
+        if is_winner:
+            minat_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam kegiatan Minat dan Bakat (Olahraga, Seni,Kerohanian dan IT)")
+            if minat_win is not None:
+                return minat_win
+        minat_peserta = _match_label(ACTIVITY_FIELD, "Mengikuti kegiatan Minat dan Bakat (Olahraga, Seni dan Kerohanian)")
+        if minat_peserta is not None:
+            return minat_peserta
 
     if (is_lomba and is_winner) or is_winner or (role_match.id in (7, 8, 9, 10, 25, 26, 27, 29)):
         lomba_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Interpreneurship/Business Plan")
@@ -329,7 +344,6 @@ def _resolve_activity(
         lomba_peserta = _match_label(ACTIVITY_FIELD, "Mengikuti Kegiatan Lomba Ilmiah")
         if lomba_peserta is not None:
             return lomba_peserta
-
     # 3. PKKMB / ORIENTASI MAHASISWA BARU (Peserta)
     is_pkkmb = bool(re.search(
         r"\bpkkmb\b|pengenalan\s+kehidupan\s+kampus|freshman\s+(?:solidarity|orientation|welcome|induction)|"
