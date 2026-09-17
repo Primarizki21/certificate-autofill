@@ -90,9 +90,13 @@ data/
 khp/
 # Private experiment reports & documentation
 docs/report
+docs/experiments
 docs/experiments/
+docs/screenshots
 docs/screenshots/
-old_docs/
+docs/pipeline_pr_3
 docs/pipeline_pr_3/
+old_docs/
+project_source
 # Agents Instructions and internal notes
 AGENTS.md
