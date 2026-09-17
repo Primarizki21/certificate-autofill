@@ -139,15 +139,15 @@ Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
 ### 1. Evaluasi Terpadu Master Data KHP 9-Field (Dataset Terpadu $N=104$)
 Evaluasi pipeline terintegrasi (Gemini V2 Scope-Aware + Resolver Deterministik Taksonomi Universitas) pada 104 sertifikat terverifikasi:
 
-| Dimensi Evaluasi | Exact Match (%) | Fuzzy / Overlap (%) | Detail Capaian | Status / Keterangan |
-|---|:---:|:---:|:---:|---|
-| **Master 3-Field (Taksonomi Universitas)** | **80.77%** | **80.77%** | 252/312 sel | **+63 sel bersih (+20.19pt)** vs baseline awal; zero loss |
-| **All-Cells 9-Field (End-to-End KHP)** | **73.08%** | **78.42%** | 684/936 sel | 6 fakta sertifikat + 3 taksonomi master database |
-| **Base 6-Field Ekstraksi Faktual** | **69.23%** | **77.40%** | 432/624 sel | Kestabilan penuh pada field literal sertifikat |
-| **Pencocokan Tuple Resmi Database** | **91.35%** | — | **95 / 104 Dokumen** | 95 sertifikat terpetakan otomatis ke ID resmi kegiatan tanpa review |
-| **Safety Net Review Manual** | **8.65%** | — | 9 / 104 Dokumen | Hanya memicu review manual pada noise OCR ekstrem atau kombinasi belum terdaftar |
+| Dimensi Evaluasi | Tahap Optimasi Semantik | Tahap Penyempurnaan Prioritas | Detail / Keterangan |
+|---|:---:|:---:|---|
+| **Master 3-Field (Taksonomi Universitas)** | **80.77% (252/312 sel)** | **80.45% (251/312 sel)** | **+63 sel bersih (+20.19pt)** vs baseline awal; zero loss |
+| **All-Cells 9-Field (End-to-End KHP)** | **73.08% (684/936 sel)** | **72.97% (683/936 sel)** | 6 fakta sertifikat + 3 taksonomi master database |
+| **Base 6-Field Ekstraksi Faktual** | **69.23% (432/624 sel)** | **69.23% (432/624 sel)** | Kestabilan penuh pada field literal sertifikat (zero regression) |
+| **Pencocokan Tuple Resmi Database** | **86.54% (90/104 dokumen)** | **91.35% (95/104 dokumen)** | Hingga 95 sertifikat terpetakan otomatis ke ID resmi kegiatan |
+| **Safety Net Review Manual** | **13.46% (14/104 dokumen)** | **8.65% (9/104 dokumen)** | Terpangkas dari 42 menjadi hanya 9 kasus review manual |
 
-*Catatan: Resolusi master mencakup penyempurnaan deteksi minat-bakat dan varian kata kunci kompetisi.*
+*Catatan: Tahap penyempurnaan memprioritaskan pemetaan peran panitia dan orientasi mahasiswa baru, disusul penanganan varian kompetisi minat-bakat.*
 
 ---
 
@@ -171,10 +171,10 @@ Evaluasi ekstraksi persepsi 6-field pada 74 teks sertifikat:
 
 | Pipeline / Model | MACRO Exact (All-Cells) | Framework Exact (5 Field) | Akurasi Tingkat | Biaya / Dokumen | Rata-rata Latensi | Status / Keterangan |
 |---|:---:|:---:|:---:|:---:|:---:|---|
-| **Production Conditional + Gemini 3.1 Flash-Lite (V2 Scope-Aware)** | **70.27%** | **80.65%** | **83.78%** | **Rp10,40** | **1.89s** | **Arsitektur Persepsi Standar**. Menghilangkan bias hierarki penyelenggara. |
+| **Production Conditional + Gemini 3.1 Flash-Lite (V2 Scope-Aware)** | **70.27%** | **80.65%** | **83.78%** | **Rp10,91** | **2.23s** | **Arsitektur Persepsi Standar**. Menghilangkan bias hierarki penyelenggara. |
 | Production Conditional + Gemini Baseline V1 | 67.12% | 81.29% | 62.16% | Rp10,40 | 1.89s | Baseline awal (terdistraksi bias kepanitiaan fakultas) |
-| Direct Gemini 2.5 Flash-Lite | 58.78% | 71.05% | 43.20% | **Rp3,26** | 1.32s | Biaya termurah, akurasi tingkat lebih rendah |
-| Direct Gemini 2.5 Flash | 58.56% | 71.38% | 51.35% | Rp38,94 | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
+| Direct Gemini 2.5 Flash-Lite | 58.78% | 61.89% | 43.24% | **Rp3,26** | 1.32s | Biaya termurah, akurasi tingkat lebih rendah |
+| Direct Gemini 2.5 Flash | 58.56% | 57.84% | 62.16% | Rp38,94 | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
 
 ---
 
@@ -183,7 +183,7 @@ Ekstraksi lokal deterministik tanpa ketergantungan API eksternal (100% offline):
 
 | Pipeline / Versi | MACRO Exact (All-Cells) | Framework Exact (5 Field) | MACRO Fuzzy | LLM Calls | Sifat / Arsitektur |
 |---|:---:|:---:|:---:|:---:|---|
-| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **78.64%** | **0** | **Best Offline Fallback**. 3 pilar OOD + High-DPI crop zoom 6.0×. |
+| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **77.93%** | **0** | **Best Offline Fallback**. 3 pilar OOD + High-DPI crop zoom 6.0×. |
 | Combined v3 | 74.20% | 85.70%* | 88.30% | 0 | 5 branch composite (basis 384 sel non-empty) |
 | Combined v2 | 74.20% | 80.70% | 80.70% | 0 | Port integrasi rule router v5 |
 | Regex Baseline Legacy (v2) | 42.20% | — | — | 0 | Baseline regex awal historis |
