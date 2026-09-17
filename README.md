@@ -1,15 +1,15 @@
 # Certificate Autofill Prototype
 
-Prototype internal — ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasil Prestasi (KHP).
+Prototype sistem ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasil Prestasi (KHP) terintegrasi taksonomi resmi universitas.
 
-**Stack Utama:**
+**Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR:** PyMuPDF (fast text) + Tesseract OCR + RapidOCR
-- **Ekstraksi Semantik (Default):** Google Gemini (`gemini-3.1-flash-lite`) via Direct Tesseract-to-Gemini REST API
-- **Ekstraksi Offline (Fallback):** Combined v4.2 (Structural Semantic Rules + High-DPI Region Crop)
+- **Text & OCR Engine:** PyMuPDF (fast text) + Tesseract OCR Multi-PSM + RapidOCR
+- **Persepsi Semantik (LLM):** Google Gemini (`gemini-3.1-flash-lite`) untuk ekstraksi fakta teks sertifikat dan penentuan tingkat cakupan
+- **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas (normalisasi tingkat, peran/prestasi, dan pengelompokan kegiatan resmi)
+- **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
+- **Ekstraksi Offline (Fallback):** Combined v4.2 (Sistem aturan struktural lokal tanpa cloud API)
 - **Monitoring:** Prometheus + Grafana + Loki
-
-Lihat [AGENTS.md](AGENTS.md) untuk arsitektur mendalam, konvensi teknis, dan panduan kontribusi tim.
 
 ---
 
@@ -34,7 +34,7 @@ GOOGLE_API_KEY=""  # Masukkan kunci Google AI Studio API Anda
 
 ### 2. Menjalankan via Docker Compose
 
-Perintah default hanya menyalakan backend FastAPI dan PostgreSQL 17:
+Perintah default menyalakan backend FastAPI dan PostgreSQL 17:
 
 ```bash
 docker compose up --build
@@ -48,7 +48,7 @@ docker compose --profile monitoring up --build
 
 Setelah container aktif:
 | Service | URL | Keterangan |
-|---------|-----|------------|
+|---|---|---|
 | **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
 | **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
@@ -71,6 +71,8 @@ export APP_ENV=development
 export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 export PROCESSING_MODE=background
 export ENABLE_TESSERACT_GEMINI=true
+export ENABLE_KHP_MASTER_STAGING=true
+export ENABLE_COMBINED_V4_2=true
 export GOOGLE_API_KEY=""
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -81,6 +83,8 @@ $env:APP_ENV="development"
 $env:DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 $env:PROCESSING_MODE="background"
 $env:ENABLE_TESSERACT_GEMINI="true"
+$env:ENABLE_KHP_MASTER_STAGING="true"
+$env:ENABLE_COMBINED_V4_2="true"
 $env:GOOGLE_API_KEY=""
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
@@ -100,33 +104,26 @@ cd frontend && python -m http.server 5173
 Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`:
 
 | Variabel | Nilai Default | Deskripsi |
-|----------|---------------|-----------|
-| `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini |
+|---|:---:|---|
+| `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini dengan prompt V2 Scope-Aware |
 | `GOOGLE_API_KEY` | *(kosong)* | Kunci Google AI Studio API Anda |
 | `GOOGLE_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model Gemini yang digunakan (`gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`) |
 | `GEMINI_TIMEOUT_SECONDS` | `30.0` | Batas waktu timeout pemanggilan API Gemini sebelum fallback |
+| `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
+| `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
-| `ENABLE_COMBINED_V4_2` | `false` | Mengaktifkan pipeline staging offline v4.2 saat Gemini dinonaktifkan |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
 
-### Storage Sementara dan Migrasi Database
-PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database menyimpan metadata dan hasil field, bukan bytes PDF atau OCR mentah.
+### Storage Sementara dan Manajemen File
+PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database PostgreSQL hanya menyimpan metadata teks dan hasil ekstraksi form, bukan data bytes PDF atau file OCR mentah.
 
-Untuk database lama, buat backup terverifikasi lalu cek rencana migrasi:
+Untuk pemeliharaan storage atau database lama:
 ```bash
 uv run python scripts/migrate_ephemeral_storage.py
 ```
-
-Hentikan seluruh instance FastAPI dan `db_worker`, lalu jalankan:
-```bash
-uv run python scripts/migrate_ephemeral_storage.py --apply --confirm-delete-legacy-storage --confirm-maintenance-window
-```
-
-Perintah di atas menghapus permanen tabel lama `document_files` dan `parsed_documents`. Jangan jalankan tanpa backup.
-
 
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
 Cukup ubah baris berikut di `.env`:
@@ -137,74 +134,104 @@ Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
 
 ---
 
-## Hasil Evaluasi & Benchmark (Dataset 74 Sertifikat, Evaluator Frozen Matcher v2)
+## Hasil Evaluasi & Benchmark
 
-### 1. Pipeline Ekstraksi Utama & Model Cloud LLM
-Evaluasi pada 74 teks sertifikat (sumber asli gabungan digital dan pindaian raster):
+### 1. Evaluasi Terpadu Master Data KHP 9-Field (Dataset Terpadu $N=104$)
+Evaluasi pipeline terintegrasi (Gemini V2 Scope-Aware + Resolver Deterministik Taksonomi Universitas) pada 104 sertifikat terverifikasi:
 
-| Pipeline / Model | MACRO Exact (All-Cells) | Framework Exact (5 Field) | MACRO Fuzzy | Biaya / Dokumen | Rata-rata Latensi | Status / Keterangan |
+| Dimensi Evaluasi | Tahap Optimasi Semantik | Tahap Penyempurnaan Prioritas | Detail / Keterangan |
+|---|:---:|:---:|---|
+| **Master 3-Field (Taksonomi Universitas)** | **80.77% (252/312 sel)** | **80.45% (251/312 sel)** | **+63 sel bersih (+20.19pt)** vs baseline awal; zero loss |
+| **All-Cells 9-Field (End-to-End KHP)** | **73.08% (684/936 sel)** | **72.97% (683/936 sel)** | 6 fakta sertifikat + 3 taksonomi master database |
+| **Base 6-Field Ekstraksi Faktual** | **69.23% (432/624 sel)** | **69.23% (432/624 sel)** | Kestabilan penuh pada field literal sertifikat (zero regression) |
+| **Pencocokan Tuple Resmi Database** | **86.54% (90/104 dokumen)** | **91.35% (95/104 dokumen)** | Hingga 95 sertifikat terpetakan otomatis ke ID resmi kegiatan |
+| **Safety Net Review Manual** | **13.46% (14/104 dokumen)** | **8.65% (9/104 dokumen)** | Terpangkas dari 42 menjadi hanya 9 kasus review manual |
+
+*Catatan: Tahap penyempurnaan memprioritaskan pemetaan peran panitia dan orientasi mahasiswa baru, disusul penanganan varian kompetisi minat-bakat.*
+
+---
+
+### 2. Riwayat Evaluasi Eksperimen Prompting LLM (Dataset Terpadu $N=104$)
+Ringkasan perjalanan eksperimen teknik prompting LLM dari baseline awal hingga arsitektur final:
+
+| Strategi / Arsitektur Prompt | Akurasi Tingkat | All-Cells (Exact) | Token / Doc | Estimasi Biaya / Doc | Status & Temuan Kunci |
+|---|:---:|:---:|:---:|:---:|---|
+| **V1 Baseline Produksi** | 61.54% | 62.50% | 1.463,5 tok | Rp 9,95 | Baseline awal. Rentan bias hierarki penyelenggara (13 event nasional salah ditebak menjadi fakultas). |
+| **V2 Scope-Aware (Pilihan Standar)** | **82.69% (+21.15pt)** | **65.71% (+3.21pt)** | 1.576,2 tok | Rp 10,44 | **Winner Persepsi**. Prinsip eksplisit: *Cakupan Sasaran Peserta > Jenjang Penyelenggara*. Memangkas bias hierarki ke 5 kasus. |
+| **V3 Decoupled 2-Stage** | 76.92% | 64.90% | 1.409,7 tok | Rp 9,77 (2 calls) | Pemisahan ekstraksi literal (Stage 1) dan tingkat CoT (Stage 2). Akurasi tingkat berada 5.77pt di bawah V2 dan butuh 2 panggilan API. |
+| **V4 In-JSON Scope Signal** | 77.88% (-4.81pt) | 65.22% | 1.650,6 tok | Rp 11,16 | Pembatasan enum sinyal perantara membuat model over-konservatif; 56.73% dokumen jatuh ke internal kampus. |
+| **V5 Natural Rationale Buffer** | 80.77% (-1.92pt) | 64.58% | 1.775,5 tok | Rp 12,57 | Menuliskan unit penyelenggara di awal buffer penalaran menginduksi bias atensi berurutan dan mendegradasi salinan teks literal. |
+| **Web Search Grounding** | 77.66% (-4.26pt) | N/A | 1.723,2 tok | Rp 197,87 | Web search menimbulkan false positive pada artikel fakultas induk, latensi naik 3×, dan biaya membengkak ~19× lipat. |
+| **Injeksi Enum Master ke Prompt** | 52.88% (-29.81pt) | 60.26% | 1.130,0 tok | Rp 8,50 | **Katastropik**. Memaksa LLM memilih 13 enum master resmi merusak penalaran. Keputusan: serahkan taksonomi ke resolver Python. |
+
+---
+
+### 3. Pipeline Ekstraksi Utama & Model Cloud LLM (Dataset Evaluasi $N=74$)
+Evaluasi ekstraksi persepsi 6-field pada 74 teks sertifikat:
+
+| Pipeline / Model | MACRO Exact (All-Cells) | Framework Exact (5 Field) | Akurasi Tingkat | Biaya / Dokumen | Rata-rata Latensi | Status / Keterangan |
 |---|:---:|:---:|:---:|:---:|:---:|---|
-| **Production Conditional + Gemini 3.1 Flash-Lite** | **67.57%** | **81.29%** | **75.68%** | **Rp9,50** ($0.0005) | **1.36s** | **Produksi Aktif** (`PROD-INPUT-MATRIX-001` / `PROD-GEMINI-001/002`). Pemenang akurasi semantik. |
-| Direct Gemini 2.5 Flash-Lite | 58.78% | 71.05% | 66.44% | **Rp3,26** ($0.00018) | 1.32s | Biaya termurah, akurasi tingkat lebih rendah (43.2%) |
-| Direct Gemini 2.5 Flash | 58.56% | 71.38% | 71.40% | Rp38,94 ($0.0022) | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
+| **Production Conditional + Gemini 3.1 Flash-Lite (V2 Scope-Aware)** | **70.27%** | **80.65%** | **83.78%** | **Rp10,91** | **2.23s** | **Arsitektur Persepsi Standar**. Menghilangkan bias hierarki penyelenggara. |
+| Production Conditional + Gemini Baseline V1 | 67.12% | 81.29% | 62.16% | Rp10,40 | 1.89s | Baseline awal (terdistraksi bias kepanitiaan fakultas) |
+| Direct Gemini 2.5 Flash-Lite | 58.78% | 61.89% | 43.24% | **Rp3,26** | 1.32s | Biaya termurah, akurasi tingkat lebih rendah |
+| Direct Gemini 2.5 Flash | 58.56% | 57.84% | 62.16% | Rp38,94 | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
 
-### 2. Pipeline Offline Rule-Based Composite v4.x (Staging / Fallback — 0 LLM)
+---
+
+### 4. Pipeline Offline Rule-Based Composite v4.x (Fallback Resmi — 0 LLM)
 Ekstraksi lokal deterministik tanpa ketergantungan API eksternal (100% offline):
 
 | Pipeline / Versi | MACRO Exact (All-Cells) | Framework Exact (5 Field) | MACRO Fuzzy | LLM Calls | Sifat / Arsitektur |
 |---|:---:|:---:|:---:|:---:|---|
-| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **78.64%** | **0** | **Best Offline Staging** (`EXP-V4-003` / `B8-COMPOSITE-001`). 3 pilar OOD + High-DPI crop zoom 6.0×. |
-| Combined v3 (`COMBINED-V3-001`) | 74.20% | 85.70%* | 88.30% | 0 | 5 branch composite (basis 384 sel non-empty) |
-| Combined v2 (`COMBINED-V2-001`) | 74.20% | 80.70% | 80.70% | 0 | Dummy port integrasi rule router v5 |
+| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **77.93%** | **0** | **Best Offline Fallback**. 3 pilar OOD + High-DPI crop zoom 6.0×. |
+| Combined v3 | 74.20% | 85.70%* | 88.30% | 0 | 5 branch composite (basis 384 sel non-empty) |
+| Combined v2 | 74.20% | 80.70% | 80.70% | 0 | Port integrasi rule router v5 |
 | Regex Baseline Legacy (v2) | 42.20% | — | — | 0 | Baseline regex awal historis |
 
-### 3. Perbandingan Rekognisi Teks & OCR Engine
+---
+
+### 5. Perbandingan Rekognisi Teks & OCR Engine
 Evaluasi pembentukan teks input terhadap 74 dokumen sertifikat (49 pindaian/scan + 25 digital murni):
 
 | Engine / Strategi OCR | MACRO Exact (All-Cells) | Framework Exact | Kinerja Pindaian (Scan-49) | Kinerja Digital (Emb-25) | Status Evaluasi |
 |---|:---:|:---:|:---:|:---:|---|
-| **Production Conditional (PyMuPDF + RapidOCR)** | **67.57%** | **81.29%** | **65.31%** | **72.00%** | **Pemenang Produksi** (`PROD-INPUT-MATRIX-001`). Mencegah derau OCR pada PDF digital murni. |
-| Tesseract Standalone Multi-PSM (`OCR-TESS-V4-001`) | 68.47% | 77.10% | 78.61% (nomor 87.88%) | 74.31% | Alternatif tangguh bila layer teks digital rusak |
+| **Production Conditional (PyMuPDF + RapidOCR)** | **67.57%** | **81.29%** | **65.31%** | **72.00%** | **Pemenang Produksi**. Mencegah derau OCR pada PDF digital murni. |
+| Tesseract Standalone Multi-PSM | 68.47% | 77.10% | 78.61% (nomor 87.88%) | 74.31% | Alternatif tangguh bila layer teks digital rusak |
 | RapidOCR + Tesseract murni | 66.89% | 80.00% | 66.33% | 68.00% | Degradasi -4.0pt pada PDF digital akibat derau OCR |
 | Tesseract OCR murni | 65.77% | 78.71% | 64.63% | 68.00% | Stabil pada pindaian, rentan pada font dekoratif digital |
 | RapidOCR murni | 63.06% | 75.16% | 61.22% | 66.67% | Kecepatan tinggi namun akurasi nomor lebih rendah |
 | PyMuPDF murni (Tanpa OCR) | 27.70% | 33.23% | 9.18% (collapse) | 64.00% | Gagal membaca dokumen scan tanpa layer teks |
-| Engine Lain (DocTR, LFM2.5-VL, Docling, PaddleOCR) | Gagal Gate | Gagal Gate | — | — | **Closed** di *ledger* (faktor kegagalan nomor, latensi ekstrem >70s, atau memory overhead) |
 
-### 4. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
+---
+
+### 6. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
 |---|:---:|:---:|:---:|---|
-| IndoBERT-ner-gold Fine-Tuned (`NER-ENCODER-002`) | 44.52% | 57.10% | -4.2pt drop | Monolingual Indonesia 334M, 5-Fold Stratified OOF |
-| XLM-RoBERTa Large Fine-Tuned (`NER-ENCODER-001`) | 43.55% | 55.48% | -5.8pt drop | Multilingual 560M, kebutuhan VRAM tinggi (7.1 GB) |
-| mDeBERTa-v3-base Fine-Tuned (`NER-ENCODER-001`) | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
+| IndoBERT-ner-gold Fine-Tuned | 44.52% | 57.10% | -4.2pt drop | Monolingual Indonesia 334M, 5-Fold Stratified OOF |
+| XLM-RoBERTa Large Fine-Tuned | 43.55% | 55.48% | -5.8pt drop | Multilingual 560M, kebutuhan VRAM tinggi (7.1 GB) |
+| mDeBERTa-v3-base Fine-Tuned | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
 | IndoBERT Pre-trained v1 (Zero-Shot) | 12.80% | 24.50% | — | Baseline tanpa penyesuaian domain sertifikat |
 
 > Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Tesseract sebagai sumber OCR dan extractor produksi; GLiNER serta model NER tidak dipanggil.
+
 ---
 
 ### Penjelasan Metrik & Formula Evaluasi
 
-Evaluasi menggunakan standar baku evaluator beku (*frozen matcher v2* di `tests/matchers.py`) pada Ground Truth v9:
+Evaluasi menggunakan formula standar baku:
 
 1. **MACRO Exact Match**:
-   Mengukur persentase prediksi yang cocok persis 100% terhadap Ground Truth setelah normalisasi kanonikal (pembersihan spasi ganda, kapitalisasi, standarisasi format tanggal ISO `YYYY-MM-DD`, dan pembersihan tanda baca nomor sertifikat):
+   Mengukur persentase prediksi yang cocok persis 100% terhadap Ground Truth setelah normalisasi kanonikal:
    $$\text{Exact Match} = \frac{1}{N} \sum_{i=1}^{N} \mathbf{1}(\text{Prediksi}_i = \text{GroundTruth}_i)$$
 
 2. **Fuzzy Match (Threshold $\ge 0.75$)**:
-   Memberikan toleransi kecocokan semantik untuk:
-   - **Portmanteau & Akronim Resmi**: Deteksi ekspansi organisasi yang sah (contoh: `UNAIR` $\leftrightarrow$ `Universitas Airlangga`, `BEM` $\leftrightarrow$ `Badan Eksekutif Mahasiswa`, `HIMA` $\leftrightarrow$ `Himpunan Mahasiswa`).
-   - **Substring Relevan**: Kecocokan nama kegiatan yang mencakup nama inti acara sertifikat.
+   Memberikan toleransi kecocokan semantik untuk akronim resmi organisasi dan substring relevan nama kegiatan.
 
 3. **Perbedaan Basis Evaluasi: Framework vs All-Cells**:
-   - **Framework (5 Field, 310 Sel)**: Menghitung akurasi hanya pada 5 field inti (*nama kegiatan, nomor sertifikat, penyelenggara, tanggal mulai, tanggal selesai*) yang memiliki target Ground Truth non-kosong. Digunakan sebagai metrik standar perbandingan model NLP/NER.
-   - **All-Cells (6 Field, 444 Sel)**: Menghitung akurasi seluruh 6 field form KHP (termasuk *tingkat*) dan memperhitungkan penalti jika sistem mengisi nilai pada field yang seharusnya kosong. Merupakan representasi akurasi end-to-end produksi.
-
-4. **Character Error Rate (CER) & Word Error Rate (WER)**:
-   Mengukur jarak edit Levenshtein antara teks prediksi ($P$) dan referensi ($R$):
-   $$\text{CER / WER} = \frac{S + D + I}{N}$$
-   di mana $S$ adalah jumlah substitusi karakter/kata, $D$ adalah penghapusan (*deletion*), $I$ adalah penyisipan (*insertion*), dan $N$ adalah panjang total karakter/kata pada teks referensi Ground Truth.
+   - **Framework (5 Field)**: Menghitung akurasi hanya pada 5 field inti (*nama kegiatan, nomor sertifikat, penyelenggara, tanggal mulai, tanggal selesai*) yang memiliki target data non-kosong.
+   - **All-Cells (6 Field / 9 Field)**: Menghitung akurasi seluruh field form KHP secara end-to-end (termasuk tingkat dan taksonomi master kegiatan), memperhitungkan penalti jika sistem mengisi nilai pada field yang seharusnya kosong.
 
 ---
 
@@ -213,30 +240,28 @@ Evaluasi menggunakan standar baku evaluator beku (*frozen matcher v2* di `tests/
 Jalankan pengujian unit dan verifikasi fungsionalitas dengan:
 
 ```bash
-pytest tests/ -v
+uv run pytest tests/ -v
 ```
+
 ---
 
 ## Endpoint API Utama
 
 ```http
-POST /api/documents              # Upload dokumen PDF sertifikat → parsing background
-GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi form KHP
-GET  /api/options                # Opsi dropdown master data KHP (tingkat, jenis kegiatan, dsb.)
+POST /api/documents              # Upload dokumen PDF sertifikat → pemrosesan ekstraksi di background
+GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi 9-field form KHP
+GET  /api/options                # Opsi dropdown master data KHP berelasi (Kelompok Kegiatan berelasi dengan Jenis Kegiatan, Tingkat, Jabatan)
+GET  /api/master/activities      # Katalog pencarian taksonomi kegiatan resmi universitas untuk UI Modal
 GET  /metrics                    # Metrik Prometheus (ekstraksi, latensi, error rate)
 GET  /healthz                    # Health check endpoint
 ```
 
 ---
 
-## Dokumen Referensi
+## Dokumentasi Terkait
 
-| Dokumen | Deskripsi |
+| Dokumen / Antarmuka | Deskripsi |
 |---|---|
-| [AGENTS.md](AGENTS.md) | Konvensi proyek, standar pengujian 3 lapis empiris, dan protokol keamanan rahasia |
-| [docs/experiments_ledger.md](docs/experiments_ledger.md) | Rekam jejak seluruh eksperimen aktif maupun tertutup (*closed/failed approaches*) |
-| [docs/report/runs_summary.md](docs/report/runs_summary.md) | Rekapitulasi metrik numerik seluruh run eksperimen |
-| [docs/report/production_input_matrix.md](docs/report/production_input_matrix.md) | Laporan komparasi empiris 6 varian teks input OCR/PyMuPDF (`PROD-INPUT-MATRIX-001`) |
-| [docs/report/gemini_tesseract_benchmark_report.md](docs/report/gemini_tesseract_benchmark_report.md) | Laporan evaluasi model Gemini, pencatatan token, dan tarif resmi (`EXP-LLM-002`) |
-| [docs/report/composite_v4_candidate_report.md](docs/report/composite_v4_candidate_report.md) | Laporan teknikal pipeline offline Combined v4.2 / Composite B8 |
-| [docs/handoff_v52.md](docs/handoff_v52.md) | Handoff v52: Arsitektur Ephemeral Zero-PDF Storage & Input Matrix Produksi |
+| [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi (`/docs`) |
+| [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API |
+| [Frontend Guide](frontend/README_FRONTEND.md) | Panduan antarmuka web, penanganan cascading dropdown, dan modal pencarian kegiatan |
