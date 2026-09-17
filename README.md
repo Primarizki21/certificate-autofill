@@ -2,13 +2,14 @@
 
 Prototype internal — ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasil Prestasi (KHP).
 
-**Stack Utama:**
+**Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR:** PyMuPDF (fast text) + Tesseract OCR + RapidOCR
-- **Ekstraksi Semantik (Default):** Google Gemini (`gemini-3.1-flash-lite`) via Direct Tesseract-to-Gemini REST API
-- **Ekstraksi Offline (Fallback):** Combined v4.2 (Structural Semantic Rules + High-DPI Region Crop)
+- **Text & OCR:** PyMuPDF (fast text) + Tesseract OCR Multi-PSM + RapidOCR
+- **Ekstraksi Persepsi Semantik (Default):** Google Gemini (`gemini-3.1-flash-lite`) via Direct Tesseract-to-Gemini REST API dengan prompt V2 Scope-Aware
+- **Resolusi Taksonomi Master Data:** Resolver Deterministik Python memetakan hasil ekstraksi ke katalog master kegiatan database kemahasiswaan universitas (Autofill 9-Field KHP)
+- **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
+- **Ekstraksi Offline (Fallback):** Combined v4.2 (Structural Semantic Rules + High-DPI Region Crop 6.0×)
 - **Monitoring:** Prometheus + Grafana + Loki
-
 Lihat [AGENTS.md](AGENTS.md) untuk arsitektur mendalam, konvensi teknis, dan panduan kontribusi tim.
 
 ---
@@ -101,17 +102,17 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 
 | Variabel | Nilai Default | Deskripsi |
 |----------|---------------|-----------|
-| `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini |
+| `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini dengan prompt V2 Scope-Aware |
 | `GOOGLE_API_KEY` | *(kosong)* | Kunci Google AI Studio API Anda |
 | `GOOGLE_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model Gemini yang digunakan (`gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`) |
 | `GEMINI_TIMEOUT_SECONDS` | `30.0` | Batas waktu timeout pemanggilan API Gemini sebelum fallback |
+| `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
+| `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
-| `ENABLE_COMBINED_V4_2` | `false` | Mengaktifkan pipeline staging offline v4.2 saat Gemini dinonaktifkan |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
-
 ### Storage Sementara dan Migrasi Database
 PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database menyimpan metadata dan hasil field, bukan bytes PDF atau OCR mentah.
 
@@ -137,27 +138,40 @@ Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
 
 ---
 
-## Hasil Evaluasi & Benchmark (Dataset 74 Sertifikat, Evaluator Frozen Matcher v2)
+## Hasil Evaluasi & Benchmark
 
-### 1. Pipeline Ekstraksi Utama & Model Cloud LLM
-Evaluasi pada 74 teks sertifikat (sumber asli gabungan digital dan pindaian raster):
+### 1. Evaluasi Terpadu Master Data KHP 9-Field (Dataset Unified $N=104$)
+Evaluasi pengujian pipeline terintegrasi (Gemini V2 Scope-Aware + Resolver Deterministik Taksonomi Universitas) pada 104 sertifikat terverifikasi (`EVAL-006` & `EVAL-007`):
 
-| Pipeline / Model | MACRO Exact (All-Cells) | Framework Exact (5 Field) | MACRO Fuzzy | Biaya / Dokumen | Rata-rata Latensi | Status / Keterangan |
+| Dimensi Evaluasi | Exact Match (%) | Fuzzy / Overlap (%) | Detail Capaian | Status / Keterangan |
+|---|:---:|:---:|:---:|---|
+| **Master 3-Field (Taksonomi Universitas)** | **80.77%** | **80.77%** | 252/312 sel | **+63 sel bersih (+20.19pt)** vs baseline awal; zero loss |
+| **All-Cells 9-Field (End-to-End KHP)** | **73.08%** | **78.42%** | 684/936 sel | 6 fakta sertifikat + 3 taksonomi master database |
+| **Base 6-Field Ekstraksi Faktual** | **69.23%** | **77.40%** | 432/624 sel | Zero regression pada field literal sertifikat |
+| **Pencocokan Tuple Resmi Database** | **91.35%** | — | **95 / 104 Dokumen** | 95 sertifikat terpetakan otomatis ke ID resmi kegiatan tanpa review |
+| **Safety Net Review Manual** | **8.65%** | — | 9 / 104 Dokumen | Hanya memicu review manual pada noise OCR ekstrem atau kombinasi tuple tak terdaftar |
+
+*Catatan: Penyempurnaan resolver paska-EVAL-007 (pemisahan deteksi minat-bakat dari penalaran serta penambahan varian kata kunci kompetisi pada commit `78e85c9` & `5cf001a`) merupakan penyempurnaan staging lanjutan.*
+
+### 2. Pipeline Ekstraksi Utama & Model Cloud LLM (Primary Frozen v9, $N=74$)
+Evaluasi ekstraksi persepsi 6-field pada 74 teks sertifikat:
+
+| Pipeline / Model | MACRO Exact (All-Cells) | Framework Exact (5 Field) | Akurasi Tingkat | Biaya / Dokumen | Rata-rata Latensi | Status / Keterangan |
 |---|:---:|:---:|:---:|:---:|:---:|---|
-| **Production Conditional + Gemini 3.1 Flash-Lite** | **67.57%** | **81.29%** | **75.68%** | **Rp9,50** ($0.0005) | **1.36s** | **Produksi Aktif** (`PROD-INPUT-MATRIX-001` / `PROD-GEMINI-001/002`). Pemenang akurasi semantik. |
-| Direct Gemini 2.5 Flash-Lite | 58.78% | 71.05% | 66.44% | **Rp3,26** ($0.00018) | 1.32s | Biaya termurah, akurasi tingkat lebih rendah (43.2%) |
-| Direct Gemini 2.5 Flash | 58.56% | 71.38% | 71.40% | Rp38,94 ($0.0022) | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
+| **Production Conditional + Gemini 3.1 Flash-Lite (V2 Scope-Aware)** | **70.27%** | **80.65%** | **83.78%** | **Rp10,40** | **1.89s** | **Arsitektur Persepsi Standar**. Menghilangkan bias hierarki penyelenggara. |
+| Production Conditional + Gemini Baseline V1 | 67.12% | 81.29% | 62.16% | Rp10,40 | 1.89s | Baseline awal (terdistraksi bias kepanitiaan fakultas) |
+| Direct Gemini 2.5 Flash-Lite | 58.78% | 71.05% | 43.20% | **Rp3,26** | 1.32s | Biaya termurah, akurasi tingkat lebih rendah |
+| Direct Gemini 2.5 Flash | 58.56% | 71.38% | 51.35% | Rp38,94 | 4.62s | Latensi lambat dan biaya 4x lipat tanpa peningkatan akurasi |
 
-### 2. Pipeline Offline Rule-Based Composite v4.x (Staging / Fallback — 0 LLM)
+### 3. Pipeline Offline Rule-Based Composite v4.x (Fallback Resmi — 0 LLM)
 Ekstraksi lokal deterministik tanpa ketergantungan API eksternal (100% offline):
 
 | Pipeline / Versi | MACRO Exact (All-Cells) | Framework Exact (5 Field) | MACRO Fuzzy | LLM Calls | Sifat / Arsitektur |
 |---|:---:|:---:|:---:|:---:|---|
-| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **78.64%** | **0** | **Best Offline Staging** (`EXP-V4-003` / `B8-COMPOSITE-001`). 3 pilar OOD + High-DPI crop zoom 6.0×. |
+| **Combined v4.2 / Composite B8** | **76.13%** | **87.42%** | **78.64%** | **0** | **Best Offline Fallback** (`EXP-V4-003` / `B8-COMPOSITE-001`). 3 pilar OOD + High-DPI crop zoom 6.0×. |
 | Combined v3 (`COMBINED-V3-001`) | 74.20% | 85.70%* | 88.30% | 0 | 5 branch composite (basis 384 sel non-empty) |
 | Combined v2 (`COMBINED-V2-001`) | 74.20% | 80.70% | 80.70% | 0 | Dummy port integrasi rule router v5 |
 | Regex Baseline Legacy (v2) | 42.20% | — | — | 0 | Baseline regex awal historis |
-
 ### 3. Perbandingan Rekognisi Teks & OCR Engine
 Evaluasi pembentukan teks input terhadap 74 dokumen sertifikat (49 pindaian/scan + 25 digital murni):
 
@@ -222,7 +236,8 @@ pytest tests/ -v
 ```http
 POST /api/documents              # Upload dokumen PDF sertifikat → parsing background
 GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi form KHP
-GET  /api/options                # Opsi dropdown master data KHP (tingkat, jenis kegiatan, dsb.)
+GET  /api/options                # Opsi dropdown master data KHP berelasi (Kelompok Kegiatan berelasi dengan Jenis Kegiatan, Tingkat, Jabatan)
+GET  /api/master/activities      # Katalog pencarian taksonomi kegiatan resmi universitas untuk UI Modal
 GET  /metrics                    # Metrik Prometheus (ekstraksi, latensi, error rate)
 GET  /healthz                    # Health check endpoint
 ```
