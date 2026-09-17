@@ -56,3 +56,41 @@ class PublicExtractionResult(BaseModel):
 
 class OptionsResponse(BaseModel):
     options: dict[str, list[str | MasterOption]]
+
+
+class KHPRuleResponse(BaseModel):
+    id: int
+    source_no: int
+    id_kelompok_kegiatan: int
+    nama_kelompok_kegiatan: str | None = None
+    id_kegiatan_1: int
+    nama_kegiatan_1: str | None = None
+    id_tingkat: int | None = None
+    nama_tingkat: str | None = None
+    id_jabatan_prestasi: int | None = None
+    nama_jabatan_prestasi: str | None = None
+    dasar_penilaian: str
+    id_kegiatan_2: int
+    is_active: bool = True
+    created_at: str | None = None
+    updated_at: str | None = None
+
+
+class CreateKHPRuleRequest(BaseModel):
+    id_kelompok_kegiatan: int
+    id_kegiatan_1: int
+    id_tingkat: int | None = None
+    id_jabatan_prestasi: int | None = None
+    dasar_penilaian: str
+    id_kegiatan_2: int | None = None
+    is_active: bool = True
+
+
+class UpdateKHPRuleRequest(BaseModel):
+    dasar_penilaian: str | None = None
+    is_active: bool | None = None
+
+
+class KHPRulesListResponse(BaseModel):
+    total: int
+    items: list[KHPRuleResponse]

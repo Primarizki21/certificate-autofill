@@ -95,3 +95,7 @@ docs/screenshots/
 old_docs/
 # Agents Instructions and internal notes
 AGENTS.md
+
+# Private admin documentation
+docs/ADMIN_GUIDE.md
+ADMIN_GUIDE.md

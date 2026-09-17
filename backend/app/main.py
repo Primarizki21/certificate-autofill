@@ -22,16 +22,32 @@ from fastapi.staticfiles import StaticFiles
 import openpyxl
 from openpyxl.utils import get_column_letter
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import get_db, init_db
 from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
-from app.models import Document, ExtractionJob, ExtractedField, KHPMasterResolution
+from app.models import (
+    Document,
+    ExtractionJob,
+    ExtractedField,
+    KHPMasterResolution,
+    KHPKelompokKegiatan,
+    KHPKegiatan1,
+    KHPTingkat,
+    KHPJabatanPrestasi,
+    KHPKegiatan2,
+    KHPMasterRule,
+)
 from app.schemas import (
+    CreateKHPRuleRequest,
     ExtractionResult,
     FieldResult,
+    KHPRuleResponse,
+    KHPRulesListResponse,
     OptionsResponse,
     PublicExtractionResult,
+    UpdateKHPRuleRequest,
     UploadResponse,
 )
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
@@ -237,6 +253,55 @@ def verify_admin(credentials: HTTPBasicCredentials = Depends(security)) -> str:
     return credentials.username
 
 
+def _build_streaming_export_response(
+    headers: list[tuple[str, str]],
+    rows: list[dict],
+    filename_prefix: str,
+    export_format: str,
+    sheet_title: str = "Data",
+) -> StreamingResponse:
+    header_labels = [h[0] for h in headers]
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    filename = f"{filename_prefix}_{timestamp}"
+
+    if export_format.lower() == "csv":
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(header_labels)
+        for r in rows:
+            writer.writerow([r.get(h[1], "") for h in headers])
+        return StreamingResponse(
+            io.BytesIO(output.getvalue().encode("utf-8")),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+        )
+
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = sheet_title[:31]
+    ws.append(header_labels)
+
+    for cell in ws[1]:
+        cell.font = openpyxl.styles.Font(bold=True)
+
+    for r in rows:
+        ws.append([r.get(h[1], "") for h in headers])
+
+    for col in ws.columns:
+        max_len = max(len(str(cell.value or "")) for cell in col)
+        col_letter = get_column_letter(col[0].column)
+        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 45)
+
+    buffer = io.BytesIO()
+    wb.save(buffer)
+    buffer.seek(0)
+    return StreamingResponse(
+        buffer,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
+    )
+
+
 @app.get("/api/admin/documents/export")
 def export_documents(
     format: str = "xlsx",
@@ -274,7 +339,6 @@ def export_documents(
         ("Avg Confidence", "avg_confidence"),
         ("Perlu Review", "needs_review"),
     ]
-    header_labels = [h[0] for h in headers]
 
     rows = []
     for idx, doc in enumerate(docs, start=1):
@@ -290,7 +354,7 @@ def export_documents(
         avg_conf = round(sum(conf_list) / len(conf_list), 4) if conf_list else 0.0
         has_review = any(bool(f.needs_review) for f in fmap.values()) or doc.status == "needs_review"
 
-        row_data = {
+        rows.append({
             "no": idx,
             "id": str(doc.id),
             "created_at": doc.created_at.strftime("%Y-%m-%d %H:%M:%S") if doc.created_at else "",
@@ -311,46 +375,354 @@ def export_documents(
             "waktu_selesai_pelaksanaan": _val("waktu_selesai_pelaksanaan"),
             "avg_confidence": avg_conf,
             "needs_review": "Ya" if has_review else "Tidak",
-        }
-        rows.append(row_data)
+        })
 
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    filename = f"riwayat_sertifikat_{timestamp}"
+    return _build_streaming_export_response(
+        headers=headers,
+        rows=rows,
+        filename_prefix="riwayat_sertifikat",
+        export_format=format,
+        sheet_title="Riwayat Sertifikat",
+    )
 
-    if format.lower() == "csv":
-        output = io.StringIO()
-        writer = csv.writer(output)
-        writer.writerow(header_labels)
-        for r in rows:
-            writer.writerow([r[h[1]] for h in headers])
-        return StreamingResponse(
-            io.BytesIO(output.getvalue().encode("utf-8")),
-            media_type="text/csv",
-            headers={"Content-Disposition": f'attachment; filename="{filename}.csv"'},
+
+@app.get("/api/admin/khp/export")
+def export_khp_master(
+    table: str = "rules",
+    format: str = "xlsx",
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/khp/export").inc()
+    table_lower = table.lower().strip()
+
+    if table_lower == "rules":
+        rules = db.query(KHPMasterRule).order_by(KHPMasterRule.id.asc()).all()
+        headers = [
+            ("ID Rule", "id"),
+            ("No Sumber", "source_no"),
+            ("ID Kelompok", "id_kelompok_kegiatan"),
+            ("Nama Kelompok Kegiatan", "nama_kelompok"),
+            ("ID Kegiatan 1", "id_kegiatan_1"),
+            ("Nama Kegiatan 1", "nama_kegiatan_1"),
+            ("ID Tingkat", "id_tingkat"),
+            ("Nama Tingkat", "nama_tingkat"),
+            ("ID Jabatan/Prestasi", "id_jabatan_prestasi"),
+            ("Nama Jabatan / Prestasi", "nama_jabatan"),
+            ("Dasar Penilaian / Bukti Fisik", "dasar_penilaian"),
+            ("ID Kegiatan 2", "id_kegiatan_2"),
+            ("Status Aktif", "is_active"),
+        ]
+        rows = [
+            {
+                "id": r.id,
+                "source_no": r.source_no,
+                "id_kelompok_kegiatan": r.id_kelompok_kegiatan,
+                "nama_kelompok": r.kelompok.nm_kelompok_kegiatan if r.kelompok else "",
+                "id_kegiatan_1": r.id_kegiatan_1,
+                "nama_kegiatan_1": r.kegiatan_1.nm_kegiatan_1 if r.kegiatan_1 else "",
+                "id_tingkat": r.id_tingkat or "",
+                "nama_tingkat": r.tingkat.nm_tingkat if r.tingkat else "-",
+                "id_jabatan_prestasi": r.id_jabatan_prestasi or "",
+                "nama_jabatan": r.jabatan_prestasi.nm_jabatan_prestasi if r.jabatan_prestasi else "-",
+                "dasar_penilaian": r.dasar_penilaian,
+                "id_kegiatan_2": r.id_kegiatan_2,
+                "is_active": "Ya" if r.is_active else "Tidak",
+            }
+            for r in rules
+        ]
+        return _build_streaming_export_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="khp_master_rules",
+            export_format=format,
+            sheet_title="Rules Penilaian KHP",
         )
 
-    # Default XLSX
-    wb = openpyxl.Workbook()
-    ws = wb.active
-    ws.title = "Riwayat Sertifikat"
-    ws.append(header_labels)
+    elif table_lower == "kegiatan_2":
+        k2_items = db.query(KHPKegiatan2).order_by(KHPKegiatan2.id_kegiatan_2.asc()).all()
+        headers = [
+            ("ID Kegiatan 2", "id_kegiatan_2"),
+            ("ID Kegiatan 1", "id_kegiatan_1"),
+            ("Nama Kegiatan 1", "nama_kegiatan_1"),
+            ("ID Tingkat", "id_tingkat"),
+            ("Nama Tingkat", "nama_tingkat"),
+            ("ID Jabatan/Prestasi", "id_jabatan_prestasi"),
+            ("Nama Jabatan / Prestasi", "nama_jabatan"),
+        ]
+        rows = [
+            {
+                "id_kegiatan_2": k.id_kegiatan_2,
+                "id_kegiatan_1": k.id_kegiatan_1,
+                "nama_kegiatan_1": k.kegiatan_1.nm_kegiatan_1 if k.kegiatan_1 else "",
+                "id_tingkat": k.id_tingkat or "",
+                "nama_tingkat": k.tingkat.nm_tingkat if k.tingkat else "-",
+                "id_jabatan_prestasi": k.id_jabatan_prestasi or "",
+                "nama_jabatan": k.jabatan_prestasi.nm_jabatan_prestasi if k.jabatan_prestasi else "-",
+            }
+            for k in k2_items
+        ]
+        return _build_streaming_export_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="khp_kegiatan_2",
+            export_format=format,
+            sheet_title="Master Kegiatan 2",
+        )
 
-    for cell in ws[1]:
-        cell.font = openpyxl.styles.Font(bold=True)
+    elif table_lower == "kegiatan_1":
+        k1_items = db.query(KHPKegiatan1).order_by(KHPKegiatan1.id_kegiatan_1.asc()).all()
+        headers = [
+            ("ID Kegiatan 1", "id_kegiatan_1"),
+            ("Nama Kegiatan 1", "nama_kegiatan_1"),
+            ("ID Kelompok Kegiatan", "id_kelompok_kegiatan"),
+            ("Nama Kelompok Kegiatan", "nama_kelompok"),
+            ("Status Aktif", "is_aktif"),
+        ]
+        rows = [
+            {
+                "id_kegiatan_1": k.id_kegiatan_1,
+                "nama_kegiatan_1": k.nm_kegiatan_1,
+                "id_kelompok_kegiatan": k.id_kelompok_kegiatan,
+                "nama_kelompok": k.kelompok.nm_kelompok_kegiatan if k.kelompok else "",
+                "is_aktif": "Ya" if k.is_aktif else "Tidak",
+            }
+            for k in k1_items
+        ]
+        return _build_streaming_export_response(
+            headers=headers,
+            rows=rows,
+            filename_prefix="khp_kegiatan_1",
+            export_format=format,
+            sheet_title="Master Kegiatan 1",
+        )
 
-    for r in rows:
-        ws.append([r[h[1]] for h in headers])
+    elif table_lower in {"kelompok", "kelompok_kegiatan"}:
+        items = db.query(KHPKelompokKegiatan).order_by(KHPKelompokKegiatan.id_kelompok_kegiatan.asc()).all()
+        headers = [
+            ("ID Kelompok Kegiatan", "id"),
+            ("Nama Kelompok Kegiatan", "nama"),
+            ("Status Aktif", "is_aktif"),
+        ]
+        rows = [{"id": i.id_kelompok_kegiatan, "nama": i.nm_kelompok_kegiatan, "is_aktif": "Ya" if i.is_aktif else "Tidak"} for i in items]
+        return _build_streaming_export_response(headers=headers, rows=rows, filename_prefix="khp_kelompok_kegiatan", export_format=format, sheet_title="Kelompok Kegiatan")
 
-    for col in ws.columns:
-        max_len = max(len(str(cell.value or "")) for cell in col)
-        col_letter = get_column_letter(col[0].column)
-        ws.column_dimensions[col_letter].width = min(max(max_len + 3, 10), 40)
+    elif table_lower == "tingkat":
+        items = db.query(KHPTingkat).order_by(KHPTingkat.id_tingkat.asc()).all()
+        headers = [("ID Tingkat", "id"), ("Nama Tingkat", "nama")]
+        rows = [{"id": i.id_tingkat, "nama": i.nm_tingkat} for i in items]
+        return _build_streaming_export_response(headers=headers, rows=rows, filename_prefix="khp_tingkat", export_format=format, sheet_title="Tingkat")
 
-    buffer = io.BytesIO()
-    wb.save(buffer)
-    buffer.seek(0)
-    return StreamingResponse(
-        buffer,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}.xlsx"'},
+    elif table_lower in {"jabatan", "jabatan_prestasi"}:
+        items = db.query(KHPJabatanPrestasi).order_by(KHPJabatanPrestasi.id_jabatan_prestasi.asc()).all()
+        headers = [("ID Jabatan/Prestasi", "id"), ("Nama Jabatan / Prestasi", "nama")]
+        rows = [{"id": i.id_jabatan_prestasi, "nama": i.nm_jabatan_prestasi} for i in items]
+        return _build_streaming_export_response(headers=headers, rows=rows, filename_prefix="khp_jabatan_prestasi", export_format=format, sheet_title="Jabatan Prestasi")
+
+    else:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Tabel '{table}' tidak didukung. Pilihan: rules, kegiatan_2, kegiatan_1, kelompok, tingkat, jabatan.",
+        )
+
+
+@app.get("/api/admin/khp/rules", response_model=KHPRulesListResponse)
+def list_khp_rules(
+    search: str | None = None,
+    id_kelompok_kegiatan: int | None = None,
+    id_kegiatan_1: int | None = None,
+    id_tingkat: int | None = None,
+    is_active: bool | None = None,
+    limit: int = 100,
+    offset: int = 0,
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/khp/rules").inc()
+    query = db.query(KHPMasterRule)
+    if id_kelompok_kegiatan is not None:
+        query = query.filter(KHPMasterRule.id_kelompok_kegiatan == id_kelompok_kegiatan)
+    if id_kegiatan_1 is not None:
+        query = query.filter(KHPMasterRule.id_kegiatan_1 == id_kegiatan_1)
+    if id_tingkat is not None:
+        query = query.filter(KHPMasterRule.id_tingkat == id_tingkat)
+    if is_active is not None:
+        query = query.filter(KHPMasterRule.is_active == is_active)
+    if search:
+        s = f"%{search}%"
+        query = query.join(KHPMasterRule.kegiatan_1).filter(
+            or_(
+                KHPKegiatan1.nm_kegiatan_1.ilike(s),
+                KHPMasterRule.dasar_penilaian.ilike(s),
+            )
+        )
+    total = query.count()
+    rules = query.order_by(KHPMasterRule.id.asc()).offset(offset).limit(limit).all()
+    items = [
+        KHPRuleResponse(
+            id=r.id,
+            source_no=r.source_no,
+            id_kelompok_kegiatan=r.id_kelompok_kegiatan,
+            nama_kelompok_kegiatan=r.kelompok.nm_kelompok_kegiatan if r.kelompok else None,
+            id_kegiatan_1=r.id_kegiatan_1,
+            nama_kegiatan_1=r.kegiatan_1.nm_kegiatan_1 if r.kegiatan_1 else None,
+            id_tingkat=r.id_tingkat,
+            nama_tingkat=r.tingkat.nm_tingkat if r.tingkat else None,
+            id_jabatan_prestasi=r.id_jabatan_prestasi,
+            nama_jabatan_prestasi=r.jabatan_prestasi.nm_jabatan_prestasi if r.jabatan_prestasi else None,
+            dasar_penilaian=r.dasar_penilaian,
+            id_kegiatan_2=r.id_kegiatan_2,
+            is_active=r.is_active,
+            created_at=r.created_at.strftime("%Y-%m-%d %H:%M:%S") if r.created_at else None,
+            updated_at=r.updated_at.strftime("%Y-%m-%d %H:%M:%S") if r.updated_at else None,
+        )
+        for r in rules
+    ]
+    return KHPRulesListResponse(total=total, items=items)
+
+
+@app.post("/api/admin/khp/rules", response_model=KHPRuleResponse, status_code=201)
+def create_khp_rule(
+    req: CreateKHPRuleRequest,
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/khp/rules").inc()
+    # Validasi keberadaan dimensi
+    kelompok = db.query(KHPKelompokKegiatan).filter_by(id_kelompok_kegiatan=req.id_kelompok_kegiatan).first()
+    if not kelompok:
+        raise HTTPException(status_code=400, detail=f"Kelompok kegiatan ID {req.id_kelompok_kegiatan} tidak ditemukan.")
+    keg1 = db.query(KHPKegiatan1).filter_by(id_kegiatan_1=req.id_kegiatan_1).first()
+    if not keg1:
+        raise HTTPException(status_code=400, detail=f"Kegiatan 1 ID {req.id_kegiatan_1} tidak ditemukan.")
+
+    if req.id_tingkat is not None:
+        if not db.query(KHPTingkat).filter_by(id_tingkat=req.id_tingkat).first():
+            raise HTTPException(status_code=400, detail=f"Tingkat ID {req.id_tingkat} tidak ditemukan.")
+    if req.id_jabatan_prestasi is not None:
+        if not db.query(KHPJabatanPrestasi).filter_by(id_jabatan_prestasi=req.id_jabatan_prestasi).first():
+            raise HTTPException(status_code=400, detail=f"Jabatan prestasi ID {req.id_jabatan_prestasi} tidak ditemukan.")
+
+    # Cek duplikasi rule persis
+    existing_rule = db.query(KHPMasterRule).filter_by(
+        id_kelompok_kegiatan=req.id_kelompok_kegiatan,
+        id_kegiatan_1=req.id_kegiatan_1,
+        id_tingkat=req.id_tingkat,
+        id_jabatan_prestasi=req.id_jabatan_prestasi,
+    ).first()
+    if existing_rule:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Rule untuk kombinasi ini sudah ada (Rule ID {existing_rule.id}). Gunakan update jika ingin mengubah.",
+        )
+
+    # Resolve atau generate id_kegiatan_2
+    id_kegiatan_2 = req.id_kegiatan_2
+    if id_kegiatan_2 is None:
+        k2 = db.query(KHPKegiatan2).filter_by(
+            id_kegiatan_1=req.id_kegiatan_1,
+            id_tingkat=req.id_tingkat,
+            id_jabatan_prestasi=req.id_jabatan_prestasi,
+        ).first()
+        if k2:
+            id_kegiatan_2 = k2.id_kegiatan_2
+        else:
+            max_k2 = db.query(func.max(KHPKegiatan2.id_kegiatan_2)).scalar() or 0
+            id_kegiatan_2 = max_k2 + 1
+            new_k2 = KHPKegiatan2(
+                id_kegiatan_2=id_kegiatan_2,
+                id_kegiatan_1=req.id_kegiatan_1,
+                id_tingkat=req.id_tingkat,
+                id_jabatan_prestasi=req.id_jabatan_prestasi,
+            )
+            db.add(new_k2)
+            db.flush()
+
+    max_source_no = db.query(func.max(KHPMasterRule.source_no)).scalar() or 0
+    new_rule = KHPMasterRule(
+        source_no=max_source_no + 1,
+        id_kelompok_kegiatan=req.id_kelompok_kegiatan,
+        id_kegiatan_1=req.id_kegiatan_1,
+        id_tingkat=req.id_tingkat,
+        id_jabatan_prestasi=req.id_jabatan_prestasi,
+        dasar_penilaian=req.dasar_penilaian.strip(),
+        id_kegiatan_2=id_kegiatan_2,
+        is_active=req.is_active,
     )
+    db.add(new_rule)
+    db.commit()
+    db.refresh(new_rule)
+
+    return KHPRuleResponse(
+        id=new_rule.id,
+        source_no=new_rule.source_no,
+        id_kelompok_kegiatan=new_rule.id_kelompok_kegiatan,
+        nama_kelompok_kegiatan=new_rule.kelompok.nm_kelompok_kegiatan if new_rule.kelompok else None,
+        id_kegiatan_1=new_rule.id_kegiatan_1,
+        nama_kegiatan_1=new_rule.kegiatan_1.nm_kegiatan_1 if new_rule.kegiatan_1 else None,
+        id_tingkat=new_rule.id_tingkat,
+        nama_tingkat=new_rule.tingkat.nm_tingkat if new_rule.tingkat else None,
+        id_jabatan_prestasi=new_rule.id_jabatan_prestasi,
+        nama_jabatan_prestasi=new_rule.jabatan_prestasi.nm_jabatan_prestasi if new_rule.jabatan_prestasi else None,
+        dasar_penilaian=new_rule.dasar_penilaian,
+        id_kegiatan_2=new_rule.id_kegiatan_2,
+        is_active=new_rule.is_active,
+        created_at=new_rule.created_at.strftime("%Y-%m-%d %H:%M:%S") if new_rule.created_at else None,
+        updated_at=new_rule.updated_at.strftime("%Y-%m-%d %H:%M:%S") if new_rule.updated_at else None,
+    )
+
+
+@app.patch("/api/admin/khp/rules/{rule_id}", response_model=KHPRuleResponse)
+def update_khp_rule(
+    rule_id: int,
+    req: UpdateKHPRuleRequest,
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/khp/rules/{rule_id}").inc()
+    rule = db.query(KHPMasterRule).filter_by(id=rule_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"Rule ID {rule_id} tidak ditemukan.")
+    if req.dasar_penilaian is not None:
+        rule.dasar_penilaian = req.dasar_penilaian.strip()
+    if req.is_active is not None:
+        rule.is_active = req.is_active
+    db.commit()
+    db.refresh(rule)
+    return KHPRuleResponse(
+        id=rule.id,
+        source_no=rule.source_no,
+        id_kelompok_kegiatan=rule.id_kelompok_kegiatan,
+        nama_kelompok_kegiatan=rule.kelompok.nm_kelompok_kegiatan if rule.kelompok else None,
+        id_kegiatan_1=rule.id_kegiatan_1,
+        nama_kegiatan_1=rule.kegiatan_1.nm_kegiatan_1 if rule.kegiatan_1 else None,
+        id_tingkat=rule.id_tingkat,
+        nama_tingkat=rule.tingkat.nm_tingkat if rule.tingkat else None,
+        id_jabatan_prestasi=rule.id_jabatan_prestasi,
+        nama_jabatan_prestasi=rule.jabatan_prestasi.nm_jabatan_prestasi if rule.jabatan_prestasi else None,
+        dasar_penilaian=rule.dasar_penilaian,
+        id_kegiatan_2=rule.id_kegiatan_2,
+        is_active=rule.is_active,
+        created_at=rule.created_at.strftime("%Y-%m-%d %H:%M:%S") if rule.created_at else None,
+        updated_at=rule.updated_at.strftime("%Y-%m-%d %H:%M:%S") if rule.updated_at else None,
+    )
+
+
+@app.delete("/api/admin/khp/rules/{rule_id}")
+def delete_khp_rule(
+    rule_id: int,
+    hard: bool = False,
+    admin: str = Depends(verify_admin),
+    db: Session = Depends(get_db),
+):
+    REQUEST_COUNT.labels(endpoint="/api/admin/khp/rules/{rule_id}").inc()
+    rule = db.query(KHPMasterRule).filter_by(id=rule_id).first()
+    if not rule:
+        raise HTTPException(status_code=404, detail=f"Rule ID {rule_id} tidak ditemukan.")
+    if hard:
+        db.delete(rule)
+        db.commit()
+        return {"message": f"Rule ID {rule_id} berhasil dihapus permanen."}
+    rule.is_active = False
+    db.commit()
+    return {"message": f"Rule ID {rule_id} berhasil dinonaktifkan (soft delete)."}
