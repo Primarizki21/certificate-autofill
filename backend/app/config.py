@@ -69,5 +69,7 @@ class Settings:
     google_api_key: str | None = os.getenv("GOOGLE_API_KEY")
     google_gemini_model: str = os.getenv("GOOGLE_GEMINI_MODEL", "gemini-3.1-flash-lite")
     gemini_timeout_seconds: float = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0"))
+    admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "admin123")
 
 settings = Settings()

@@ -11,3 +11,4 @@ Pillow
 rapidocr-onnxruntime
 python-dotenv
 tqdm
+openpyxl
