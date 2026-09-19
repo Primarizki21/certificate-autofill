@@ -54,3 +54,6 @@ def main() -> None:
             time.sleep(settings.db_worker_poll_seconds)
         finally:
             db.close()
+
+if __name__ == "__main__":
+    main()

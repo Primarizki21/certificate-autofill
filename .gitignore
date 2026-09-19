@@ -87,7 +87,8 @@ Sertifikat_Ground_Truth/
 certs_test/
 certs_unified/
 data/
-khp/
+khp/*
+!khp/aucc.sql.example
 # Private experiment reports & documentation
 docs/report
 docs/experiments/
