@@ -154,17 +154,26 @@ def merge_unique_lines(texts: list[str]) -> str:
     return "\n".join(lines)
 
 
+_RAPIDOCR_INSTANCE = None
+_RAPIDOCR_INITIALIZED = False
+
+
 def _load_rapidocr():
+    """Cache singleton engine RapidOCR agar model ONNX tidak dimuat ulang per dokumen."""
+    global _RAPIDOCR_INSTANCE, _RAPIDOCR_INITIALIZED
+    if _RAPIDOCR_INITIALIZED:
+        return _RAPIDOCR_INSTANCE
     try:
         from rapidocr_onnxruntime import RapidOCR
-        return RapidOCR()
+        _RAPIDOCR_INSTANCE = RapidOCR()
     except Exception:
         try:
             from rapidocr import RapidOCR
-            return RapidOCR()
+            _RAPIDOCR_INSTANCE = RapidOCR()
         except Exception:
-            return None
-
+            _RAPIDOCR_INSTANCE = None
+    _RAPIDOCR_INITIALIZED = True
+    return _RAPIDOCR_INSTANCE
 
 def _ocr_with_rapidocr(engine, image_bytes: bytes) -> str:
     try:
