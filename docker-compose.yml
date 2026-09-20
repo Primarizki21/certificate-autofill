@@ -1,41 +1,117 @@
 services:
   postgres:
-    image: postgres:17
+    image: postgres:17-alpine
     container_name: cert_postgres
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: certautofill
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-certautofill}
     ports:
-      - "5434:5432"
+      # Terikat ke 127.0.0.1 (localhost) saja untuk keamanan jaringan kampus
+      - "127.0.0.1:5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d certautofill"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-certautofill}"]
       interval: 5s
       timeout: 5s
       retries: 20
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   backend:
     build:
       context: ./backend
     container_name: cert_backend
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
-    env_file: .env.docker.example
+    restart: unless-stopped
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    env_file:
+      - path: .env.docker.example
+        required: false
+      - path: .env
+        required: false
     environment:
+      - APP_ENV=${APP_ENV:-production}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-certautofill}
+      - PROCESSING_MODE=db_worker
+      - UPLOAD_TEMP_DIR=/tmp/cert_uploads
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - ENABLE_TESSERACT_GEMINI=${ENABLE_TESSERACT_GEMINI:-true}
       - ENABLE_COMBINED_V4_2=${ENABLE_COMBINED_V4_2:-true}
       - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-gemini-3.1-flash-lite}
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
       - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
     ports:
       - "8000:8000"
     volumes:
+      - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     depends_on:
       postgres:
         condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  worker:
+    build:
+      context: ./backend
+    container_name: cert_worker
+    restart: unless-stopped
+    command: python -m app.worker
+    env_file:
+      - path: .env.docker.example
+        required: false
+      - path: .env
+        required: false
+    environment:
+      - APP_ENV=${APP_ENV:-production}
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-certautofill}
+      - UPLOAD_TEMP_DIR=/tmp/cert_uploads
+      - OMP_NUM_THREADS=1
+      - OPENBLAS_NUM_THREADS=1
+      - MKL_NUM_THREADS=1
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - ENABLE_TESSERACT_GEMINI=${ENABLE_TESSERACT_GEMINI:-true}
+      - ENABLE_COMBINED_V4_2=${ENABLE_COMBINED_V4_2:-true}
+      - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-gemini-3.1-flash-lite}
+      - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
+      - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
+    volumes:
+      - cert_uploads:/tmp/cert_uploads
+      - ./khp:/app/khp:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "4.0"
+          memory: 4G
+    depends_on:
+      postgres:
+        condition: service_healthy
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   prometheus:
     image: prom/prometheus:latest
@@ -47,6 +123,11 @@ services:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
       - backend
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   grafana:
     image: grafana/grafana:latest
@@ -55,10 +136,15 @@ services:
     ports:
       - "3000:3000"
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - grafana_data:/var/lib/grafana
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
 
   loki:
     image: grafana/loki:2.9.8
@@ -69,6 +155,13 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
 volumes:
   postgres_data:
   grafana_data:
+  cert_uploads:

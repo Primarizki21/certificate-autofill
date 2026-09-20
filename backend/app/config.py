@@ -22,6 +22,7 @@ class Settings:
         "postgresql+psycopg2://postgres:changeme@127.0.0.1:5434/certautofill",
     )
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+    max_pdf_pages: int = int(os.getenv("MAX_PDF_PAGES", "3"))
     upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
     temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))

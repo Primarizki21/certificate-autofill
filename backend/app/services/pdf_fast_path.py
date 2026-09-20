@@ -19,12 +19,27 @@ def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
         doc.close()
 
 
-def render_pdf_pages_to_png_bytes(pdf_bytes: bytes, zoom: float = 2.0) -> list[bytes]:
+def render_pdf_pages_to_png_bytes(
+    pdf_bytes: bytes,
+    zoom: float = 2.0,
+    max_pages: int | None = None,
+) -> list[bytes]:
+    # Batasi jumlah halaman render raster untuk mencegah OOM dari PDF multi-halaman.
+    limit = max_pages
+    if limit is None:
+        try:
+            from app.config import settings
+            limit = settings.max_pdf_pages
+        except Exception:
+            limit = 3
+
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     rendered: list[bytes] = []
     try:
         matrix = fitz.Matrix(zoom, zoom)
-        for page in doc:
+        for idx, page in enumerate(doc):
+            if limit is not None and limit > 0 and idx >= limit:
+                break
             pix = page.get_pixmap(matrix=matrix, alpha=False)
             rendered.append(pix.tobytes("png"))
         return rendered

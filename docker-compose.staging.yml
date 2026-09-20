@@ -5,17 +5,38 @@ services:
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - APP_ENV=development
-      - DATABASE_URL=postgresql+psycopg2://postgres:postgres@postgres:5432/certautofill
+      - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-certautofill}
+      - UPLOAD_TEMP_DIR=/tmp/cert_uploads
       - ENABLE_KHP_MASTER_STAGING=true
       - ENABLE_TESSERACT_GEMINI=true
       - ENABLE_COMBINED_V4_2=true
       - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
       - GOOGLE_GEMINI_MODEL=${GOOGLE_GEMINI_MODEL:-gemini-3.1-flash-lite}
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
+      - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
     ports:
       - "8001:8000"
     volumes:
+      - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
     depends_on:
       postgres:
         condition: service_healthy
+
+volumes:
+  cert_uploads:

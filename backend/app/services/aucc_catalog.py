@@ -179,8 +179,14 @@ def get_aucc_catalog(path: str | Path) -> AuccCatalog | None:
 
 
 def get_default_aucc_catalog() -> AuccCatalog | None:
-    return get_aucc_catalog(settings.khp_aucc_sql_path)
-
+    catalog = get_aucc_catalog(settings.khp_aucc_sql_path)
+    if catalog is not None:
+        return catalog
+    example_path = Path(f"{settings.khp_aucc_sql_path}.example")
+    if example_path.exists():
+        logger.info("Using fallback sample AUCC catalog from %s", example_path)
+        return get_aucc_catalog(example_path)
+    return None
 
 def warm_aucc_catalog() -> AuccCatalog | None:
     return get_default_aucc_catalog()

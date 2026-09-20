@@ -1,0 +1,4 @@
+-- Sample AUCC KHP Master Snapshot for prototype & open-source deployment
+-- Real university master data is confidential and gitignored at khp/aucc.sql
+INSERT INTO "aucc"."kegiatan_2" VALUES (9001, 41, NULL, 6);
+INSERT INTO "aucc"."master_kegiatan_rule" VALUES (1, 26, 1, 41, NULL, 6, 'Sertifikat', 9001, true, '2026-09-14 02:22:42+07', '2026-09-14 02:22:42+07');

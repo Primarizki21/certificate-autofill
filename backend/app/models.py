@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -34,7 +34,7 @@ class ExtractionJob(Base):
     __tablename__ = "extraction_jobs"
 
     id = Column(UUID(as_uuid=False), primary_key=True)
-    document_id = Column(UUID(as_uuid=False), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(UUID(as_uuid=False), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     status = Column(String(50), nullable=False, default="queued")
     retry_count = Column(Integer, nullable=False, default=0)
     error_message = Column(Text, nullable=True)
@@ -47,13 +47,17 @@ class ExtractionJob(Base):
     finished_at = Column(DateTime(timezone=True), nullable=True)
 
     document = relationship("Document", back_populates="jobs")
+    __table_args__ = (
+        Index("ix_extraction_jobs_polling", "status", "available_at", "created_at"),
+        Index("ix_extraction_jobs_lease", "status", "lease_expires_at"),
+    )
 
 
 class ExtractedField(Base):
     __tablename__ = "extracted_fields"
 
     id = Column(UUID(as_uuid=False), primary_key=True)
-    document_id = Column(UUID(as_uuid=False), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(UUID(as_uuid=False), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
     form_field_name = Column(String(120), nullable=False)
     extracted_value = Column(Text, nullable=True)
     mapped_value = Column(Text, nullable=True)
