@@ -1,7 +1,6 @@
 services:
   backend_staging:
     image: certificate-autofill-dev-backend:latest
-    container_name: cert_backend_staging
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     environment:
       - APP_ENV=development
@@ -15,7 +14,7 @@ services:
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
     ports:
-      - "8001:8000"
+      - "${STAGING_BACKEND_PORT:-8001}:8000"
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
