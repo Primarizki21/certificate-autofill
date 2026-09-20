@@ -1,7 +1,6 @@
 services:
   postgres:
     image: postgres:17-alpine
-    container_name: cert_postgres
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -9,7 +8,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-certautofill}
     ports:
       # Terikat ke 127.0.0.1 (localhost) saja untuk keamanan jaringan kampus
-      - "127.0.0.1:5434:5432"
+      - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -26,7 +25,6 @@ services:
   backend:
     build:
       context: ./backend
-    container_name: cert_backend
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     env_file:
@@ -47,7 +45,7 @@ services:
       - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
     ports:
-      - "8000:8000"
+      - "${BACKEND_PORT:-8000}:8000"
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
@@ -74,7 +72,6 @@ services:
   worker:
     build:
       context: ./backend
-    container_name: cert_worker
     restart: unless-stopped
     command: python -m app.worker
     env_file:
@@ -115,10 +112,9 @@ services:
 
   prometheus:
     image: prom/prometheus:latest
-    container_name: cert_prometheus
     profiles: ["monitoring"]
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
     depends_on:
@@ -131,10 +127,9 @@ services:
 
   grafana:
     image: grafana/grafana:latest
-    container_name: cert_grafana
     profiles: ["monitoring"]
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -148,10 +143,9 @@ services:
 
   loki:
     image: grafana/loki:2.9.8
-    container_name: cert_loki
     profiles: ["monitoring"]
     ports:
-      - "3100:3100"
+      - "${LOKI_PORT:-3100}:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
