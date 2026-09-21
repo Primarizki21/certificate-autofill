@@ -67,6 +67,31 @@ def test_organizer_boundary_uses_issuer_not_signer_office() -> None:
     assert result.changed is True
 
 
+def test_organizer_boundary_uses_english_issuer_phrase() -> None:
+    raw = "UNIVERSITY OF SCIENCE\nThis certificate is proudly presented to:"
+    result = apply_organizer_boundary(
+        raw,
+        "Student Affairs Office University of Science",
+    )
+    assert result.value == "University of Science"
+    assert result.changed is True
+    assert result.reason == "issuer_organizer_over_signer_office"
+
+
+def test_organizer_boundary_recognizes_english_student_society_header() -> None:
+    raw = (
+        "Student Society of Data Science\n"
+        "CERTIFICATE OF RECOGNITION\n"
+        "Presented by Student Society of Data Science in cooperation with Partner"
+    )
+    result = apply_organizer_boundary(
+        raw,
+        "Faculty of Computer Science",
+    )
+    assert result.value == "Student Society of Data Science"
+    assert result.changed is True
+    assert result.reason == "organization_header_over_broad_institution"
+
 def test_ocr_normalizer_limits_character_repairs_to_number_region() -> None:
     raw = "Nomor: O0OO3/UNIT/1/2024\nNama B8T tetap\nhttps://example.test/O0OO3"
     result = normalize_raw_ocr(raw)
