@@ -158,7 +158,7 @@ def extract_role(text: str) -> str | None:
 
     english_patterns = [
         r"\bas\s+(?:a|an|the)\s+([A-Za-z][A-Za-z\s/\-]{2,50})",
-        r"\bASAVICEPRESIDENT\b",
+        r"\b(ASAVICEPRESIDENT)\b",
         r"\bOF\s+PARTICIPATION\b",
         r"\bPARTICIPATION\b",
     ]
@@ -167,7 +167,11 @@ def extract_role(text: str) -> str | None:
         if match:
             if "PARTICIPATION" in pattern:
                 return "Peserta"
-            first_line = match.group(1).splitlines()[0] if match.group(1) else ""
+            first_line = (
+                match.group(1).splitlines()[0]
+                if (match.lastindex and match.group(1))
+                else match.group(0)
+            )
             role = clean_inline_phrase(first_line)
             for stop in stop_words:
                 idx = role.upper().find(stop)
