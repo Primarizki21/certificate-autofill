@@ -165,13 +165,14 @@ class TestGeminiExtractorProduction:
                 "enable_combined_v4_1",
                 "enable_combined_v4_2",
                 "enable_organizer_normalization",
+                "enable_khp_master_staging",
             )
         }
         try:
             object.__setattr__(settings, "enable_ocr_fallback", False)
             object.__setattr__(settings, "enable_tesseract_gemini", True)
             for name in original_flags:
-                if name.startswith("enable_combined_") or name == "enable_organizer_normalization":
+                if name.startswith("enable_combined_") or name in {"enable_organizer_normalization", "enable_khp_master_staging"}:
                     object.__setattr__(settings, name, False)
             result = run_extraction_pipeline(
                 b"not-a-real-pdf",
@@ -246,6 +247,7 @@ class TestGeminiExtractorProduction:
                 "enable_combined_v4_1",
                 "enable_combined_v4_2",
                 "enable_organizer_normalization",
+                "enable_khp_master_staging",
             )
         }
         try:
