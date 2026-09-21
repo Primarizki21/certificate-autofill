@@ -23,20 +23,29 @@ _PARTNER_RE = re.compile(
 )
 _PRIMARY_RE = re.compile(
     r"(?:diselenggarakan|diadakan|dilaksanakan)\s+oleh|"
-    r"(?:organized|organised|held|hosted|presented)\s+by",
+    r"(?:(?:proudly\s+)?presented|organized|organised|held|hosted)\s+by",
     re.IGNORECASE,
 )
 _COORGANIZER_RE = re.compile(
     r"\b[\w.-]+\s+[x×&]\s+[\w.-]+\b",
     re.IGNORECASE,
 )
-_ISSUER_RE = re.compile(r"dengan\s*ini\s*memberikan|hereby\s*(?:gives|awards)", re.IGNORECASE)
+_ISSUER_RE = re.compile(
+    r"dengan\s*ini\s*memberikan|"
+    r"hereby\s*(?:gives|awards|presents)|"
+    r"(?:is\s+)?hereby\s+(?:awarded|presented)\s+to|"
+    r"(?:is\s+)?proudly\s+presented\s+to|"
+    r"this\s+certificate\s+is\s+(?:proudly\s+)?presented\s+to|"
+    r"this\s+is\s+to\s+certify\s+that",
+    re.IGNORECASE,
+)
 _CERTIFICATE_RE = re.compile(
     r"(?:sertifikat|certificate|piagam|penghargaan|certification)", re.IGNORECASE
 )
 _ORGANIZATION_LINE_RE = re.compile(
-    r"^(?:UKM|BEM|HIMA|DPM|MPM|Himpunan|Badan\s+Eksekutif|"
-    r"Student\s+Association|Student\s+Executive)\b.*$",
+    r"^(?:UKM|BEM|HIMA|DPM|MPM|BSO|Himpunan|Badan\s+Eksekutif|Badan\s+Semi\s+Otonom|"
+    r"Student\s+Association|Student\s+Executive|Student\s+Council|Student\s+Chapter|"
+    r"Student\s+Club|Student\s+Society|Society|Chapter|Club|Council|Committee)\b.*$",
     re.IGNORECASE,
 )
 _BROAD_INSTITUTION_TERMS = (

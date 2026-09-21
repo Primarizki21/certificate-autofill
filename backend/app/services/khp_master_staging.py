@@ -157,7 +157,17 @@ _ACTIVITY_PATTERNS = (
     (42, (r"\bkkn\s*bbm\b", r"kuliah kerja nyata")),
     (72, (r"mencalonkan diri", r"calon ketua", r"calon anggota organisasi")),
     (73, (r"\bpemira\b", r"pemilihan raya mahasiswa")),
-    (129, (r"sertifikasi", r"sertifikat kompetensi", r"certification")),
+    (
+        129,
+        (
+            r"sertifikasi\s+kompetensi",
+            r"sertifikasi\s+profesi",
+            r"uji\s+sertifikasi",
+            r"professional\s+certification",
+            r"competency\s+certification",
+            r"certification\s+of\s+competency",
+        ),
+    ),
     (117, (r"\bkim\b", r"kompetisi ilmiah mahasiswa")),
     (121, (r"\bpkl\b", r"praktik kerja lapangan")),
     (127, (r"magang ukm", r"internship ukm")),
@@ -202,9 +212,47 @@ _ROLE_PATTERNS = (
     (27, (r"juara harapan iii", r"harapan iii")),
     (25, (r"juara harapan i\b", r"harapan i\b")),
     (26, (r"juara harapan ii", r"harapan ii")),
-    (7, (r"juara i\b", r"juara 1\b", r"first winner", r"1st winner", r"1st place")),
-    (8, (r"juara ii\b", r"juara 2\b", r"juara ll\b", r"second winner", r"2nd winner", r"2nd place")),
-    (9, (r"juara iii\b", r"juara 3\b", r"juara lll\b", r"third winner", r"3rd winner", r"3rd place")),
+    (
+        7,
+        (
+            r"juara i\b",
+            r"juara 1\b",
+            r"first winner",
+            r"1st winner",
+            r"1st place",
+            r"first place",
+            r"first prize",
+            r"1st prize",
+        ),
+    ),
+    (
+        8,
+        (
+            r"juara ii\b",
+            r"juara 2\b",
+            r"juara ll\b",
+            r"second winner",
+            r"2nd winner",
+            r"2nd place",
+            r"second place",
+            r"second prize",
+            r"2nd prize",
+        ),
+    ),
+    (
+        9,
+        (
+            r"juara iii\b",
+            r"juara 3\b",
+            r"juara lll\b",
+            r"third winner",
+            r"3rd winner",
+            r"3rd place",
+            r"third place",
+            r"third prize",
+            r"3rd prize",
+        ),
+    ),
     (29, (r"\bbest\b", r"terbaik")),
     (10, (r"finalis", r"finalist")),
     (11, (r"peserta terpilih", r"selected participant")),
@@ -222,7 +270,18 @@ _ROLE_PATTERNS = (
     (20, (r"kemitraan", r"partnership")),
     (19, (r"mandiri", r"independent")),
     (21, (r"panitia", r"committee")),
-    (2, (r"wakil ketua", r"vice chair")),
+    (
+        2,
+        (
+            r"wakil ketua",
+            r"vice chair",
+            r"vice[\s_-]*president",
+            r"vicepresident",
+            r"vice[\s_-]*general[\s_-]*manager",
+            r"deputy chair",
+            r"deputy general manager",
+        ),
+    ),
     (
         4,
         (
@@ -236,6 +295,8 @@ _ROLE_PATTERNS = (
             r"koordinator",
             r"kepala\s+bidang",
             r"pengurus\s+inti(?:\s+lain)?",
+            r"\bmanager\b",
+            r"head\s+of\s+(?:division|department|bureau|section)",
         ),
     ),
     (
@@ -247,6 +308,9 @@ _ROLE_PATTERNS = (
             r"\bketua\s+bem\b",
             r"\bketua(?!\s+(?:divisi|bidang|seksi|departemen|biro|panitia))\b",
             r"chair(?!\s+(?:division|department|committee))",
+            r"\bgeneral\s+manager\b",
+            r"\bgeneralmanager\b",
+            r"\bpresident\b(?!\s+(?:division|department|committee))",
         ),
     ),
     (3, (r"sekretaris", r"secretary")),
@@ -323,7 +387,15 @@ def _resolve_activity(
     ))
     is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest\b|dataquest|slayer|datathon|ideathon", text))
     is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
-    is_ormawa_context = bool(re.search(r"hima|bem|ormawa|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif", text))
+    is_ormawa_context = bool(
+        re.search(
+            r"hima|bem|ormawa|bso\b|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif|"
+            r"student\s+association|student\s+executive|student\s+council|student\s+society|"
+            r"student\s+club|student\s+chapter|student\s+organization|semi-autonomous|"
+            r"badan\s+semi\s+otonom|research\s+group|study\s+group",
+            text,
+        )
+    )
     is_not_team = not bool(re.search(r"\b(?:ketua|pengurus|anggota|leader)\s+tim\b|\bteam\s+(?:leader|member)\b|\btim\b|\bteam\b", role_combined))
     has_explicit_pengurus_role = bool(re.search(r"\bpengurus\b|\bbph\b|\bbidang\b|\bkoordinator\b", role_combined))
 
@@ -392,11 +464,25 @@ def _resolve_activity(
             return kim_match
 
     # 10. Pengurus Organisasi (guarded against competition and orientation context)
+    has_org_text = any(
+        k in text
+        for k in [
+            "kepengurusan", "masa bakti", "period of", "for the period",
+            "certificate of membership", "membership of", "executive board", "ofmembership"
+        ]
+    )
     if is_not_team and not (is_lomba and not has_explicit_pengurus_role) and not is_pkkmb and (
         ("pengurus" in role_combined and not re.search(r"\btim\b|\bteam\b", role_combined))
-        or any(k in text for k in ["kepengurusan", "masa bakti"])
+        or has_org_text
         or (
-            any(k in role_combined for k in ["ketua", "sekretaris", "bendahara", "supervisor"])
+            any(
+                k in role_combined
+                for k in [
+                    "ketua", "wakil ketua", "sekretaris", "bendahara", "supervisor",
+                    "koordinator", "president", "vice president", "vicepresident",
+                    "general manager", "manager", "board member",
+                ]
+            )
             and is_ormawa_context
         )
     ):
@@ -462,7 +548,9 @@ def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMa
         # If bare "juara", "winner", or "pemenang", search raw_text for rank
         if _fold(role_value) in ("juara", "winner", "pemenang"):
             m_rank = re.search(
-                r"\bjuara\s+(?:harapan\s+)?(?:i{1,3}|[1-3]|iv|v)\b|\b(?:1st|2nd|3rd|first|second|third)\s+(?:winner|place)\b|\bbest\b|\bfinalis\b",
+                r"\bjuara\s+(?:harapan\s+)?(?:i{1,3}|[1-3]|iv|v)\b|"
+                r"\b(?:1st|2nd|3rd|first|second|third)\s+(?:place\s+)?(?:winner|place|prize)\b|"
+                r"\bbest\b|\bfinalis\b",
                 raw_text,
                 re.I,
             )
@@ -482,13 +570,33 @@ def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMa
     # Fallback to direct word presence in raw text (Prioritaskan Juara/Winner sebelum Panitia)
     upper = raw_text.upper()
     m_juara = re.search(
-        r"\bJUARA\s+(?:HARAPAN\s+)?(?:I{1,3}|[1-3])\b|\b(?:1ST|2ND|3RD|FIRST|SECOND|THIRD)\s+(?:WINNER|PLACE)\b|\bBEST\b|\bFINALIS\b",
+        r"\bJUARA\s+(?:HARAPAN\s+)?(?:I{1,3}|[1-3])\b|"
+        r"\b(?:1ST|2ND|3RD|FIRST|SECOND|THIRD)\s+(?:PLACE\s+)?(?:WINNER|PLACE|PRIZE)\b|"
+        r"\bBEST\b|\bFINALIS\b",
         upper,
     )
     if m_juara:
         juara_match = _match_patterns(ROLE_FIELD, m_juara.group(0), _ROLE_PATTERNS)
         if juara_match is not None and juara_match.status == "matched":
             return juara_match
+
+    if re.search(
+        r"\b(?:AS|SEBAGAI)\s+(?:A\s+|AN\s+)?(?:VICE[\s_-]*PRESIDENT|VICEPRESIDENT|VICE\s+GENERAL\s+MANAGER)\b|"
+        r"\bASAVICEPRESIDENT\b|\bAS\s+VICE\s+PRESIDENT\b",
+        upper,
+    ):
+        vice_match = _match_label(ROLE_FIELD, "Wakil Ketua")
+        if vice_match is not None:
+            return vice_match
+
+    if re.search(
+        r"\b(?:AS|SEBAGAI)\s+(?:A\s+|AN\s+)?(?:PRESIDENT|GENERAL\s+MANAGER)\b|"
+        r"\bASAPRESIDENT\b|\bAS\s+PRESIDENT\b",
+        upper,
+    ):
+        ketua_match = _match_label(ROLE_FIELD, "Ketua")
+        if ketua_match is not None:
+            return ketua_match
 
     if re.search(r"\bPANITIA\b|\bORGANIZING COMMITTEE\b|\bSTEERING COMMITTEE\b|\bAS\s+COMMITTEE\b", upper):
         panitia_match = _match_label(ROLE_FIELD, "Panitia")
