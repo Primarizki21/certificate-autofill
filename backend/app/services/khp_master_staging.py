@@ -391,7 +391,8 @@ def _resolve_activity(
         re.search(
             r"hima|bem|ormawa|bso\b|organisasi\s+kemahasiswaan|himpunan|badan\s+eksekutif|"
             r"student\s+association|student\s+executive|student\s+council|student\s+society|"
-            r"student\s+club|student\s+chapter|iris\b",
+            r"student\s+club|student\s+chapter|student\s+organization|semi-autonomous|"
+            r"badan\s+semi\s+otonom|research\s+group|study\s+group",
             text,
         )
     )
