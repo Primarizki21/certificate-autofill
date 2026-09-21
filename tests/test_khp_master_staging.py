@@ -752,3 +752,86 @@ def test_dataquest_peserta_resolves_to_mengikuti_lomba_id83() -> None:
     act_match = _resolve_activity(raw_text, fields, role_match)
     assert act_match.id == 83
     assert act_match.label == "Mengikuti Kegiatan Lomba Ilmiah"
+
+
+def test_first_place_winner_resolves_to_juara_1_id7() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "CERTIFICATE Awarded to: 25/435/SF/06/RASIO/BEHIMASTA/X/2025\n"
+        "As the First Place Winner of the University Infographic Competition RASIO 9.0\n"
+        "Organized by Badan Eksekutif Himpunan Mahasiswa Statistika 2025, FMIPA Unpad"
+    )
+    fields = {
+        "raw_role": "First Place Winner",
+        "nama_kegiatan_sertifikasi": "University Infographic Competition RASIO 9.0",
+        "tingkat": "Nasional",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 7
+    assert role_match.label == "Juara I"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 74
+
+
+def test_vice_president_and_membership_resolves_to_pengurus_organisasi_id67() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "IRIS CERTIFICATE OF MEMBERSHIP Number: 5287/B/UN3.FTMM/KM.06.02/2025\n"
+        "THIS CERTIFICATE IS PROUDLY PRESENTED TO: Fazil Putra\n"
+        "AS A VICE PRESIDENT OF Innovative Research of Intelligent System (IRIS) "
+        "Faculty of Advanced Technology and Multidisciplinary for the period of 2025"
+    )
+    fields = {
+        "raw_role": "Wakil Ketua",
+        "nama_kegiatan_sertifikasi": "Innovative Research of Intelligent System (IRIS)",
+        "tingkat": "Fakultas",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 2
+    assert role_match.label == "Wakil Ketua"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 67
+    assert act_match.label == "Pengurus Organisasi"
+
+
+def test_general_manager_resolves_to_ketua_id1() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    raw_text = "Diberikan kepada John Doe sebagai General Manager BSO Robotika 2025"
+    fields = {"raw_role": "General Manager"}
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 1
+    assert role_match.label == "Ketua"
+
+
+def test_manager_resolves_to_pengurus_inti_id4() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    raw_text = "Diberikan kepada Jane Doe sebagai Project Manager BSO Robotika 2025"
+    fields = {"raw_role": "Project Manager"}
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 4
+    assert role_match.label == "Pengurus Inti Lain"
+
+
+def test_bare_certification_typo_does_not_falsely_trigger_sertifikasi_profesi() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "CERTIFICATE OF PARTICIPATION\n"
+        "This certification is proudly present to ELZANDI IRFAN ZIKRA "
+        "For participation as an attendee in the event AIRNOLOGY 2.0"
+    )
+    fields = {
+        "raw_role": "Peserta",
+        "nama_kegiatan_sertifikasi": "AIRNOLOGY 2.0",
+        "tingkat": "Fakultas",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    # Must NOT falsely match ID 129 (Mengikuti Kegiatan Sertifikasi)
+    assert act_match.id != 129

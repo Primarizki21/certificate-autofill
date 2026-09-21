@@ -128,7 +128,9 @@ def extract_role(text: str) -> str | None:
     upper = text.upper()
 
     m_juara = re.search(
-        r"\bJUARA\s+(?:HARAPAN\s+)?(?:I{1,3}|[1-3]|IV|V|VI|VII|VIII|IX|X)\b|\bFIRST\s+WINNER\b|\bSECOND\s+WINNER\b|\bTHIRD\s+WINNER\b|\bFINALIS\b|\bFINALIST\b",
+        r"\bJUARA\s+(?:HARAPAN\s+)?(?:I{1,3}|[1-3]|IV|V|VI|VII|VIII|IX|X)\b|"
+        r"\b(?:1ST|2ND|3RD|FIRST|SECOND|THIRD)\s+(?:PLACE\s+)?(?:WINNER|PLACE|PRIZE)\b|"
+        r"\bFINALIS\b|\bFINALIST\b",
         upper,
     )
     if m_juara:
@@ -155,7 +157,8 @@ def extract_role(text: str) -> str | None:
                 return title_keep_acronym(role)
 
     english_patterns = [
-        r"\bas\s+(?:a|an)\s+([A-Za-z][A-Za-z\s/\-]{2,50})",
+        r"\bas\s+(?:a|an|the)\s+([A-Za-z][A-Za-z\s/\-]{2,50})",
+        r"\bASAVICEPRESIDENT\b",
         r"\bOF\s+PARTICIPATION\b",
         r"\bPARTICIPATION\b",
     ]
@@ -175,9 +178,15 @@ def extract_role(text: str) -> str | None:
                 return "Panitia"
             if "PARTICIPANT" in role_upper:
                 return "Peserta"
+            if "VICE" in role_upper and "PRESIDENT" in role_upper:
+                return "Wakil Ketua"
+            if "GENERAL MANAGER" in role_upper or "PRESIDENT" in role_upper:
+                return "Ketua"
+            if "MANAGER" in role_upper:
+                return "Pengurus Inti Lain"
             if "MINISTER" in role_upper or "MENTERI" in role_upper:
                 return "Menteri"
-            if 2 <= len(role) <= 50:
+            if "WINNER" in role_upper or "PLACE" in role_upper:
                 return title_keep_acronym(role)
     fallback_keywords = ["PANITIA", "PESERTA", "KETUA", "SEKRETARIS", "BENDAHARA", "ANGGOTA"]
     for keyword in fallback_keywords:
