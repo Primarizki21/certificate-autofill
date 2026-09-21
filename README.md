@@ -6,7 +6,7 @@ Prototype sistem ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasi
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
 - **Text & OCR Engine:** PyMuPDF (fast text) + Tesseract OCR Multi-PSM + RapidOCR
 - **Persepsi Semantik (LLM):** Google Gemini (`gemini-3.1-flash-lite`) untuk ekstraksi fakta teks sertifikat dan penentuan tingkat cakupan
-- **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas (normalisasi tingkat, peran/prestasi, dan pengelompokan kegiatan resmi)
+- **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas secara bilingual (Indonesia & Inggris, mencakup normalisasi tingkat, peran/prestasi, jabatan kepengurusan universal, dan pengelompokan kegiatan resmi)
 - **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
 - **Ekstraksi Offline (Fallback):** Combined v4.2 (Sistem aturan struktural lokal tanpa cloud API)
 - **Monitoring:** Prometheus + Grafana + Loki
@@ -139,16 +139,15 @@ Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
 ### 1. Evaluasi Terpadu Master Data KHP 9-Field (Dataset Terpadu $N=104$)
 Evaluasi pipeline terintegrasi (Gemini V2 Scope-Aware + Resolver Deterministik Taksonomi Universitas) pada 104 sertifikat terverifikasi:
 
-| Dimensi Evaluasi | Tahap Optimasi Semantik | Tahap Penyempurnaan Prioritas | Detail / Keterangan |
+| Dimensi Evaluasi | Tahap Awal Staging | Penyempurnaan Bilingual & Universal | Catatan Peningkatan |
 |---|:---:|:---:|---|
-| **Master 3-Field (Taksonomi Universitas)** | **80.77% (252/312 sel)** | **80.45% (251/312 sel)** | **+63 sel bersih (+20.19pt)** vs baseline awal; zero loss |
-| **All-Cells 9-Field (End-to-End KHP)** | **73.08% (684/936 sel)** | **72.97% (683/936 sel)** | 6 fakta sertifikat + 3 taksonomi master database |
-| **Base 6-Field Ekstraksi Faktual** | **69.23% (432/624 sel)** | **69.23% (432/624 sel)** | Kestabilan penuh pada field literal sertifikat (zero regression) |
-| **Pencocokan Tuple Resmi Database** | **86.54% (90/104 dokumen)** | **91.35% (95/104 dokumen)** | Hingga 95 sertifikat terpetakan otomatis ke ID resmi kegiatan |
-| **Safety Net Review Manual** | **13.46% (14/104 dokumen)** | **8.65% (9/104 dokumen)** | Terpangkas dari 42 menjadi hanya 9 kasus review manual |
+| **Master 3-Field (Taksonomi Universitas)** | 80.45% (251/312 sel) | **81.73% (255/312 sel)** | **+4 sel (+1.28pt)** berkat pengenalan peran juara & masa bakti bilingual |
+| **All-Cells 9-Field (End-to-End KHP)** | 72.97% (683/936 sel) | **73.40% (687/936 sel)** | 6 fakta sertifikat + 3 taksonomi master database (+0.43pt) |
+| **Base 6-Field Ekstraksi Faktual** | 69.23% (432/624 sel) | **69.23% (432/624 sel)** | Kestabilan penuh pada field literal sertifikat (zero loss) |
+| **Pencocokan Tuple Resmi Database AUCC** | 91.35% (95/104 dokumen) | **93.27% (97/104 dokumen)** | **97 sertifikat (93.27%)** sukses terpetakan otomatis ke ID resmi kegiatan |
+| **Safety Net Review Manual** | 8.65% (9/104 dokumen) | **6.73% (7/104 dokumen)** | Terpangkas ke 7 dokumen yang fisiknya tidak memuat deskriptor jenis kegiatan |
 
-*Catatan: Tahap penyempurnaan memprioritaskan pemetaan peran panitia dan orientasi mahasiswa baru, disusul penanganan varian kompetisi minat-bakat.*
-
+*Catatan: Penyempurnaan terbaru mencakup dukungan bilingual (peran pemenang kompetisi, kepengurusan ormawa, dan general leadership roles) serta pembersihan frasa sertifikasi tanpa menyebut atau mencantumkan data privat mahasiswa.*
 ---
 
 ### 2. Riwayat Evaluasi Eksperimen Prompting LLM (Dataset Terpadu $N=104$)
