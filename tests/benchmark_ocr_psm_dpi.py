@@ -125,22 +125,30 @@ class CachedOCREngine:
             return cache_file.read_bytes(), 0.0
 
         t0 = time.perf_counter()
+        max_edge = {2.0: 1800, 3.0: 2500, 4.0: 3300}.get(zoom, 2500)
         if file_path.suffix.lower() == ".pdf":
             with fitz.open(file_path) as doc:
                 page = doc[0]
-                mat = fitz.Matrix(zoom, zoom)
+                rect = page.rect
+                long_edge = max(rect.width, rect.height)
+                scale = min(max_edge / long_edge, zoom) if long_edge > 0 else zoom
+                mat = fitz.Matrix(scale, scale)
                 pix = page.get_pixmap(matrix=mat, alpha=False)
                 img_bytes = pix.tobytes("png")
                 del pix
         else:
             with Image.open(file_path) as raw_img:
                 img = raw_img.convert("RGB")
+                long_edge = max(img.size[0], img.size[1])
+                if long_edge > max_edge:
+                    scale = max_edge / long_edge
+                    new_size = (int(img.size[0] * scale), int(img.size[1] * scale))
+                    img = img.resize(new_size, Image.Resampling.LANCZOS)
                 buf = BytesIO()
                 img.save(buf, format="PNG")
                 img_bytes = buf.getvalue()
                 img.close()
         render_time = time.perf_counter() - t0
-
         _atomic_write_bytes(cache_file, img_bytes)
         return img_bytes, render_time
 
