@@ -72,6 +72,7 @@ VARIANTS = {
     "z2_psm6": {"zoom": 2.0, "psm_config": "psm6", "desc": "Zoom 2.0 + PSM 6 Tunggal"},
     "z2_psm3": {"zoom": 2.0, "psm_config": "psm3", "desc": "Zoom 2.0 + PSM 3 Tunggal"},
     "z4_psm6": {"zoom": 4.0, "psm_config": "psm6", "desc": "Zoom 4.0 + PSM 6 Tunggal"},
+    "z4_multi": {"zoom": 4.0, "psm_config": "multi", "desc": "Zoom 4.0 + Multi-PSM"},
 }
 
 
@@ -532,7 +533,13 @@ def main():
     print(f"EXP-OCR-PSM-DPI-001: RUNNING OCR EVALUATION ON {len(manifest)} UNIFIED DOCS")
     print("=" * 80)
 
+    summary_file = out_path / "detailed_results.json"
     variant_summaries = {}
+    if summary_file.exists():
+        try:
+            variant_summaries = json.loads(summary_file.read_text(encoding="utf-8"))
+        except Exception:
+            variant_summaries = {}
 
     for var_name in args.variants:
         if var_name not in VARIANTS:
