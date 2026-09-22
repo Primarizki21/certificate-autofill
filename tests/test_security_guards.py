@@ -60,6 +60,12 @@ def make_clean_png(width: int = 800, height: int = 600) -> bytes:
     return buf.getvalue()
 
 
+def make_clean_webp(width: int = 800, height: int = 600) -> bytes:
+    img = Image.new("RGB", (width, height), color=(240, 240, 240))
+    buf = io.BytesIO()
+    img.save(buf, format="WEBP", quality=90)
+    return buf.getvalue()
+
 # ============================================================================
 # Unit & Adversarial Tests
 # ============================================================================
@@ -90,6 +96,13 @@ class TestSecurityGuards:
         assert res.dimensions == (1200, 800)
         assert res.page_count == 1
 
+    def test_benign_webp_accepted_and_sanitized(self):
+        content = make_clean_webp(width=1000, height=750)
+        res = inspect_and_guard_upload(content, "sertifikat.webp")
+        assert res.file_type == "webp"
+        assert res.content_type == "image/webp"
+        assert res.dimensions == (1000, 750)
+        assert res.page_count == 1
     # --- MIME & Extension Spoofing ---
 
     def test_reject_executable_or_shell_script(self):
@@ -124,11 +137,17 @@ class TestSecurityGuards:
 
     def test_reject_disallowed_extensions(self):
         content = make_clean_jpeg()
-        for bad_ext in ("sertifikat.svg", "sertifikat.webp", "sertifikat.exe", "sertifikat.sh"):
+        for bad_ext in ("sertifikat.svg", "sertifikat.bmp", "sertifikat.exe", "sertifikat.sh"):
             with pytest.raises(SecurityValidationError) as exc:
                 inspect_and_guard_upload(content, bad_ext)
             assert exc.value.code == "INVALID_EXTENSION"
 
+    def test_reject_non_webp_riff_audio(self):
+        # Fake RIFF with WAVE format
+        wav_bytes = b"RIFF\x24\x00\x00\x00WAVEfmt \x10\x00\x00\x00"
+        with pytest.raises(SecurityValidationError) as exc:
+            inspect_and_guard_upload(wav_bytes, "audio.webp")
+        assert exc.value.code == "UNSUPPORTED_OR_SPOOFED_TYPE"
     # --- Image Dimension & Decompression Bomb Guards ---
 
     def test_reject_micro_dimension_troll_image(self):
@@ -144,10 +163,19 @@ class TestSecurityGuards:
         assert exc.value.code == "IMAGE_TOO_SMALL"
 
     def test_reject_macro_dimension_pixel_flood(self):
-        big_jpeg = make_clean_jpeg(width=6500, height=6500)
+        big_jpeg = make_clean_jpeg(width=8500, height=8500)
         with pytest.raises(SecurityValidationError) as exc:
             inspect_and_guard_upload(big_jpeg, "too_big.jpg")
         assert exc.value.code == "IMAGE_TOO_LARGE"
+
+    def test_auto_downscale_high_dpi_image(self):
+        # Scan 600 DPI (4800 x 3600 px) -> should auto-downscale to target max edge (2500 px)
+        high_dpi_jpeg = make_clean_jpeg(width=4800, height=3600)
+        res = inspect_and_guard_upload(high_dpi_jpeg, "scan_600dpi.jpg")
+        assert res.dimensions is not None
+        assert max(res.dimensions) == 2500
+        assert res.dimensions[0] == 2500
+        assert res.dimensions[1] == int(3600 * (2500 / 4800))
 
     def test_reject_extreme_aspect_ratio_banner_troll(self):
         # 3000 x 300 px = ratio 10:1 (exceeds limit 5:1)

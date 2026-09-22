@@ -27,7 +27,7 @@ def render_pdf_pages_to_png_bytes(
     # Image input fast-circuit: if already PNG or JPEG, return directly or converted
     if pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
         return [pdf_bytes]
-    if pdf_bytes.startswith(b"\xff\xd8\xff"):
+    if pdf_bytes.startswith(b"\xff\xd8\xff") or (len(pdf_bytes) >= 12 and pdf_bytes.startswith(b"RIFF") and pdf_bytes[8:12] == b"WEBP"):
         import io
         from PIL import Image
         with Image.open(io.BytesIO(pdf_bytes)) as img:

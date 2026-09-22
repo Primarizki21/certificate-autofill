@@ -32,12 +32,13 @@ logger = logging.getLogger("security_guard")
 Image.MAX_IMAGE_PIXELS = settings.max_image_pixels
 
 # Allowed file extensions & MIME types
-SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png"}
+SUPPORTED_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".webp"}
 
 MIME_TYPE_BY_FORMAT: dict[str, str] = {
     "pdf": "application/pdf",
     "jpeg": "image/jpeg",
     "png": "image/png",
+    "webp": "image/webp",
 }
 
 # Magic signatures
@@ -57,7 +58,7 @@ class SecurityValidationError(ValueError):
 
 @dataclass(frozen=True)
 class ValidatedDocument:
-    file_type: Literal["pdf", "jpeg", "png"]
+    file_type: Literal["pdf", "jpeg", "png", "webp"]
     content_type: str
     cleaned_bytes: bytes
     page_count: int
@@ -67,7 +68,7 @@ class ValidatedDocument:
     cleaned_size: int
 
 
-def detect_file_type_from_magic_bytes(content: bytes) -> Literal["pdf", "jpeg", "png"]:
+def detect_file_type_from_magic_bytes(content: bytes) -> Literal["pdf", "jpeg", "png", "webp"]:
     """Detect format strictly using magic bytes header."""
     if len(content) < 8:
         raise SecurityValidationError(
@@ -81,9 +82,11 @@ def detect_file_type_from_magic_bytes(content: bytes) -> Literal["pdf", "jpeg", 
         return "jpeg"
     if content.startswith(PNG_MAGIC):
         return "png"
+    if len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+        return "webp"
 
     raise SecurityValidationError(
-        "Format file tidak valid atau tidak didukung (magic bytes tidak cocok). Hanya menerima PDF, JPG, JPEG, dan PNG.",
+        "Format file tidak valid atau tidak didukung (magic bytes tidak cocok). Hanya menerima PDF, JPG, JPEG, PNG, dan WEBP.",
         code="UNSUPPORTED_OR_SPOOFED_TYPE",
     )
 
@@ -93,7 +96,7 @@ def validate_extension_match(filename: str, detected_type: str) -> None:
     ext = Path(filename).suffix.lower()
     if ext not in SUPPORTED_EXTENSIONS:
         raise SecurityValidationError(
-            f"Ekstensi file '{ext}' tidak diizinkan. Hanya menerima .pdf, .jpg, .jpeg, dan .png.",
+            f"Ekstensi file '{ext}' tidak diizinkan. Hanya menerima .pdf, .jpg, .jpeg, .png, dan .webp.",
             code="INVALID_EXTENSION",
         )
 
@@ -102,8 +105,8 @@ def validate_extension_match(filename: str, detected_type: str) -> None:
         ".jpg": {"jpeg"},
         ".jpeg": {"jpeg"},
         ".png": {"png"},
+        ".webp": {"webp"},
     }
-
     if detected_type not in expected_types.get(ext, set()):
         raise SecurityValidationError(
             f"Ekstensi file '{ext}' tidak sesuai dengan isi dokumen asli ({detected_type}). Terdeteksi potensi manipulasi tipe file.",
@@ -113,7 +116,7 @@ def validate_extension_match(filename: str, detected_type: str) -> None:
 
 def sanitize_and_validate_image(
     content: bytes,
-    file_type: Literal["jpeg", "png"],
+    file_type: Literal["jpeg", "png", "webp"],
 ) -> tuple[bytes, tuple[int, int]]:
     """Validate image integrity, dimensions, aspect ratio, and re-encode to strip EXIF."""
     try:
@@ -151,6 +154,19 @@ def sanitize_and_validate_image(
                     code="ASPECT_RATIO_ABNORMAL",
                 )
 
+            # Auto-downscale high-DPI scans (> 3500px on long edge, e.g. 600 DPI)
+            max_edge = max(width, height)
+            if max_edge > settings.auto_downscale_threshold:
+                scale = settings.auto_downscale_target / max_edge
+                new_w = max(settings.min_image_dimension, int(width * scale))
+                new_h = max(settings.min_image_dimension, int(height * scale))
+                logger.info(
+                    "Auto-downscaling high-DPI image from %dx%d to %dx%d (target max edge: %d)",
+                    width, height, new_w, new_h, settings.auto_downscale_target,
+                )
+                img = img.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                width, height = img.size
+
             # Re-encode to completely strip EXIF metadata and active chunks
             out_buf = io.BytesIO()
             if file_type == "jpeg":
@@ -159,12 +175,18 @@ def sanitize_and_validate_image(
                 else:
                     clean_img = img.copy()
                 clean_img.save(out_buf, format="JPEG", quality=92, optimize=True)
-            else:  # png
+            elif file_type == "png":
                 if img.mode not in ("RGB", "RGBA", "L"):
                     clean_img = img.convert("RGBA" if "A" in img.mode else "RGB")
                 else:
                     clean_img = img.copy()
                 clean_img.save(out_buf, format="PNG", optimize=True)
+            elif file_type == "webp":
+                if img.mode not in ("RGB", "RGBA"):
+                    clean_img = img.convert("RGBA" if "A" in img.mode else "RGB")
+                else:
+                    clean_img = img.copy()
+                clean_img.save(out_buf, format="WEBP", quality=90, method=4)
 
             cleaned_bytes = out_buf.getvalue()
             return cleaned_bytes, (width, height)

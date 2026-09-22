@@ -6,7 +6,7 @@ from pathlib import Path
 from app.config import settings
 from app.services.security_guard import ValidatedDocument
 
-SUPPORTED_STORE_EXTENSIONS = {".pdf", ".jpeg", ".jpg", ".png"}
+SUPPORTED_STORE_EXTENSIONS = {".pdf", ".jpeg", ".jpg", ".png", ".webp"}
 
 
 class TemporaryUploadStore:
@@ -43,7 +43,7 @@ class TemporaryUploadStore:
                 return candidate
 
         # 2. Check any existing supported extension on disk
-        for ext in (".pdf", ".jpeg", ".jpg", ".png"):
+        for ext in (".pdf", ".jpeg", ".jpg", ".png", ".webp"):
             candidate = (self.root_dir / f"{parsed_uuid}{ext}").resolve()
             if not str(candidate).startswith(str(self.root_dir)):
                 raise ValueError("Path traversal attempt detected.")
@@ -64,6 +64,8 @@ class TemporaryUploadStore:
             return "jpeg"
         if ext == ".png":
             return "png"
+        if ext == ".webp":
+            return "webp"
         return "pdf"
 
     def stage_validated(self, validated: ValidatedDocument) -> str:
@@ -102,6 +104,8 @@ class TemporaryUploadStore:
             ext = ".jpeg"
         elif content.startswith(b"\x89PNG\r\n\x1a\n"):
             ext = ".png"
+        elif len(content) >= 12 and content.startswith(b"RIFF") and content[8:12] == b"WEBP":
+            ext = ".webp"
         else:
             raise ValueError("File bukan format PDF/gambar valid (magic bytes mismatch).")
 

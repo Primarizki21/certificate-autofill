@@ -133,7 +133,11 @@ def run_extraction_pipeline(
     tahun_akademik: str,
     bukti_fisik: str,
 ) -> PipelineResult:
-    is_image = pdf_bytes.startswith(b"\xff\xd8\xff") or pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+    is_image = (
+        pdf_bytes.startswith(b"\xff\xd8\xff")
+        or pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        or (len(pdf_bytes) >= 12 and pdf_bytes.startswith(b"RIFF") and pdf_bytes[8:12] == b"WEBP")
+    )
     fast = extract_text_with_pymupdf(pdf_bytes)
     raw_text = fast.text
     parser_engine = "image_ocr" if is_image else "pymupdf_fast_path"
