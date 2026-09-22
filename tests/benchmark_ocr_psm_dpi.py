@@ -64,15 +64,21 @@ EVAL_FIELDS = [
 ]
 
 VARIANTS = {
+    # Zoom 2.0 (200 DPI)
+    "z2_multi": {"zoom": 2.0, "psm_config": "multi", "desc": "Zoom 2.0 + Multi-PSM"},
+    "z2_psm6": {"zoom": 2.0, "psm_config": "psm6", "desc": "Zoom 2.0 + PSM 6 Tunggal"},
+    "z2_psm3": {"zoom": 2.0, "psm_config": "psm3", "desc": "Zoom 2.0 + PSM 3 Tunggal"},
+    "z2_psm11": {"zoom": 2.0, "psm_config": "psm11", "desc": "Zoom 2.0 + PSM 11 Tunggal"},
+    # Zoom 3.0 (300 DPI, Current Baseline)
     "control_z3_multi": {"zoom": 3.0, "psm_config": "multi", "desc": "Zoom 3.0 + Multi-PSM (Control)"},
     "z3_psm6": {"zoom": 3.0, "psm_config": "psm6", "desc": "Zoom 3.0 + PSM 6 Tunggal"},
     "z3_psm3": {"zoom": 3.0, "psm_config": "psm3", "desc": "Zoom 3.0 + PSM 3 Tunggal"},
     "z3_psm11": {"zoom": 3.0, "psm_config": "psm11", "desc": "Zoom 3.0 + PSM 11 Tunggal"},
-    "z2_multi": {"zoom": 2.0, "psm_config": "multi", "desc": "Zoom 2.0 + Multi-PSM"},
-    "z2_psm6": {"zoom": 2.0, "psm_config": "psm6", "desc": "Zoom 2.0 + PSM 6 Tunggal"},
-    "z2_psm3": {"zoom": 2.0, "psm_config": "psm3", "desc": "Zoom 2.0 + PSM 3 Tunggal"},
-    "z4_psm6": {"zoom": 4.0, "psm_config": "psm6", "desc": "Zoom 4.0 + PSM 6 Tunggal"},
+    # Zoom 4.0 (400 DPI)
     "z4_multi": {"zoom": 4.0, "psm_config": "multi", "desc": "Zoom 4.0 + Multi-PSM"},
+    "z4_psm6": {"zoom": 4.0, "psm_config": "psm6", "desc": "Zoom 4.0 + PSM 6 Tunggal"},
+    "z4_psm3": {"zoom": 4.0, "psm_config": "psm3", "desc": "Zoom 4.0 + PSM 3 Tunggal"},
+    "z4_psm11": {"zoom": 4.0, "psm_config": "psm11", "desc": "Zoom 4.0 + PSM 11 Tunggal"},
 }
 
 
