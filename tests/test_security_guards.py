@@ -361,3 +361,39 @@ class TestUploadEndpointSecurity:
         )
         assert resp.status_code == 400
         assert "kata sandi" in resp.json()["detail"]
+
+    def test_api_upload_enforces_rate_limit(self, client):
+        from app.services.rate_limiter import upload_rate_limiter
+        upload_rate_limiter.reset()
+        original_limit = upload_rate_limiter.max_requests
+        upload_rate_limiter.max_requests = 2
+        try:
+            jpeg_bytes = make_clean_jpeg(width=800, height=600)
+            # Request 1: OK
+            r1 = client.post(
+                "/api/documents",
+                data={"tahun_akademik": "2024/2025", "bukti_fisik": "Sertifikat"},
+                files={"file": ("cert1.jpg", jpeg_bytes, "image/jpeg")},
+            )
+            assert r1.status_code == 200
+
+            # Request 2: OK
+            r2 = client.post(
+                "/api/documents",
+                data={"tahun_akademik": "2024/2025", "bukti_fisik": "Sertifikat"},
+                files={"file": ("cert2.jpg", jpeg_bytes, "image/jpeg")},
+            )
+            assert r2.status_code == 200
+
+            # Request 3: 429 Too Many Requests
+            r3 = client.post(
+                "/api/documents",
+                data={"tahun_akademik": "2024/2025", "bukti_fisik": "Sertifikat"},
+                files={"file": ("cert3.jpg", jpeg_bytes, "image/jpeg")},
+            )
+            assert r3.status_code == 429
+            assert "Terlalu banyak permintaan upload" in r3.json()["detail"]
+            assert "Retry-After" in r3.headers
+        finally:
+            upload_rate_limiter.max_requests = original_limit
+            upload_rate_limiter.reset()
