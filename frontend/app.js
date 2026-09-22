@@ -50,8 +50,9 @@ function bindEvents() {
   el('upload_bukti').addEventListener('change', () => {
     const file = el('upload_bukti').files?.[0];
     if (!file) return;
-    showPdfPreview(file);
-    setStatus('PDF dipilih. Klik PROSES PDF untuk parsing dan autofill.');
+    showDocumentPreview(file);
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    setStatus(`${isPdf ? 'PDF' : 'Gambar'} dipilih. Klik PROSES DOKUMEN untuk parsing dan autofill.`);
   });
 
   el('tingkat').addEventListener('change', applyStrictOrganizerRuleFromLevel);
