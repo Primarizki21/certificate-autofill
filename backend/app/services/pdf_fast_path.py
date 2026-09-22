@@ -9,6 +9,8 @@ class FastPathResult:
 
 
 def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
+    if not pdf_bytes.startswith(b"%PDF-"):
+        return FastPathResult(text="", page_count=1)
     doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     texts: list[str] = []
     try:
@@ -17,13 +19,25 @@ def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
         return FastPathResult(text="\n".join(texts).strip(), page_count=doc.page_count)
     finally:
         doc.close()
-
-
 def render_pdf_pages_to_png_bytes(
     pdf_bytes: bytes,
     zoom: float = 3.0,
     max_pages: int | None = None,
-) -> list[bytes]:
+):
+    # Image input fast-circuit: if already PNG or JPEG, return directly or converted
+    if pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n"):
+        return [pdf_bytes]
+    if pdf_bytes.startswith(b"\xff\xd8\xff"):
+        import io
+        from PIL import Image
+        with Image.open(io.BytesIO(pdf_bytes)) as img:
+            out = io.BytesIO()
+            if img.mode not in ("RGB", "RGBA", "L"):
+                img.convert("RGB").save(out, format="PNG")
+            else:
+                img.save(out, format="PNG")
+            return [out.getvalue()]
+
     # Batasi jumlah halaman render raster untuk mencegah OOM dari PDF multi-halaman.
     limit = max_pages
     if limit is None:
@@ -32,8 +46,11 @@ def render_pdf_pages_to_png_bytes(
             limit = settings.max_pdf_pages
         except Exception:
             limit = 3
+    try:
+        doc = fitz.open(stream=pdf_bytes, filetype="pdf")
+    except Exception:
+        return []
 
-    doc = fitz.open(stream=pdf_bytes, filetype="pdf")
     rendered: list[bytes] = []
     try:
         for idx, page in enumerate(doc):
