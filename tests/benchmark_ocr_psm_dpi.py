@@ -241,6 +241,9 @@ def evaluate_variant(
         rapid_times.append(t_rapid)
         tess_times.append(t_tess)
         total_times.append(doc_time)
+        if idx % 10 == 0 or idx == len(items):
+            print(f"       [{idx}/{len(items)}] processed {file_name[:30]} (last doc: {doc_time:.2f}s)")
+            sys.stdout.flush()
 
         gt_row = gt_dict.get(file_name, {})
         doc_eval = {
