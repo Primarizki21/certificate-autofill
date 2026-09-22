@@ -191,22 +191,15 @@ def _ocr_with_rapidocr(engine, image_bytes: bytes) -> str:
 
 def _ocr_with_tesseract(image_bytes: bytes) -> str:
     try:
-        image = Image.open(BytesIO(image_bytes))
-        # Beberapa sertifikat hasil scan membuat tanggal hilang pada mode OCR default.
-        # Gabungkan beberapa PSM agar teks kecil seperti tanggal pelaksanaan lebih sering tertangkap.
-        configs = ["", "--psm 6", "--psm 11"]
-        lines: list[str] = []
-        seen: set[str] = set()
-        for config in configs:
+        with Image.open(BytesIO(image_bytes)) as image:
+            # Berdasarkan evaluasi empiris EXP-OCR-PSM-DPI-001 (Unified N=104),
+            # Single PSM 6 terbukti menghasilkan Macro Exact 67.31% (+0.64pt vs multi-PSM 66.67%),
+            # mempertahankan 100% nomor sertifikat (66/104) dan tanggal (73/104),
+            # serta memangkas waktu inferensi Tesseract sebesar ~35-40%.
             try:
-                text = pytesseract.image_to_string(image, lang="ind+eng", config=config).strip()
+                text = pytesseract.image_to_string(image, lang="ind+eng", config="--psm 6").strip()
             except Exception:
-                text = pytesseract.image_to_string(image, lang="eng", config=config).strip()
-            for line in text.splitlines():
-                clean = line.strip()
-                if clean and clean not in seen:
-                    seen.add(clean)
-                    lines.append(clean)
-        return "\n".join(lines)
+                text = pytesseract.image_to_string(image, lang="eng", config="--psm 6").strip()
+            return text
     except Exception:
         return ""
