@@ -17,10 +17,19 @@ from __future__ import annotations
 
 import argparse
 import csv
+import gc
 import json
 import os
 import sys
 import time
+
+# Restrict CPU threads and disable GPU probing to prevent WSL host reset/overload
+os.environ["OMP_NUM_THREADS"] = "4"
+os.environ["OPENBLAS_NUM_THREADS"] = "4"
+os.environ["MKL_NUM_THREADS"] = "4"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "4"
+os.environ["NUMEXPR_NUM_THREADS"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
 from dataclasses import asdict, dataclass
 from io import BytesIO
 from pathlib import Path
@@ -86,6 +95,17 @@ def load_ground_truth() -> dict[str, dict[str, str]]:
                 gt_dict[fname] = row
     return gt_dict
 
+def _atomic_write_bytes(target: Path, data: bytes) -> None:
+    tmp = target.with_suffix(target.suffix + f".tmp_{os.getpid()}")
+    tmp.write_bytes(data)
+    os.replace(tmp, target)
+
+
+def _atomic_write_text(target: Path, text: str) -> None:
+    tmp = target.with_suffix(target.suffix + f".tmp_{os.getpid()}")
+    tmp.write_text(text, encoding="utf-8")
+    os.replace(tmp, target)
+
 
 class CachedOCREngine:
     def __init__(self, cache_root: Path):
@@ -100,24 +120,27 @@ class CachedOCREngine:
     def get_or_render_image(self, file_path: Path, zoom: float) -> tuple[bytes, float]:
         stem = file_path.stem
         cache_file = self.render_dir / f"{stem}_z{zoom:.1f}.png"
-        if cache_file.exists():
+        if cache_file.exists() and cache_file.stat().st_size > 0:
             return cache_file.read_bytes(), 0.0
 
         t0 = time.perf_counter()
         if file_path.suffix.lower() == ".pdf":
-            doc = fitz.open(file_path)
-            page = doc[0]
-            mat = fitz.Matrix(zoom, zoom)
-            pix = page.get_pixmap(matrix=mat, alpha=False)
-            img_bytes = pix.tobytes("png")
+            with fitz.open(file_path) as doc:
+                page = doc[0]
+                mat = fitz.Matrix(zoom, zoom)
+                pix = page.get_pixmap(matrix=mat, alpha=False)
+                img_bytes = pix.tobytes("png")
+                del pix
         else:
-            img = Image.open(file_path).convert("RGB")
-            buf = BytesIO()
-            img.save(buf, format="PNG")
-            img_bytes = buf.getvalue()
+            with Image.open(file_path) as raw_img:
+                img = raw_img.convert("RGB")
+                buf = BytesIO()
+                img.save(buf, format="PNG")
+                img_bytes = buf.getvalue()
+                img.close()
         render_time = time.perf_counter() - t0
 
-        cache_file.write_bytes(img_bytes)
+        _atomic_write_bytes(cache_file, img_bytes)
         return img_bytes, render_time
 
     def get_or_run_rapidocr(self, stem: str, zoom: float, img_bytes: bytes) -> tuple[str, float]:
@@ -132,7 +155,7 @@ class CachedOCREngine:
             text = ""
         rapid_time = time.perf_counter() - t0
 
-        cache_file.write_text(text, encoding="utf-8")
+        _atomic_write_text(cache_file, text)
         return text, rapid_time
 
     def get_or_run_tesseract(
@@ -142,45 +165,44 @@ class CachedOCREngine:
         if cache_file.exists():
             return cache_file.read_text(encoding="utf-8"), 0.0
 
-        img = Image.open(BytesIO(img_bytes))
         t0 = time.perf_counter()
-        if psm_config == "multi":
-            configs = ["", "--psm 6", "--psm 11"]
-            lines: list[str] = []
-            seen: set[str] = set()
-            for cfg in configs:
+        with Image.open(BytesIO(img_bytes)) as img:
+            if psm_config == "multi":
+                configs = ["", "--psm 6", "--psm 11"]
+                lines: list[str] = []
+                seen: set[str] = set()
+                for cfg in configs:
+                    try:
+                        txt = pytesseract.image_to_string(img, lang="ind+eng", config=cfg).strip()
+                    except Exception:
+                        txt = pytesseract.image_to_string(img, lang="eng", config=cfg).strip()
+                    for line in txt.splitlines():
+                        clean = line.strip()
+                        if clean and clean not in seen:
+                            seen.add(clean)
+                            lines.append(clean)
+                text = "\n".join(lines)
+            elif psm_config == "psm6":
                 try:
-                    txt = pytesseract.image_to_string(img, lang="ind+eng", config=cfg).strip()
+                    text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 6").strip()
                 except Exception:
-                    txt = pytesseract.image_to_string(img, lang="eng", config=cfg).strip()
-                for line in txt.splitlines():
-                    clean = line.strip()
-                    if clean and clean not in seen:
-                        seen.add(clean)
-                        lines.append(clean)
-            text = "\n".join(lines)
-        elif psm_config == "psm6":
-            try:
-                text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 6").strip()
-            except Exception:
-                text = pytesseract.image_to_string(img, lang="eng", config="--psm 6").strip()
-        elif psm_config == "psm3":
-            try:
-                text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 3").strip()
-            except Exception:
-                text = pytesseract.image_to_string(img, lang="eng", config="--psm 3").strip()
-        elif psm_config == "psm11":
-            try:
-                text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 11").strip()
-            except Exception:
-                text = pytesseract.image_to_string(img, lang="eng", config="--psm 11").strip()
-        else:
-            text = ""
+                    text = pytesseract.image_to_string(img, lang="eng", config="--psm 6").strip()
+            elif psm_config == "psm3":
+                try:
+                    text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 3").strip()
+                except Exception:
+                    text = pytesseract.image_to_string(img, lang="eng", config="--psm 3").strip()
+            elif psm_config == "psm11":
+                try:
+                    text = pytesseract.image_to_string(img, lang="ind+eng", config="--psm 11").strip()
+                except Exception:
+                    text = pytesseract.image_to_string(img, lang="eng", config="--psm 11").strip()
+            else:
+                text = ""
         tess_time = time.perf_counter() - t0
 
-        cache_file.write_text(text, encoding="utf-8")
+        _atomic_write_text(cache_file, text)
         return text, tess_time
-
 
 def run_pipeline_on_text(raw_text: str) -> dict[str, str]:
     extracted = extract_certificate_fields(raw_text)
@@ -227,8 +249,8 @@ def evaluate_variant(
         digital_text = ""
         if file_path.suffix.lower() == ".pdf":
             try:
-                doc = fitz.open(file_path)
-                digital_text = "".join(page.get_text() for page in doc).strip()
+                with fitz.open(file_path) as doc:
+                    digital_text = "".join(page.get_text() for page in doc).strip()
             except Exception:
                 digital_text = ""
 
@@ -283,6 +305,9 @@ def evaluate_variant(
                 field_totals[pred_key]["fuzzy"] += 1
 
         results.append(doc_eval)
+        del img_bytes, rapid_text, tess_text, combined_ocr_text, full_raw_text
+        if idx % 5 == 0:
+            gc.collect()
 
     # Compute aggregate metrics
     total_cells = sum(f["total"] for f in field_totals.values())
