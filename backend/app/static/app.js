@@ -50,8 +50,9 @@ function bindEvents() {
   el('upload_bukti').addEventListener('change', () => {
     const file = el('upload_bukti').files?.[0];
     if (!file) return;
-    showPdfPreview(file);
-    setStatus('PDF dipilih. Klik PROSES PDF untuk parsing dan autofill.');
+    showDocumentPreview(file);
+    const isPdf = file.name.toLowerCase().endsWith('.pdf');
+    setStatus(`${isPdf ? 'PDF' : 'Gambar'} dipilih. Klik PROSES DOKUMEN untuk parsing dan autofill.`);
   });
 
   el('tingkat').addEventListener('change', applyStrictOrganizerRuleFromLevel);
@@ -164,22 +165,29 @@ function setInitialDefaults() {
   ensureOptionAndSet(el('bukti_fisik'), 'Sertifikat');
 }
 
+const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
+
+function isSupportedFile(filename) {
+  const lower = (filename || '').toLowerCase();
+  return ALLOWED_EXTENSIONS.some((ext) => lower.endsWith(ext));
+}
+
 async function uploadAndParse(event) {
   event.preventDefault();
   const file = el('upload_bukti').files?.[0];
   if (!file) {
-    setStatus('Pilih file PDF terlebih dahulu.');
+    setStatus('Pilih file dokumen (PDF/Gambar) terlebih dahulu.');
     return;
   }
-  if (!file.name.toLowerCase().endsWith('.pdf')) {
-    setStatus('File wajib PDF.');
+  if (!isSupportedFile(file.name)) {
+    setStatus('Format file tidak didukung. Harap unggah PDF, JPG, JPEG, PNG, atau WEBP.');
     return;
   }
 
-  showPdfPreview(file);
+  showDocumentPreview(file);
   showAfterUploadSection();
   setLoading(true);
-  setStatus('Mengupload PDF ke PostgreSQL dan memulai parsing...');
+  setStatus('Mengunggah dokumen dan memulai ekstraksi...');
 
   const formData = new FormData();
   formData.append('tahun_akademik', el('tahun_akademik').value);
@@ -194,16 +202,19 @@ async function uploadAndParse(event) {
 
     if (!response.ok) {
       const err = await safeJson(response);
-      throw new Error(err.detail || `Upload gagal. HTTP ${response.status}`);
+      const detailMsg = err.detail || `Upload gagal. HTTP ${response.status}`;
+      setLoading(false);
+      setStatus(detailMsg);
+      return;
     }
 
     const uploaded = await response.json();
     state.currentDocumentId = uploaded.document_id;
-    setStatus('PDF berhasil diunggah. Sedang memproses dokumen...');
+    setStatus('Dokumen berhasil diunggah. Sedang memproses ekstraksi...');
     pollResult(uploaded.document_id);
-  } catch (error) {
+  } catch (networkError) {
     setLoading(false);
-    setStatus('Gagal mengunggah dokumen. Silakan coba kembali.');
+    setStatus('Terjadi kendala jaringan saat mengunggah dokumen. Silakan coba kembali.');
   }
 }
 
@@ -211,10 +222,32 @@ function showAfterUploadSection() {
   el('afterUploadSection').classList.remove('hidden');
 }
 
-function showPdfPreview(file) {
+function showDocumentPreview(file) {
   if (state.objectUrl) URL.revokeObjectURL(state.objectUrl);
   state.objectUrl = URL.createObjectURL(file);
-  el('pdfPreview').src = state.objectUrl;
+  const isPdf = file.name.toLowerCase().endsWith('.pdf');
+  const pdfFrame = el('pdfPreview');
+  const imgView = el('imagePreview');
+
+  if (isPdf) {
+    if (pdfFrame) {
+      pdfFrame.classList.remove('hidden');
+      pdfFrame.src = state.objectUrl;
+    }
+    if (imgView) {
+      imgView.classList.add('hidden');
+      imgView.src = '';
+    }
+  } else {
+    if (pdfFrame) {
+      pdfFrame.classList.add('hidden');
+      pdfFrame.src = '';
+    }
+    if (imgView) {
+      imgView.classList.remove('hidden');
+      imgView.src = state.objectUrl;
+    }
+  }
 }
 
 function pollResult(documentId) {
@@ -446,14 +479,18 @@ function resetPage() {
   setInitialDefaults();
   filterJenisKegiatanByGroup('', '');
   el('afterUploadSection').classList.add('hidden');
-  el('pdfPreview').src = '';
+  if (el('pdfPreview')) el('pdfPreview').src = '';
+  if (el('imagePreview')) {
+    el('imagePreview').src = '';
+    el('imagePreview').classList.add('hidden');
+  }
   setLoading(false);
-  setStatus('Upload PDF untuk melakukan parsing extraction.');
+  setStatus('Upload PDF atau gambar untuk melakukan parsing extraction.');
 }
 
 function setLoading(isLoading) {
   el('parseBtn').disabled = isLoading;
-  el('parseBtn').textContent = isLoading ? 'MEMPROSES...' : 'PROSES PDF';
+  el('parseBtn').textContent = isLoading ? 'MEMPROSES...' : 'PROSES DOKUMEN';
 }
 
 function setStatus(text) {

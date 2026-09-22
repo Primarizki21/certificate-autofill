@@ -14,7 +14,7 @@ import io
 import secrets
 import uuid
 from datetime import datetime
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -52,6 +52,8 @@ from app.schemas import (
 )
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 from app.services.temporary_upload_store import upload_store
+from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
+from app.services.rate_limiter import enforce_upload_rate_limit
 
 app = FastAPI(title="Certificate Autofill Prototype", version="0.1.0")
 app.add_middleware(
@@ -126,6 +128,7 @@ def get_options() -> OptionsResponse:
 
 @app.post("/api/documents", response_model=UploadResponse)
 def upload_document(
+    request: Request,
     background_tasks: BackgroundTasks,
     tahun_akademik: str = Form(...),
     bukti_fisik: str = Form("Sertifikat"),
@@ -133,22 +136,25 @@ def upload_document(
     db: Session = Depends(get_db),
 ) -> UploadResponse:
     REQUEST_COUNT.labels(endpoint="/api/documents").inc()
-    if not file.filename or not file.filename.lower().endswith(".pdf"):
-        raise HTTPException(status_code=400, detail="File wajib PDF.")
+    enforce_upload_rate_limit(request)
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File wajib diunggah.")
 
     content = file.file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
     if len(content) > max_bytes:
-        raise HTTPException(status_code=413, detail=f"Ukuran PDF maksimal {settings.max_upload_size_mb} MB.")
+        raise HTTPException(status_code=413, detail=f"Ukuran file maksimal {settings.max_upload_size_mb} MB.")
 
     try:
-        temp_key = upload_store.stage_bytes(content)
+        validated = inspect_and_guard_upload(content, file.filename)
+        temp_key = upload_store.stage_validated(validated)
+    except SecurityValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     document_id = str(uuid.uuid4())
     job_id = str(uuid.uuid4())
-    checksum = hashlib.sha256(content).hexdigest()
 
     document = Document(
         id=document_id,
@@ -156,9 +162,9 @@ def upload_document(
         tahun_akademik=tahun_akademik,
         bukti_fisik=bukti_fisik,
         original_file_name=file.filename,
-        mime_type=file.content_type or "application/pdf",
-        file_size=len(content),
-        checksum_sha256=checksum,
+        mime_type=validated.content_type,
+        file_size=validated.cleaned_size,
+        checksum_sha256=validated.checksum_sha256,
         status="queued",
     )
     job = ExtractionJob(

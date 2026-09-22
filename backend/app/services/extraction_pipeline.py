@@ -133,9 +133,14 @@ def run_extraction_pipeline(
     tahun_akademik: str,
     bukti_fisik: str,
 ) -> PipelineResult:
+    is_image = (
+        pdf_bytes.startswith(b"\xff\xd8\xff")
+        or pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        or (len(pdf_bytes) >= 12 and pdf_bytes.startswith(b"RIFF") and pdf_bytes[8:12] == b"WEBP")
+    )
     fast = extract_text_with_pymupdf(pdf_bytes)
     raw_text = fast.text
-    parser_engine = "pymupdf_fast_path"
+    parser_engine = "image_ocr" if is_image else "pymupdf_fast_path"
     raw_markdown = None
     raw_json: dict[str, Any] | None = None
     review_annotations: dict[str, SemanticReviewAnnotation] = {}
@@ -149,17 +154,20 @@ def run_extraction_pipeline(
         and extracted["waktu_selesai_pelaksanaan"].value
     )
     should_run_ocr = settings.enable_ocr_fallback and (
-        len(raw_text.strip()) < settings.min_text_length or date_missing
+        is_image or len(raw_text.strip()) < settings.min_text_length or date_missing
     )
     if should_run_ocr:
         ocr_text = extract_text_with_ocr(pdf_bytes)
         if ocr_text.strip():
             raw_text = f"{raw_text}\n{ocr_text}".strip()
-            parser_engine = (
-                "ocr_fallback"
-                if len(raw_text.strip()) < settings.min_text_length
-                else f"{parser_engine}+ocr_date_check"
-            )
+            if is_image:
+                parser_engine = "image_ocr_rapid_tesseract"
+            else:
+                parser_engine = (
+                    "ocr_fallback"
+                    if len(raw_text.strip()) < settings.min_text_length
+                    else f"{parser_engine}+ocr_date_check"
+                )
             extracted = extract_certificate_fields(raw_text)
 
     gemini_used = False
