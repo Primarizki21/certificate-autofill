@@ -4,7 +4,7 @@ Prototype sistem ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasi
 
 **Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR Engine:** PyMuPDF (fast text) + Tesseract OCR Multi-PSM + RapidOCR
+- **Text & OCR Engine:** PyMuPDF (fast text + resolution clamping) + Tesseract OCR (Single-Pass PSM 6 teroptimasi) + RapidOCR
 - **Persepsi Semantik (LLM):** Google Gemini (`gemini-3.1-flash-lite`) untuk ekstraksi fakta teks sertifikat dan penentuan tingkat cakupan
 - **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas secara bilingual (Indonesia & Inggris, mencakup normalisasi tingkat, peran/prestasi, jabatan kepengurusan universal, dan pengelompokan kegiatan resmi)
 - **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
@@ -203,7 +203,24 @@ Evaluasi pembentukan teks input terhadap 74 dokumen sertifikat (49 pindaian/scan
 
 ---
 
-### 6. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
+### 6. Optimasi Mode PSM & Skala Resolusi OCR (Dataset Terpadu $N=104$)
+Eksperimen `EXP-OCR-PSM-DPI-001` menguji 12 kombinasi skala rendering (*Zoom* 2.0, 3.0, 4.0) dan mode segmentasi halaman Tesseract (*Multi-PSM 3-Pass* vs *Single-Pass PSM 6, PSM 3, PSM 11*):
+
+| Konfigurasi / Varian | Skala Resolusi | Mode Tesseract PSM | Macro Exact | Macro Fuzzy | Waktu Tesseract | Status Evaluasi |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **`z3_psm6` (Pilihan Produksi)** | **Zoom 3.0 (~300 DPI)** | **Single-Pass `--psm 6`** | **67.31% (+0.64pt)** | **73.56%** | **Tercepat** | **PASS — Diadopsi**. Tanpa duplikasi teks, nomor & tanggal 100% terjaga |
+| `z3_psm3` | Zoom 3.0 (~300 DPI) | Single-Pass `--psm 3` | 67.47% (+0.80pt) | 73.56% | Cepat | PASS — Menghilangkan 1 nomor sertifikat terformat unik |
+| `control_z3_multi` (Baseline) | Zoom 3.0 (~300 DPI) | Multi-Pass (`""` + 6 + 11) | 66.67% | 72.76% | Lambat (3-pass) | CONTROL — Baseline lama (duplikasi teks dan overhead 3×) |
+| `z3_psm11` | Zoom 3.0 (~300 DPI) | Single-Pass `--psm 11` | 66.99% (+0.32pt) | 72.92% | Sedang | PASS — Kurang optimal pada blok teks terstruktur |
+| `z2_psm6` / `z2_multi` | Zoom 2.0 (~200 DPI) | PSM 6 / Multi-Pass | 65.87% – 66.51% | 72.12% – 72.60% | Sangat Cepat | FAIL — Penurunan akurasi nomor (-1.0pt) & tanggal (-2.0pt) |
+| `z4_psm6` / `z4_multi` | Zoom 4.0 (~400 DPI) | PSM 6 / Multi-Pass | 66.03% – 66.19% | 71.79% – 72.44% | Sangat Lambat (4s+) | FAIL — Latensi membengkak ekstrem & risiko OOM tanpa gain akurasi |
+
+**Peningkatan Ketahanan Produksi**:
+1. **Single-Pass Tesseract `--psm 6`**: Menggantikan penggabungan 3-pass multi-PSM lama pada `ocr_fallback.py`, memangkas overhead pemanggilan berulang sekaligus membersihkan derau teks duplikat.
+2. **Resolution Clamping Guard**: Pembatasan dimensi maksimum rendering PDF (`max_allowed = 2500px` long-edge pada `pdf_fast_path.py`) untuk menjamin dokumen dengan ukuran fisik cetak besar tidak memicu *Out of Memory* (OOM).
+---
+
+### 7. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
