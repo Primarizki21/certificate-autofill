@@ -35,19 +35,19 @@
         <div class="form-row">
           <label for="upload_bukti">Upload Bukti</label>
           <div class="field-block">
-            <input id="upload_bukti" name="file" type="file" accept="application/pdf" />
-            <div class="hint">Jenis file yang dapat di upload adalah (.pdf) dengan ukuran maksimal 10 Mb</div>
+            <input id="upload_bukti" name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/jpg" />
+            <div class="hint">Jenis file yang dapat di upload adalah (.pdf, .jpg, .jpeg, .png) dengan ukuran maksimal 10 Mb</div>
             <div class="upload-actions">
-              <button type="submit" id="parseBtn" class="btn teal">PROSES PDF</button>
+              <button type="submit" id="parseBtn" class="btn teal">PROSES DOKUMEN</button>
               <button type="button" id="resetBtn" class="btn gray">RESET</button>
-              <span id="statusText" class="status-text">Upload PDF untuk melakukan parsing extraction.</span>
+              <span id="statusText" class="status-text">Upload PDF atau gambar sertifikat untuk melakukan parsing extraction.</span>
             </div>
           </div>
         </div>
         <section id="afterUploadSection" class="after-upload hidden">
           <div class="preview-row">
-            <label>Preview PDF</label>
-            <div class="preview-box"><iframe id="pdfPreview" title="Preview PDF Sertifikat"></iframe></div>
+            <label>Preview Dokumen</label>
+            <div class="preview-box"><iframe id="pdfPreview" title="Preview PDF Sertifikat"></iframe><img id="imagePreview" class="hidden" alt="Preview Gambar Sertifikat" /></div>
           </div>
           <div class="form-row"><label for="kelompok_kegiatan">Kelompok Kegiatan:</label><select id="kelompok_kegiatan" name="kelompok_kegiatan"></select></div>
           <div class="form-row"><label for="jenis_kegiatan">Jenis Kegiatan:</label><select id="jenis_kegiatan" name="jenis_kegiatan"></select></div>
@@ -59,7 +59,7 @@
           <div class="form-row"><label for="jenis_penyelenggara">Jenis Penyelenggara</label><select id="jenis_penyelenggara" name="jenis_penyelenggara"></select></div>
           <div class="form-row"><label for="penyelenggara_kegiatan">Penyelenggara Kegiatan</label><input id="penyelenggara_kegiatan" name="penyelenggara_kegiatan" type="text" placeholder="Masukkan penyelenggara kegiatan" /></div>
           <div class="form-row"><label for="nomor_bukti_fisik_nomor_sertifikasi">Nomor Bukti Fisik / Nomor Sertifikasi</label><input id="nomor_bukti_fisik_nomor_sertifikasi" name="nomor_bukti_fisik_nomor_sertifikasi" type="text" placeholder="Masukkan nomor bukti fisik" /></div>
-          <div class="form-row"><label for="upload_foto_menerima_sertifikat">Upload Foto Menerima Sertifikat</label><div class="field-block"><input id="upload_foto_menerima_sertifikat" type="file" accept="application/pdf" /><div class="hint">Jenis file yang dapat di upload adalah (.pdf) dengan ukuran maksimal 10 Mb</div></div></div>
+          <div class="form-row"><label for="upload_foto_menerima_sertifikat">Upload Foto Menerima Sertifikat</label><div class="field-block"><input id="upload_foto_menerima_sertifikat" type="file" accept="application/pdf,image/jpeg,image/png,image/jpg" /><div class="hint">Jenis file yang dapat di upload adalah (.pdf, .jpg, .jpeg, .png) dengan ukuran maksimal 10 Mb</div></div></div>
           <div class="form-row"><label for="nidn_pembimbing">NIDN Pembimbing</label><div class="field-block select-with-arrow"><input id="nidn_pembimbing" type="text" placeholder="Pilih Pembimbing" /><div class="hint">Bila kegiatan tidak memiliki dosen pembimbing, dapat dimasukkan NIDN dosen wali ketua kegiatan. Kegiatan Sertifikasi yang di inputkan adalah nama dosen wali / WD 1 Fakultas</div></div></div>
           <div class="form-row"><label for="nuptk_pembimbing">NUPTK Pembimbing</label><div class="field-block select-with-arrow"><input id="nuptk_pembimbing" type="text" placeholder="Pilih Pembimbing" /></div></div>
           <div class="form-row"><label for="laman_publikasi_kegiatan">Laman Publikasi Kegiatan</label><div class="field-block"><input id="laman_publikasi_kegiatan" type="url" placeholder="https://example.com" /><div class="hint">Dapat diisi alamat laman website publikasi kegiatan, atau laman berita/media sosial terkait kegiatan</div></div></div>
