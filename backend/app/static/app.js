@@ -165,7 +165,7 @@ function setInitialDefaults() {
   ensureOptionAndSet(el('bukti_fisik'), 'Sertifikat');
 }
 
-const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png'];
+const ALLOWED_EXTENSIONS = ['.pdf', '.jpg', '.jpeg', '.png', '.webp'];
 
 function isSupportedFile(filename) {
   const lower = (filename || '').toLowerCase();
@@ -180,7 +180,7 @@ async function uploadAndParse(event) {
     return;
   }
   if (!isSupportedFile(file.name)) {
-    setStatus('Format file tidak didukung. Harap unggah PDF, JPG, JPEG, atau PNG.');
+    setStatus('Format file tidak didukung. Harap unggah PDF, JPG, JPEG, PNG, atau WEBP.');
     return;
   }
 
@@ -202,16 +202,19 @@ async function uploadAndParse(event) {
 
     if (!response.ok) {
       const err = await safeJson(response);
-      throw new Error(err.detail || `Upload gagal. HTTP ${response.status}`);
+      const detailMsg = err.detail || `Upload gagal. HTTP ${response.status}`;
+      setLoading(false);
+      setStatus(detailMsg);
+      return;
     }
 
     const uploaded = await response.json();
     state.currentDocumentId = uploaded.document_id;
     setStatus('Dokumen berhasil diunggah. Sedang memproses ekstraksi...');
     pollResult(uploaded.document_id);
-  } catch (error) {
+  } catch (networkError) {
     setLoading(false);
-    setStatus('Gagal mengunggah dokumen. Silakan coba kembali.');
+    setStatus('Terjadi kendala jaringan saat mengunggah dokumen. Silakan coba kembali.');
   }
 }
 
