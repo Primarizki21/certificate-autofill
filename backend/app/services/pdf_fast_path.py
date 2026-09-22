@@ -21,7 +21,7 @@ def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
 
 def render_pdf_pages_to_png_bytes(
     pdf_bytes: bytes,
-    zoom: float = 2.0,
+    zoom: float = 3.0,
     max_pages: int | None = None,
 ) -> list[bytes]:
     # Batasi jumlah halaman render raster untuk mencegah OOM dari PDF multi-halaman.
