@@ -4,16 +4,19 @@ import uuid
 from pathlib import Path
 
 from app.config import settings
+from app.services.security_guard import ValidatedDocument
+
+SUPPORTED_STORE_EXTENSIONS = {".pdf", ".jpeg", ".jpg", ".png"}
 
 
 class TemporaryUploadStore:
-    """Manages ephemeral PDF files on local storage with zero retention in PostgreSQL.
+    """Manages ephemeral documents (PDF and Images) on local storage with zero retention in PostgreSQL.
 
     Security & Reliability invariants:
     - Files stored with strict permissions (0o600).
     - Keys strictly validated as UUIDs to prevent directory traversal.
     - Atomic writes via .part files and os.replace.
-    - Magic bytes (%PDF-) validation before persisting.
+    - Magic bytes validation before persisting.
     """
 
     def __init__(self, root_dir: str | None = None) -> None:
@@ -24,32 +27,87 @@ class TemporaryUploadStore:
         except OSError:
             pass
 
-    def _resolve_key(self, file_key: str) -> Path:
-        """Validate UUID and resolve full path safely."""
+    def _resolve_key(self, file_key: str, preferred_ext: str | None = None) -> Path:
+        """Validate UUID and resolve full path safely across supported formats."""
         try:
             parsed_uuid = uuid.UUID(str(file_key))
         except (ValueError, TypeError, AttributeError) as exc:
             raise ValueError(f"Invalid file key (must be UUID): {file_key}") from exc
-        target_path = (self.root_dir / f"{parsed_uuid}.pdf").resolve()
-        if not str(target_path).startswith(str(self.root_dir)):
+
+        # 1. If preferred extension is given, check that first
+        if preferred_ext:
+            candidate = (self.root_dir / f"{parsed_uuid}{preferred_ext}").resolve()
+            if not str(candidate).startswith(str(self.root_dir)):
+                raise ValueError("Path traversal attempt detected.")
+            if candidate.is_file():
+                return candidate
+
+        # 2. Check any existing supported extension on disk
+        for ext in (".pdf", ".jpeg", ".jpg", ".png"):
+            candidate = (self.root_dir / f"{parsed_uuid}{ext}").resolve()
+            if not str(candidate).startswith(str(self.root_dir)):
+                raise ValueError("Path traversal attempt detected.")
+            if candidate.is_file():
+                return candidate
+
+        # 3. Default fallback path (for initial creation or missing file check)
+        fallback = (self.root_dir / f"{parsed_uuid}{preferred_ext or '.pdf'}").resolve()
+        if not str(fallback).startswith(str(self.root_dir)):
             raise ValueError("Path traversal attempt detected.")
-        return target_path
+        return fallback
 
-    def stage_bytes(self, content: bytes) -> str:
-        """Stage PDF content to an ephemeral file atomically.
+    def get_file_type(self, file_key: str) -> str:
+        """Return the normalized file type ('pdf', 'jpeg', 'png') for a staged key."""
+        target_path = self._resolve_key(file_key)
+        ext = target_path.suffix.lower()
+        if ext in (".jpg", ".jpeg"):
+            return "jpeg"
+        if ext == ".png":
+            return "png"
+        return "pdf"
 
-        Returns the UUID file key.
-        """
+    def stage_validated(self, validated: ValidatedDocument) -> str:
+        """Stage an already validated and sanitized document to an ephemeral file."""
+        file_key = str(uuid.uuid4())
+        ext = f".{validated.file_type}"
+        part_path = self.root_dir / f"{file_key}.part"
+        final_path = self._resolve_key(file_key, preferred_ext=ext)
+
+        fd = os.open(str(part_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        try:
+            with os.fdopen(fd, "wb") as f:
+                f.write(validated.cleaned_bytes)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(str(part_path), str(final_path))
+        except Exception:
+            if part_path.exists():
+                try:
+                    part_path.unlink()
+                except OSError:
+                    pass
+            raise
+
+        return file_key
+
+    def stage_bytes(self, content: bytes, filename: str | None = None) -> str:
+        """Stage raw content to an ephemeral file atomically after basic magic byte check."""
         max_bytes = settings.max_upload_size_mb * 1024 * 1024
         if len(content) > max_bytes:
             raise ValueError(f"Ukuran file ({len(content)} bytes) melebihi batas {settings.max_upload_size_mb} MB.")
 
-        if not content.startswith(b"%PDF-"):
-            raise ValueError("File bukan format PDF valid (magic bytes mismatch).")
+        if content.startswith(b"%PDF-"):
+            ext = ".pdf"
+        elif content.startswith(b"\xff\xd8\xff"):
+            ext = ".jpeg"
+        elif content.startswith(b"\x89PNG\r\n\x1a\n"):
+            ext = ".png"
+        else:
+            raise ValueError("File bukan format PDF/gambar valid (magic bytes mismatch).")
 
         file_key = str(uuid.uuid4())
         part_path = self.root_dir / f"{file_key}.part"
-        final_path = self._resolve_key(file_key)
+        final_path = self._resolve_key(file_key, preferred_ext=ext)
 
         fd = os.open(str(part_path), os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
         try:
@@ -98,7 +156,9 @@ class TemporaryUploadStore:
         deleted_count = 0
 
         for entry in self.root_dir.iterdir():
-            if entry.stem in protected or not entry.is_file() or entry.suffix not in {".pdf", ".part"}:
+            if entry.stem in protected or not entry.is_file():
+                continue
+            if entry.suffix not in SUPPORTED_STORE_EXTENSIONS and entry.suffix != ".part":
                 continue
             try:
                 if (now - entry.stat().st_mtime) > cutoff_age:
