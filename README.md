@@ -1,6 +1,6 @@
 # Certificate Autofill Prototype
 
-Prototype sistem ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasil Prestasi (KHP) terintegrasi taksonomi resmi universitas.
+Prototype sistem ekstraksi multi-format sertifikat mahasiswa (PDF, JPG, JPEG, PNG, WEBP) dan autofill form Kartu Hasil Prestasi (KHP) terintegrasi taksonomi resmi universitas.
 
 **Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
@@ -10,6 +10,7 @@ Prototype sistem ekstraksi PDF sertifikat mahasiswa dan autofill form Kartu Hasi
 - **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
 - **Ekstraksi Offline (Fallback):** Combined v4.2 (Sistem aturan struktural lokal tanpa cloud API)
 - **Monitoring:** Prometheus + Grafana + Loki
+- **Keamanan & Guard Upload:** Inspeksi *defense-in-depth* multi-format (validasi *magic bytes*, sanitasi metadata/EXIF, batas dekompresi 60 MP, pencegahan injeksi skrip PDF) dan *sliding-window rate limiter*
 
 ---
 
@@ -116,6 +117,14 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
+| `RATE_LIMIT_PER_MINUTE` | `30` | Batas maksimum unggahan per menit per IP address |
+| `MAX_PDF_PAGES` | `3` | Batas maksimum jumlah halaman file PDF sertifikat |
+| `MAX_IMAGE_PIXELS` | `60000000` | Batas aman piksel gambar (Pillow Decompression Bomb safeguard, 60 MP) |
+| `MAX_IMAGE_DIMENSION` | `8000` | Dimensi panjang/lebar piksel maksimum gambar (anti-pixel flood) |
+| `MIN_IMAGE_DIMENSION` | `300` | Dimensi piksel minimum gambar sertifikat (anti-troll micro icon) |
+| `AUTO_DOWNSCALE_THRESHOLD` | `3500` | Ambang resolusi pindaian tinggi sebelum di-downscale otomatis |
+| `AUTO_DOWNSCALE_TARGET` | `2500` | Target resolusi sisi terpanjang gambar setelah downscale proporsional |
+| `MAX_PDF_CANVAS_DIMENSION` | `5000` | Batas dimensi kanvas halaman PDF dalam point (anti-canvas bomb) |
 
 ### Storage Sementara dan Manajemen File
 PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database PostgreSQL hanya menyimpan metadata teks dan hasil ekstraksi form, bukan data bytes PDF atau file OCR mentah.
@@ -132,6 +141,34 @@ ENABLE_TESSERACT_GEMINI=false
 ```
 Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
 
+---
+
+## Proteksi & Keamanan Unggahan Dokumen (Defense-in-Depth)
+
+Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum dokumen diproses oleh pipeline OCR/ekstraksi:
+
+1. **Multi-Format & Validasi Magic Bytes (Anti-Spoofing)**:
+   - Format yang didukung: **PDF, JPG, JPEG, PNG, dan WEBP**.
+   - Integritas file diverifikasi langsung dari *magic bytes* header biner dokumen, bukan sekadar ekstensi nama file atau `Content-Type`. Upaya *MIME spoofing* atau *polyglot file* otomatis ditolak dengan pesan error yang jelas.
+
+2. **Sanitasi Metadata & Privasi Gambar**:
+   - Gambar yang diunggah otomatis di-*re-encode* secara aman melalui Pillow untuk membersihkan seluruh metadata EXIF, profil perangkat, dan potensi *active chunk* injeksi.
+
+3. **Mitigasi DoS & Decompression Bomb**:
+   - Batas maksimum piksel 60 MP (`MAX_IMAGE_PIXELS = 60000000`) mencegah serangan *decompression bomb* / *pixel flood*.
+   - **Smart High-DPI Auto-Downscaling**: Pindaian resolusi tinggi (>3500px, misal scan 600 DPI) secara otomatis diperkecil secara proporsional ke batas aman 2500px menggunakan filter Lanczos agar OCR optimal tanpa risiko *Out-of-Memory* (OOM).
+   - Validasi batas dimensi minimum ($\ge 300\times300\text{px}$) dan rasio aspek wajar ($\le 5.0:1$) untuk menangkal file *troll* atau *banner*.
+
+4. **Inspeksi Mendalam Dokumen PDF**:
+   - Maksimal 3 halaman (`MAX_PDF_PAGES = 3`) untuk mencegah *page bomb*.
+   - Deteksi proteksi kata sandi / enkripsi.
+   - Penolakan dokumen yang memuat lampiran biner (*embedded files*).
+   - Pindaian objek aktif berbahaya pada tabel *xref* (`/JavaScript`, `/JS`, `/Launch`, `/EmbeddedFiles`, `/RichMedia`).
+   - Batas kanvas render maksimal 5000 pt untuk mencegah OOM saat proses rasterisasi.
+
+5. **Rate Limiting (Sliding Window)**:
+   - Endpoint upload dilindungi pembatas laju *in-memory* berbasis IP dengan jendela geser (*sliding window*).
+   - Default: **30 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 30`). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
 ---
 
 ## Hasil Evaluasi & Benchmark
@@ -264,7 +301,7 @@ uv run pytest tests/ -v
 ## Endpoint API Utama
 
 ```http
-POST /api/documents              # Upload dokumen PDF sertifikat → pemrosesan ekstraksi di background
+POST /api/documents              # Upload sertifikat (PDF, JPG, PNG, WEBP) dengan proteksi security guard & rate limit
 GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi 9-field form KHP
 GET  /api/options                # Opsi dropdown master data KHP berelasi (Kelompok Kegiatan berelasi dengan Jenis Kegiatan, Tingkat, Jabatan)
 GET  /api/master/activities      # Katalog pencarian taksonomi kegiatan resmi universitas untuk UI Modal
