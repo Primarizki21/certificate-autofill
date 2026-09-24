@@ -255,6 +255,32 @@ class TestSecurityGuards:
             inspect_and_guard_upload(pdf_bytes, "js_script.pdf")
         assert exc.value.code == "PDF_ACTIVE_CONTENT"
 
+    def test_accept_google_docs_benign_js_name_tree(self):
+        # Simulates Google Docs/Google Drive PDF export having empty /Names <</JavaScript 3 0 R>>
+        doc = fitz.open()
+        doc.new_page()
+        catalog = doc.pdf_catalog()
+        doc.xref_set_key(catalog, "Names", "<</JavaScript 3 0 R>>")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        res = inspect_and_guard_upload(pdf_bytes, "google_docs_sertifikat.pdf")
+        assert res.file_type == "pdf"
+        assert res.page_count == 1
+
+    def test_reject_pdf_with_launch_action(self):
+        # Malicious PDF trying to execute an OS command or binary
+        doc = fitz.open()
+        doc.new_page()
+        catalog = doc.pdf_catalog()
+        doc.xref_set_key(catalog, "OpenAction", "<</S /Launch /F (cmd.exe)>>")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with pytest.raises(SecurityValidationError) as exc:
+            inspect_and_guard_upload(pdf_bytes, "malicious_launch.pdf")
+        assert exc.value.code == "PDF_ACTIVE_CONTENT"
+
     def test_reject_pdf_canvas_bomb(self):
         # Abnormal canvas: 8000 x 8000 pt (limit is 5000 pt)
         canvas_bomb = make_clean_pdf(pages=1, width=8000.0, height=8000.0)
