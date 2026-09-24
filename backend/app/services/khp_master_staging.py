@@ -364,18 +364,28 @@ def _resolve_activity(
     activity_name = _field_value(mapped_fields, "nama_kegiatan_sertifikasi") or ""
     text = f"{activity_name} {raw_text}".lower()
 
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest\b|dataquest|slayer|datathon|ideathon", text))
+    is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
+    is_winner_role = role_match.id in (7, 8, 9, 10, 25, 26, 27, 29) or bool(
+        re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b|\bbest\b", role_combined)
+    )
+
     # 1. ATURAN EMAS PANITIA: Seluruh kepanitiaan diarahkan ke ID 71
-    is_panitia = (
+    # Guard: Panitia tidak boleh berlaku jika peran penerima adalah pemenang/juara lomba
+    is_panitia = not is_winner_role and (
         role_match.id == 21
         or "panitia" in role_label.lower()
         or bool(re.search(r"\bpanitia\b|organizing committee|steering committee", role_combined))
-        or bool(re.search(r"\bpanitia\b|\bsteering committee\b|\borganizing committee\b", raw_text.lower()))
+        or (
+            bool(re.search(r"\bpanitia\b|\bsteering committee\b|\borganizing committee\b", raw_text.lower()))
+            and not is_lomba
+            and role_match.id not in (6, 17, 18, 19, 20)  # Bukan peserta
+        )
     )
     if is_panitia:
         panitia_match = _match_label(ACTIVITY_FIELD, "Panitia Dalam Suatu Kegiatan Kemahasiswaan")
         if panitia_match is not None:
             return panitia_match
-
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     if _fold(mapped_value) == "peserta pkkmb":
         return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
