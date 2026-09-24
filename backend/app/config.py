@@ -79,5 +79,8 @@ class Settings:
     gemini_timeout_seconds: float = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0"))
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
     admin_password: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    # API Key Authentication (prefix sk-, optional for internal mode)
+    api_keys: str = os.getenv("API_KEYS", os.getenv("API_KEY", ""))
+    require_api_key: bool = os.getenv("REQUIRE_API_KEY", "false").lower() == "true"
 
 settings = Settings()
