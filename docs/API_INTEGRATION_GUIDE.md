@@ -52,7 +52,7 @@ Request dikirimkan menggunakan format `multipart/form-data`:
 
 | Nama Parameter | Tipe | Status | Deskripsi |
 |---|:---:|:---:|---|
-| **`file`** | File Binary | **Wajib** | File dokumen sertifikat. Format yang didukung: `.pdf`, `.jpg`, `.jpeg`, `.png`, `.webp`. Ukuran maksimal default **10 MB**. |
+| **`file`** | File Binary | **Wajib** | File dokumen sertifikat. Format yang didukung: `.pdf`, `.jpg`, `.jpeg`, `.png`, `.webp`. Ukuran maksimal default **25 MB**. |
 | `tahun_akademik` | String | Opsional | Format tahun akademik pelaporan. Contoh: `"2024/2025 - Genap"`. Default: `"2035/2036 - Genap"`. |
 | `bukti_fisik` | String | Opsional | Jenis bukti fisik. Default: `"Sertifikat"`. |
 
@@ -284,6 +284,6 @@ Untuk menutup akses publik kapan saja:
 | **`200 OK`** | Berhasil | Dokumen berhasil diproses dan JSON dikembalikan. |
 | **`400 Bad Request`** | Input Tidak Valid | File kosong, format file bukan dokumen yang didukung (bukan PDF/JPG/PNG/WEBP), atau berkas korup. |
 | **`401 Unauthorized`** | Kredensial Salah / Hilang | Header `X-API-Key` atau Bearer token tidak disertakan atau nilai API Key salah. |
-| **`413 Payload Too Large`** | Ukuran File Terlalu Besar | Ukuran dokumen melebihi batas (default: 10 MB). Kompresi dokumen sebelum mengunggah. |
+| **`413 Payload Too Large`** | Ukuran File Terlalu Besar | Ukuran dokumen melebihi batas (default: 25 MB). Kompresi dokumen sebelum mengunggah jika melebihi batas. |
 | **`422 Unprocessable Entity`** | Validasi Skema Gagal | Parameter form wajib (`file`) tidak ditemukan dalam payload request. |
 | **`500 Internal Server Error`** | Kesalahan Server | Terjadi kendala internal pada server saat mengekstrak teks. |

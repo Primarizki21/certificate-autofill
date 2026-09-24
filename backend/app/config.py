@@ -21,7 +21,7 @@ class Settings:
         "DATABASE_URL",
         "postgresql+psycopg2://postgres:changeme@127.0.0.1:5434/certautofill",
     )
-    max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+    max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25"))
     max_pdf_pages: int = int(os.getenv("MAX_PDF_PAGES", "3"))
     max_image_dimension: int = int(os.getenv("MAX_IMAGE_DIMENSION", "8000"))
     min_image_dimension: int = int(os.getenv("MIN_IMAGE_DIMENSION", "300"))

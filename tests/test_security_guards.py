@@ -103,6 +103,13 @@ class TestSecurityGuards:
         assert res.content_type == "image/webp"
         assert res.dimensions == (1000, 750)
         assert res.page_count == 1
+
+    def test_file_size_boundary_enforcement(self):
+        # Default limit is 25 MB. 26 MB must be rejected.
+        oversized = b"%PDF-" + b"0" * (26 * 1024 * 1024)
+        with pytest.raises(SecurityValidationError) as exc:
+            inspect_and_guard_upload(oversized, "huge.pdf")
+        assert exc.value.code == "FILE_TOO_LARGE"
     # --- MIME & Extension Spoofing ---
 
     def test_reject_executable_or_shell_script(self):
