@@ -6,8 +6,8 @@ from app.services.field_extractor import ExtractedValue
 from app.services.combined_extractor import (
     extract_activity_v7,
     normalize_nomor_v4,
-    apply_combined_v4_1,
 )
+from tests.legacy_extractors import apply_combined_v4_1
 from tests.date_normalizer import normalize_date
 from tests.matchers import match_field
 
