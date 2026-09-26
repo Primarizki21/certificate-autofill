@@ -418,6 +418,12 @@ def _resolve_activity(
         if minat_peserta is not None:
             return minat_peserta
 
+    # 2. MAWAPRES (Pemilihan Mahasiswa Berprestasi)
+    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
+        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
+        if mawapres_match is not None:
+            return mawapres_match
+
     if (is_lomba and is_winner) or is_winner or (role_match.id in (7, 8, 9, 10, 25, 26, 27, 29)):
         lomba_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Interpreneurship/Business Plan")
         if lomba_win is not None:
@@ -436,13 +442,6 @@ def _resolve_activity(
         pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")
         if pkkmb_match is not None:
             return pkkmb_match
-
-    # 4. MAWAPRES
-    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
-        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
-        if mawapres_match is not None:
-            return mawapres_match
-
     # 5. KKN / BBK
     if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", text):
         kkn_match = _match_label(ACTIVITY_FIELD, "KKN-BBM")
