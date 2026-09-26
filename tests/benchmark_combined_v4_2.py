@@ -17,10 +17,10 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
-from app.services.combined_extractor import (
+from app.services.combined_extractor import apply_combined_v4_2
+from tests.legacy_extractors import (
     apply_combined_v4,
     apply_combined_v4_1,
-    apply_combined_v4_2,
 )
 from app.services.field_extractor import extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form

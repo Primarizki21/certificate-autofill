@@ -21,7 +21,7 @@ class Settings:
         "DATABASE_URL",
         "postgresql+psycopg2://postgres:changeme@127.0.0.1:5434/certautofill",
     )
-    max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "10"))
+    max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25"))
     max_pdf_pages: int = int(os.getenv("MAX_PDF_PAGES", "3"))
     max_image_dimension: int = int(os.getenv("MAX_IMAGE_DIMENSION", "8000"))
     min_image_dimension: int = int(os.getenv("MIN_IMAGE_DIMENSION", "300"))
@@ -79,5 +79,8 @@ class Settings:
     gemini_timeout_seconds: float = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0"))
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
     admin_password: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    # API Key Authentication (prefix sk-, optional for internal mode)
+    api_keys: str = os.getenv("API_KEYS", os.getenv("API_KEY", ""))
+    require_api_key: bool = os.getenv("REQUIRE_API_KEY", "false").lower() == "true"
 
 settings = Settings()

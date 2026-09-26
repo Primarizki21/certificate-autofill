@@ -189,17 +189,22 @@ def run_extraction_pipeline(
             gemini_used = True
 
     if not gemini_used:
-        from app.services.organizer_v2 import extract_organizer_v2
+        offline_engine = "offline_rules"
+        if settings.enable_combined_v4_2:
+            from app.services.combined_extractor import apply_combined_v4_2
 
-        v2_org = extract_organizer_v2(raw_text)
-        if v2_org:
-            extracted["penyelenggara_kegiatan"] = ExtractedValue(
-                v2_org, 0.84, "organizer_v2"
-            )
-
-        if settings.enable_organizer_normalization:
+            extracted = apply_combined_v4_2(extracted, raw_text)
+            parser_engine = f"{parser_engine}+combined_v4_2"
+            offline_engine = "combined_v4_2"
+        elif settings.enable_organizer_normalization:
             from app.services.organizer_normalize import normalize_nomor, normalize_organizer
+            from app.services.organizer_v2 import extract_organizer_v2
 
+            v2_org = extract_organizer_v2(raw_text)
+            if v2_org:
+                extracted["penyelenggara_kegiatan"] = ExtractedValue(
+                    v2_org, 0.84, "organizer_v2"
+                )
             norm_org = normalize_organizer(
                 extracted.get("penyelenggara_kegiatan").value, raw_text
             )
@@ -213,39 +218,10 @@ def run_extraction_pipeline(
                     norm_nomor, 0.95, "regex_certificate_number"
                 )
 
-        offline_engine = "offline_rules"
-        if settings.enable_combined_v4_2:
-            from app.services.combined_extractor import apply_combined_v4_2
-
-            extracted = apply_combined_v4_2(extracted, raw_text)
-            parser_engine = f"{parser_engine}+combined_v4_2"
-            offline_engine = "combined_v4_2"
-        elif settings.enable_combined_v4_1:
-            from app.services.combined_extractor import apply_combined_v4_1
-
-            extracted = apply_combined_v4_1(extracted, raw_text)
-            offline_engine = "combined_v4_1"
-        elif settings.enable_combined_v4:
-            from app.services.combined_extractor import apply_combined_v4
-
-            extracted = apply_combined_v4(extracted, raw_text)
-            offline_engine = "combined_v4"
-        elif settings.enable_combined_v3:
-            from app.services.combined_extractor import apply_combined_v3
-
-            extracted = apply_combined_v3(extracted, raw_text)
-            offline_engine = "combined_v3"
-        elif settings.enable_combined_v2:
-            from app.services.combined_extractor import apply_combined_v2
-
-            extracted = apply_combined_v2(extracted, raw_text)
-            offline_engine = "combined_v2"
-
         gemini_meta["fallback_engine"] = offline_engine
         gemini_meta["fallback_used"] = True
         raw_json = gemini_meta
         _log_gemini_fallback(gemini_meta, offline_engine)
-
     if gemini_used:
         title = extracted.get("nama_kegiatan_sertifikasi")
         if title is not None:

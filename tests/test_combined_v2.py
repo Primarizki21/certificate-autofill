@@ -3,7 +3,7 @@
 import pytest
 from app.config import settings
 from app.services.activity_extractor import extract_activity
-from app.services.combined_extractor import apply_combined_v2
+from tests.legacy_extractors import apply_combined_v2
 from app.services.field_extractor import ExtractedValue, extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form
 from app.services.tingkat_router import _sig, route_tingkat, route_tingkat_trace

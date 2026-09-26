@@ -103,6 +103,13 @@ class TestSecurityGuards:
         assert res.content_type == "image/webp"
         assert res.dimensions == (1000, 750)
         assert res.page_count == 1
+
+    def test_file_size_boundary_enforcement(self):
+        # Default limit is 25 MB. 26 MB must be rejected.
+        oversized = b"%PDF-" + b"0" * (26 * 1024 * 1024)
+        with pytest.raises(SecurityValidationError) as exc:
+            inspect_and_guard_upload(oversized, "huge.pdf")
+        assert exc.value.code == "FILE_TOO_LARGE"
     # --- MIME & Extension Spoofing ---
 
     def test_reject_executable_or_shell_script(self):
@@ -253,6 +260,32 @@ class TestSecurityGuards:
 
         with pytest.raises(SecurityValidationError) as exc:
             inspect_and_guard_upload(pdf_bytes, "js_script.pdf")
+        assert exc.value.code == "PDF_ACTIVE_CONTENT"
+
+    def test_accept_google_docs_benign_js_name_tree(self):
+        # Simulates Google Docs/Google Drive PDF export having empty /Names <</JavaScript 3 0 R>>
+        doc = fitz.open()
+        doc.new_page()
+        catalog = doc.pdf_catalog()
+        doc.xref_set_key(catalog, "Names", "<</JavaScript 3 0 R>>")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        res = inspect_and_guard_upload(pdf_bytes, "google_docs_sertifikat.pdf")
+        assert res.file_type == "pdf"
+        assert res.page_count == 1
+
+    def test_reject_pdf_with_launch_action(self):
+        # Malicious PDF trying to execute an OS command or binary
+        doc = fitz.open()
+        doc.new_page()
+        catalog = doc.pdf_catalog()
+        doc.xref_set_key(catalog, "OpenAction", "<</S /Launch /F (cmd.exe)>>")
+        pdf_bytes = doc.tobytes()
+        doc.close()
+
+        with pytest.raises(SecurityValidationError) as exc:
+            inspect_and_guard_upload(pdf_bytes, "malicious_launch.pdf")
         assert exc.value.code == "PDF_ACTIVE_CONTENT"
 
     def test_reject_pdf_canvas_bomb(self):

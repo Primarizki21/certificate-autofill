@@ -835,3 +835,96 @@ def test_bare_certification_typo_does_not_falsely_trigger_sertifikasi_profesi() 
     act_match = _resolve_activity(raw_text, fields, role_match)
     # Must NOT falsely match ID 129 (Mengikuti Kegiatan Sertifikasi)
     assert act_match.id != 129
+
+
+def test_mawapres_activity_resolution_and_lookup() -> None:
+    from app.services.khp_master_staging import _resolve_activity, _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT 4575/B/UN3.FTMM/KM.05.04/2024\n"
+        "Diberikan kepada Elzandi Irfan Zikra sebagai Finalis Mahasiswa Berprestasi Tingkat Fakultas "
+        "Dalam acara Pemilihan Mahasiswa Berprestasi (Mawapres) 2024 FTMM Unair"
+    )
+    fields = {
+        "raw_role": "Finalis Mahasiswa Berprestasi Tingkat Fakultas",
+        "nama_kegiatan_sertifikasi": "Pemilihan Mahasiswa Berprestasi (Mawapres) 2024",
+        "tingkat": "Fakultas",
+    }
+    role_match = _resolve_role(raw_text, fields)
+    assert role_match.id == 10
+    assert role_match.label == "Finalis"
+
+    act_match = _resolve_activity(raw_text, fields, role_match)
+    assert act_match.id == 93
+    assert act_match.label == "MAWAPRES"
+
+    res = resolve_khp_master_fields(raw_text, fields)
+    assert res.fields["jenis_kegiatan"].id == 93
+    assert res.fields["kelompok_kegiatan"].id == 3
+    assert res.fields["tingkat"].id == 5
+    assert res.fields["prestasi_partisipasi_jabatan"].id == 10
+    assert res.id_kegiatan_2 == 6086
+    assert res.status == "resolved"
+    assert res.master_rule is not None
+    assert res.master_rule.source_no == 157
+
+
+def test_role_activity_invariants_structure() -> None:
+    from app.services.khp_master_staging import ROLE_ACTIVITY_INVARIANTS
+
+    assert 41 in ROLE_ACTIVITY_INVARIANTS  # PKKMB
+    assert ROLE_ACTIVITY_INVARIANTS[41] == {6}  # Only Peserta
+    assert 42 in ROLE_ACTIVITY_INVARIANTS  # KKN
+    assert ROLE_ACTIVITY_INVARIANTS[42] == {6}  # Only Peserta
+    assert 67 in ROLE_ACTIVITY_INVARIANTS  # Pengurus
+    assert ROLE_ACTIVITY_INVARIANTS[67] == {1, 2, 3, 4, 5}
+    assert 93 in ROLE_ACTIVITY_INVARIANTS  # MAWAPRES
+    assert ROLE_ACTIVITY_INVARIANTS[93] == {7, 8, 9, 10, 11}
+
+
+def test_kkn_role_harmonized_to_peserta() -> None:
+    from app.services.khp_master_staging import _resolve_role
+
+    raw_text = (
+        "SERTIFIKAT BELAJAR BERSAMA KOMUNITAS (BBK) PERIODE 5\n"
+        "Diberikan kepada Mahasiswa A. Mengetahui Ketua LPPM Universitas Airlangga"
+    )
+    fields = {
+        "raw_role": "Ketua",
+        "nama_kegiatan_sertifikasi": "Belajar Bersama Komunitas (BBK) Periode 5",
+    }
+    role = _resolve_role(raw_text, fields)
+    assert role.id == 6
+    assert role.label == "Peserta"
+
+
+def test_role_activity_invariant_violation_triggers_review() -> None:
+    raw_text = "Sertifikat Pengurus Organisasi BEM FTMM"
+    fields = {
+        "raw_role": "Peserta",  # Peserta is forbidden for Pengurus Organisasi (ID 67)
+        "nama_kegiatan_sertifikasi": "Kepengurusan BEM FTMM Masa Bakti 2024",
+        "tingkat": "Fakultas",
+    }
+    res = resolve_khp_master_fields(raw_text, fields)
+    if res.fields["jenis_kegiatan"].id == 67:
+        assert "role_activity_invariant_violation" in res.reasons
+        assert res.status == "needs_review"
+
+
+def test_wildcard_master_rule_lookup_succeeds() -> None:
+    from app.services.khp_master_staging import _lookup_master_rule
+    from app.services.aucc_catalog import get_default_aucc_catalog
+
+    catalog = get_default_aucc_catalog()
+    # Panitia ID 71, Tingkat Fakultas ID 5, Role Panitia ID 21
+    # In aucc.master_kegiatan_rule, row 196 has id_jabatan_prestasi = NULL
+    rule, status = _lookup_master_rule(
+        catalog.master_rules,
+        id_kelompok_kegiatan=2,
+        id_kegiatan_1=71,
+        id_tingkat=5,
+        id_jabatan_prestasi=21,
+    )
+    assert status == "matched"
+    assert rule is not None
+    assert rule.id_kegiatan_2 == 17747

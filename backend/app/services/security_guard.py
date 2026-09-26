@@ -17,6 +17,7 @@ from __future__ import annotations
 import hashlib
 import io
 import logging
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Literal
@@ -238,21 +239,54 @@ def validate_pdf_security(content: bytes) -> tuple[int, tuple[int, int] | None]:
                 code="PDF_EMBEDDED_FILES",
             )
 
-        # 4. Check active scripts & dangerous objects in xrefs
-        dangerous_keywords = ("/JavaScript", "/JS", "/Launch", "/EmbeddedFiles", "/RichMedia")
+        # 4. Check active scripts & dangerous execution objects in xrefs
         for xref in range(1, doc.xref_length()):
             try:
                 obj_str = doc.xref_object(xref)
-                for kw in dangerous_keywords:
-                    if kw in obj_str:
-                        raise SecurityValidationError(
-                            f"PDF ditolak karena memuat objek aktif/eksekusi berisiko ({kw}).",
-                            code="PDF_ACTIVE_CONTENT",
-                        )
+                if not obj_str:
+                    continue
+
+                # 4a. Explicit executable action types
+                if "/S /JavaScript" in obj_str or "/S /Launch" in obj_str:
+                    raise SecurityValidationError(
+                        "PDF ditolak karena memuat objek aksi eksekusi berisiko (/S /JavaScript atau /S /Launch).",
+                        code="PDF_ACTIVE_CONTENT",
+                    )
+
+                # 4b. Inline script code string or hex payload (/JS (...) or /JS <...>)
+                if re.search(r"/JS\s*[\(<]", obj_str):
+                    raise SecurityValidationError(
+                        "PDF ditolak karena memuat kode script JavaScript tersemat (/JS).",
+                        code="PDF_ACTIVE_CONTENT",
+                    )
+
+                # 4c. RichMedia active containers (Flash / 3D executable scripts)
+                if "/Subtype /RichMedia" in obj_str or "/Type /RichMedia" in obj_str:
+                    raise SecurityValidationError(
+                        "PDF ditolak karena memuat container multimedia aktif berisiko (/RichMedia).",
+                        code="PDF_ACTIVE_CONTENT",
+                    )
+
+                # 4d. Document-level JavaScript name trees with actual script targets
+                if "/JavaScript" in obj_str and "/Names" in obj_str:
+                    match = re.search(r"/JavaScript\s+(\d+)\s+0\s+R", obj_str)
+                    if match:
+                        target_xref = int(match.group(1))
+                        try:
+                            target_str = doc.xref_object(target_xref)
+                            if target_str and target_str.strip() != "null":
+                                if "/S /JavaScript" in target_str or re.search(r"/JS\s*[\(<]", target_str):
+                                    raise SecurityValidationError(
+                                        "PDF ditolak karena memuat katalog JavaScript aktif.",
+                                        code="PDF_ACTIVE_CONTENT",
+                                    )
+                        except SecurityValidationError:
+                            raise
+                        except Exception:
+                            pass
             except SecurityValidationError:
                 raise
             except Exception:
-                # Malformed xref entry
                 pass
 
         # 5. Check canvas dimension limits on all pages

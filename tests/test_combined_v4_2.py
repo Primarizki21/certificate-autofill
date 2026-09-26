@@ -8,7 +8,7 @@ from app.services.combined_extractor import (
     normalize_nomor_v5,
     apply_combined_v4_2,
 )
-from app.services.high_dpi_crop import crop_and_ocr_number_region
+from tests.high_dpi_crop import crop_and_ocr_number_region
 
 
 def test_default_config_v4_2_disabled(monkeypatch):

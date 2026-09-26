@@ -41,8 +41,11 @@ from app.models import (
 )
 from app.schemas import (
     CreateKHPRuleRequest,
+    ExtractV1Response,
+    ExtractedCertificateData,
     ExtractionResult,
     FieldResult,
+    KHPFieldSelection,
     KHPRuleResponse,
     KHPRulesListResponse,
     OptionsResponse,
@@ -50,6 +53,9 @@ from app.schemas import (
     UpdateKHPRuleRequest,
     UploadResponse,
 )
+from app.services.api_key_auth import require_api_key
+from app.services.extraction_pipeline import run_extraction_pipeline
+from app.services.form_mapper import field_needs_review
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
@@ -242,6 +248,146 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtract
         status=document.status,
         needs_review=needs_review,
         fields=field_dict,
+    )
+
+
+@app.post("/api/v1/extract", response_model=ExtractV1Response)
+def extract_certificate_v1(
+    request: Request,
+    file: UploadFile = File(..., description="File sertifikat mahasiswa (.pdf, .jpg, .jpeg, .png, .webp)"),
+    tahun_akademik: str = Form("2035/2036 - Genap", description="Tahun akademik"),
+    bukti_fisik: str = Form("Sertifikat", description="Jenis bukti fisik"),
+    _api_key: str | None = Depends(require_api_key),
+) -> ExtractV1Response:
+    REQUEST_COUNT.labels(endpoint="/api/v1/extract").inc()
+    enforce_upload_rate_limit(request)
+
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="File sertifikat wajib diunggah.")
+
+    content = file.file.read()
+    max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    if len(content) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Ukuran file melebihi batas maksimal {settings.max_upload_size_mb} MB.",
+        )
+
+    try:
+        validated = inspect_and_guard_upload(content, file.filename)
+    except SecurityValidationError as exc:
+        raise HTTPException(status_code=400, detail=exc.message)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    result = run_extraction_pipeline(
+        pdf_bytes=validated.cleaned_bytes,
+        tahun_akademik=tahun_akademik,
+        bukti_fisik=bukti_fisik,
+    )
+
+    mapped = result.mapped_fields
+    master_res = result.master_resolution or {}
+    master_fields = master_res.get("fields", {})
+
+    def _get_master_selection(key: str) -> KHPFieldSelection:
+        field_info = master_fields.get(key, {})
+        opt_id = field_info.get("id")
+        opt_label = field_info.get("label") or (
+            mapped[key].value if key in mapped and hasattr(mapped[key], "value") else None
+        )
+        return KHPFieldSelection(id=opt_id, label=opt_label)
+
+    data = ExtractedCertificateData(
+        nama_kegiatan_sertifikasi=(
+            mapped["nama_kegiatan_sertifikasi"].value
+            if "nama_kegiatan_sertifikasi" in mapped and hasattr(mapped["nama_kegiatan_sertifikasi"], "value")
+            else None
+        ),
+        nomor_bukti_fisik_nomor_sertifikasi=(
+            mapped["nomor_bukti_fisik_nomor_sertifikasi"].value
+            if "nomor_bukti_fisik_nomor_sertifikasi" in mapped and hasattr(mapped["nomor_bukti_fisik_nomor_sertifikasi"], "value")
+            else None
+        ),
+        penyelenggara_kegiatan=(
+            mapped["penyelenggara_kegiatan"].value
+            if "penyelenggara_kegiatan" in mapped and hasattr(mapped["penyelenggara_kegiatan"], "value")
+            else None
+        ),
+        jenis_penyelenggara=(
+            mapped["jenis_penyelenggara"].value
+            if "jenis_penyelenggara" in mapped and hasattr(mapped["jenis_penyelenggara"], "value")
+            else None
+        ),
+        waktu_mulai_pelaksanaan=(
+            mapped["waktu_mulai_pelaksanaan"].value
+            if "waktu_mulai_pelaksanaan" in mapped and hasattr(mapped["waktu_mulai_pelaksanaan"], "value")
+            else None
+        ),
+        waktu_selesai_pelaksanaan=(
+            mapped["waktu_selesai_pelaksanaan"].value
+            if "waktu_selesai_pelaksanaan" in mapped and hasattr(mapped["waktu_selesai_pelaksanaan"], "value")
+            else None
+        ),
+        bukti_fisik=bukti_fisik,
+        tahun_akademik=tahun_akademik,
+        kelompok_kegiatan=_get_master_selection("kelompok_kegiatan"),
+        jenis_kegiatan=_get_master_selection("jenis_kegiatan"),
+        tingkat=_get_master_selection("tingkat"),
+        prestasi_partisipasi_jabatan=_get_master_selection("prestasi_partisipasi_jabatan"),
+        id_kegiatan_2=master_res.get("id_kegiatan_2"),
+    )
+
+    confidence = {
+        name: float(ev.confidence)
+        for name, ev in mapped.items()
+        if hasattr(ev, "confidence") and ev.confidence is not None
+    }
+    sources = {
+        name: str(ev.source)
+        for name, ev in mapped.items()
+        if hasattr(ev, "source") and ev.source is not None
+    }
+
+    review_reasons: list[str] = []
+    review_annotations = getattr(result, "review_annotations", {})
+    for field_name, ev in mapped.items():
+        val = ev.value if hasattr(ev, "value") else None
+        conf = float(ev.confidence) if hasattr(ev, "confidence") and ev.confidence is not None else 0.0
+        annotation = review_annotations.get(field_name)
+        if annotation and annotation.needs_review:
+            for r in annotation.reasons:
+                if r not in review_reasons:
+                    review_reasons.append(r)
+        if field_needs_review(field_name, val, conf):
+            reason_tag = f"low_confidence_{field_name}"
+            if reason_tag not in review_reasons:
+                review_reasons.append(reason_tag)
+
+    if settings.enable_khp_master_staging:
+        res_status = master_res.get("status")
+        if res_status != "resolved":
+            for r in master_res.get("reasons", []):
+                reason_tag = f"master_{r}"
+                if reason_tag not in review_reasons:
+                    review_reasons.append(reason_tag)
+            if not master_res.get("reasons") and "master_resolution_pending" not in review_reasons:
+                review_reasons.append("master_resolution_pending")
+
+    needs_review = len(review_reasons) > 0
+    status_str = "needs_review" if needs_review else "success"
+
+    UPLOAD_COUNT.inc()
+    UPLOAD_SIZE.observe(len(content))
+
+    return ExtractV1Response(
+        status=status_str,
+        needs_review=needs_review,
+        data=data,
+        confidence=confidence,
+        sources=sources,
+        review_reasons=review_reasons,
+        parser_engine=result.parser_engine,
     )
 
 security = HTTPBasic()

@@ -24,7 +24,7 @@ sys.path.insert(0, os.path.abspath("."))
 from app.services.field_extractor import extract_certificate_fields, ExtractedValue
 from app.services.organizer_v2 import extract_organizer_v2
 from app.services.form_mapper import map_fields_to_form, field_needs_review
-from app.services.combined_extractor import apply_combined_v2, apply_combined_v3
+from tests.legacy_extractors import apply_combined_v2, apply_combined_v3
 from tests.matchers import match_field, normalize_date, normalize_nomor, normalize_value
 from tests.evaluation_framework import _normalize_key
 

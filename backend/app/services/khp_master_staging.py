@@ -341,6 +341,31 @@ _LEVEL_PATTERNS = (
     (12, (r"tingkat dasar", r"basic level")),
 )
 
+# Matriks Invarian Peran–Kegiatan resmi dari aucc.master_kegiatan_rule (234 aturan aktif).
+# Memetakan id_kegiatan_1 ke himpunan id_jabatan_prestasi yang sah.
+ROLE_ACTIVITY_INVARIANTS: dict[int, set[int]] = {
+    41: {6},                          # PKKMB: Hanya Peserta
+    42: {6},                          # KKN-BBM: Hanya Peserta
+    67: {1, 2, 3, 4, 5},              # Pengurus Organisasi: Ketua, Waket, Sekr, Pengurus Inti, Anggota
+    71: {13, 21},                     # Panitia Kemahasiswaan: Panitia (21), Moderator (13)
+    84: {6, 12, 13},                  # Forum Ilmiah (Seminar/Workshop): Peserta (6), Pembicara (12), Moderator (13)
+    86: {1, 14},                      # Karya Ilmiah Publikasi: Penulis Utama/Ketua (1), Anggota (14)
+    87: {1, 14},                      # Karya Populer: Penulis/Ketua (1), Anggota (14)
+    88: {1, 14},                      # Karya Didanai: Ketua (1), Anggota (14)
+    93: {7, 8, 9, 10, 11},            # MAWAPRES: Juara I..III, Finalis, Peserta Terpilih
+    98: {7, 8, 9, 10, 11},            # Prestasi Minat & Bakat: Juara I..III, Finalis, Peserta Terpilih
+    99: {15, 16, 17},                 # Minat & Bakat Non-Lomba: Delegasi (15), Undangan (16), Biasa (17)
+    105: {19, 20},                    # Kewirausahaan: Mandiri (19), Kemitraan (20)
+    115: {6, 18},                     # ESQ: Peserta (6), Fasilitator (18)
+    116: {6, 18},                     # Kegiatan Jati Diri: Peserta (6), Fasilitator (18)
+    117: {6},                         # KIM tingkat Fakultas: Peserta (6)
+    121: {6},                         # PKL: Peserta (6)
+    127: {6},                         # Magang UKM: Peserta (6)
+    129: {6, 30, 31, 32, 33, 34, 35}, # Sertifikasi: Peserta (6), Kompetensi..LSP (30..35)
+    132: {1, 14},                     # Karya Buku Tidak Dipublikasikan: Penulis (1), Anggota (14)
+    136: {6, 7, 8, 9, 10, 11},        # Prestasi Lomba: Peserta (6), Juara I..III (7..9), Finalis (10), Terpilih (11)
+}
+
 
 def _unresolved(reason: str) -> KHPFieldMatch:
     return KHPFieldMatch(id=None, label=None, status="unresolved", reasons=(reason,))
@@ -364,18 +389,28 @@ def _resolve_activity(
     activity_name = _field_value(mapped_fields, "nama_kegiatan_sertifikasi") or ""
     text = f"{activity_name} {raw_text}".lower()
 
+    is_lomba = bool(re.search(r"lomba|kompetisi|competition|championship|contest|olympiad|olimpiade|hackathon|challenge|fest|fair|turnamen|tournament|gemastik|pimnas|kontes|pagelaran\s+mahasiswa|quest\b|dataquest|slayer|datathon|ideathon", text))
+    is_winner = bool(re.search(r"juara|winner|finalis|finalist|best|pemenang", role_combined)) or bool(re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b", raw_text.lower()))
+    is_winner_role = role_match.id in (7, 8, 9, 10, 25, 26, 27, 29) or bool(
+        re.search(r"\bjuara\b|\bwinner\b|\bfinalis\b|\bpemenang\b|\bbest\b", role_combined)
+    )
+
     # 1. ATURAN EMAS PANITIA: Seluruh kepanitiaan diarahkan ke ID 71
-    is_panitia = (
+    # Guard: Panitia tidak boleh berlaku jika peran penerima adalah pemenang/juara lomba
+    is_panitia = not is_winner_role and (
         role_match.id == 21
         or "panitia" in role_label.lower()
         or bool(re.search(r"\bpanitia\b|organizing committee|steering committee", role_combined))
-        or bool(re.search(r"\bpanitia\b|\bsteering committee\b|\borganizing committee\b", raw_text.lower()))
+        or (
+            bool(re.search(r"\bpanitia\b|\bsteering committee\b|\borganizing committee\b", raw_text.lower()))
+            and not is_lomba
+            and role_match.id not in (6, 17, 18, 19, 20)  # Bukan peserta
+        )
     )
     if is_panitia:
         panitia_match = _match_label(ACTIVITY_FIELD, "Panitia Dalam Suatu Kegiatan Kemahasiswaan")
         if panitia_match is not None:
             return panitia_match
-
     mapped_value = _field_value(mapped_fields, ACTIVITY_FIELD)
     if _fold(mapped_value) == "peserta pkkmb":
         return _match_label(ACTIVITY_FIELD, "PKKMB") or _unresolved("activity_not_in_master")
@@ -408,6 +443,12 @@ def _resolve_activity(
         if minat_peserta is not None:
             return minat_peserta
 
+    # 2. MAWAPRES (Pemilihan Mahasiswa Berprestasi)
+    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
+        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
+        if mawapres_match is not None:
+            return mawapres_match
+
     if (is_lomba and is_winner) or is_winner or (role_match.id in (7, 8, 9, 10, 25, 26, 27, 29)):
         lomba_win = _match_label(ACTIVITY_FIELD, "Memperoleh prestasi dalam Lomba Karya Tulis Ilmiah/Lingkungan Hidup/Kreativitas/Inovatif/Pemikiran Kritis/Populer/Interpreneurship/Business Plan")
         if lomba_win is not None:
@@ -426,13 +467,6 @@ def _resolve_activity(
         pkkmb_match = _match_label(ACTIVITY_FIELD, "PKKMB")
         if pkkmb_match is not None:
             return pkkmb_match
-
-    # 4. MAWAPRES
-    if re.search(r"\bmawapres\b|mahasiswa berprestasi", text):
-        mawapres_match = _match_label(ACTIVITY_FIELD, "MAWAPRES")
-        if mawapres_match is not None:
-            return mawapres_match
-
     # 5. KKN / BBK
     if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", text):
         kkn_match = _match_label(ACTIVITY_FIELD, "KKN-BBM")
@@ -496,6 +530,17 @@ def _resolve_activity(
             return forum_match
 
     match = _match_patterns(ACTIVITY_FIELD, f"{text} {role}", _ACTIVITY_PATTERNS)
+    if (
+        match
+        and match.id == 71
+        and role_match.id in (6, 7, 8, 9, 10, 11, 15, 16, 17, 18, 19, 20, 25, 26, 27, 29)
+    ):
+        # Participant or winner cannot be Panitia
+        if re.search(r"seminar|workshop|lokakarya|webinar|talkshow|forum|youth|summit|conference|symposium", text):
+            forum_match = _match_label(ACTIVITY_FIELD, "Mengikuti kegiatan/forum ilmiah (seminar, lokakarya, workshop, pameran)")
+            if forum_match is not None:
+                return forum_match
+        return _unresolved("activity_not_in_master")
     return match or _unresolved("activity_not_in_master")
 
 def _resolve_level(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMatch:
@@ -531,9 +576,15 @@ def _resolve_level(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldM
 
 
 def _resolve_role(raw_text: str, mapped_fields: Mapping[str, Any]) -> KHPFieldMatch:
+    activity_name = _field_value(mapped_fields, "nama_kegiatan_sertifikasi") or ""
+    # Invariant: dalam KKN/BBK, peran mahasiswa selalu Peserta (ID 6)
+    if re.search(r"\bkkn\b|\bbbk\b|belajar bersama komunitas|kuliah kerja nyata", f"{activity_name} {raw_text}".lower()):
+        peserta_match = _match_label(ROLE_FIELD, "Peserta")
+        if peserta_match is not None:
+            return peserta_match
+
     role_value = _field_value(mapped_fields, "raw_role")
     mapped_value = _field_value(mapped_fields, ROLE_FIELD)
-
     if role_value:
         if re.search(
             r"supervisor|divisi|bidang|seksi|biro|bendahara|bph", role_value, re.I
@@ -712,8 +763,23 @@ def _lookup_master_rule(
         return matches[0], "matched"
     if len(matches) > 1:
         return None, "ambiguous"
-    return None, "not_found"
 
+    # Wildcard role lookup for activities that do not differentiate role score
+    wildcard_matches = [
+        rule
+        for rule in rules
+        if rule.is_active
+        and rule.id_kelompok_kegiatan == id_kelompok_kegiatan
+        and rule.id_kegiatan_1 == id_kegiatan_1
+        and rule.id_tingkat == id_tingkat
+        and rule.id_jabatan_prestasi is None
+    ]
+    if len(wildcard_matches) == 1:
+        return wildcard_matches[0], "matched"
+    if len(wildcard_matches) > 1:
+        return None, "ambiguous"
+
+    return None, "not_found"
 
 def resolve_khp_master_fields(
     raw_text: str,
@@ -745,6 +811,14 @@ def resolve_khp_master_fields(
         for reason in field_match.reasons
     ]
     reasons = list(field_reasons)
+
+    # Role-Activity Invariant validation from aucc.master_kegiatan_rule
+    invariant_violation = False
+    if activity.id is not None and activity.id in ROLE_ACTIVITY_INVARIANTS and role.id is not None:
+        allowed_roles = ROLE_ACTIVITY_INVARIANTS[activity.id]
+        if role.id not in allowed_roles:
+            invariant_violation = True
+            reasons.append("role_activity_invariant_violation")
     id_kegiatan_2 = None
     lookup_status = "blocked_by_missing_field"
     lookup_fields = (activity, level, role)
@@ -776,7 +850,7 @@ def resolve_khp_master_fields(
     if evidence_status in {"missing", "not_allowed"}:
         reasons.append(f"bukti_fisik_{evidence_status}")
 
-    if field_reasons or rule_status == "ambiguous" or evidence_status in {
+    if field_reasons or invariant_violation or rule_status == "ambiguous" or evidence_status in {
         "missing",
         "not_allowed",
     }:

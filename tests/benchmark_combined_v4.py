@@ -18,7 +18,7 @@ from datetime import datetime
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
-from app.services.combined_extractor import (
+from tests.legacy_extractors import (
     apply_combined_v2,
     apply_combined_v3,
     apply_combined_v4,

@@ -2,10 +2,8 @@
 
 import pytest
 from app.services.field_extractor import ExtractedValue
-from app.services.combined_extractor import (
-    normalize_organizer_v7,
-    apply_combined_v4,
-)
+from app.services.combined_extractor import normalize_organizer_v7
+from tests.legacy_extractors import apply_combined_v4
 
 
 def test_normalize_organizer_v7_s1_canonicalization():

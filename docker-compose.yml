@@ -44,6 +44,8 @@ services:
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
       - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
+      - API_KEYS=${API_KEYS:-}
+      - REQUIRE_API_KEY=${REQUIRE_API_KEY:-false}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:

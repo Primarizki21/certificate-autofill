@@ -108,3 +108,8 @@ AGENTS.md
 # Private admin documentation
 docs/ADMIN_GUIDE.md
 ADMIN_GUIDE.md
+
+# Cloudflare Tunnel binary and artifacts
+cloudflared
+cloudflared-linux-*
+*.tunnel.log

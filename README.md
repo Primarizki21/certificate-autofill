@@ -301,6 +301,7 @@ uv run pytest tests/ -v
 ## Endpoint API Utama
 
 ```http
+POST /api/v1/extract              # Endpoint satu-langkah (one-shot) ekstraksi sertifikat -> JSON siap frontend (AUCC KHP Master) dengan otentikasi API Key (sk-)
 POST /api/documents              # Upload sertifikat (PDF, JPG, PNG, WEBP) dengan proteksi security guard & rate limit
 GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi 9-field form KHP
 GET  /api/options                # Opsi dropdown master data KHP berelasi (Kelompok Kegiatan berelasi dengan Jenis Kegiatan, Tingkat, Jabatan)
@@ -311,6 +312,18 @@ GET  /healthz                    # Health check endpoint
 
 ---
 
+## Integrasi API Eksternal & Pengujian Jarak Jauh (Cloudflare Tunnel)
+
+Sistem menyediakan endpoint satu-langkah `POST /api/v1/extract` yang dirancang untuk integrasi langsung dengan aplikasi frontend eksternal (React, Vue, mobile) tanpa perlu logika polling:
+- **Autentikasi:** API Key berbasis header `X-API-Key: sk-...` atau `Authorization: Bearer sk-...`.
+- **Output:** JSON siap pakai berisi teks bersih sertifikat, ID & Label Master AUCC KHP (`id_kelompok_kegiatan`, `id_kegiatan_1`, `id_tingkat`, `id_jabatan_prestasi`), dan Primary Key tabel AUCC (`id_kegiatan_2`).
+- **Pengujian Jarak Jauh:** Dapat diuji dari luar jaringan lokal menggunakan Cloudflare Tunnel tanpa perlu konfigurasi server publik.
+
+> 📖 **Panduan Lengkap & Contoh Kode:**
+> Silakan baca [Panduan Integrasi API & Cloudflare Tunnel](docs/API_INTEGRATION_GUIDE.md) untuk spesifikasi kamus data lengkap, contoh pemanggilan cURL, JavaScript Fetch/Axios, Python requests, dan cara menjalankan Cloudflare Tunnel.
+
+---
+
 ## Dokumentasi Terkait
 
 | Dokumen / Antarmuka | Deskripsi |
@@ -318,3 +331,4 @@ GET  /healthz                    # Health check endpoint
 | [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi (`/docs`) |
 | [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API |
 | [Frontend Guide](frontend/README_FRONTEND.md) | Panduan antarmuka web, penanganan cascading dropdown, dan modal pencarian kegiatan |
+| [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) | Panduan lengkap integrasi endpoint `/api/v1/extract`, format API Key, contoh cURL/JS/Python, dan setup Cloudflare Tunnel |

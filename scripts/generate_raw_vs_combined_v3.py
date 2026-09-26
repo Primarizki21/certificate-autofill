@@ -33,7 +33,7 @@ from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
 
-from app.services.combined_extractor import apply_combined_v2, apply_combined_v3
+from tests.legacy_extractors import apply_combined_v2, apply_combined_v3
 from app.services.field_extractor import extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form
 from tests.ood_probe import load_gt, load_texts, EVAL_FIELDS

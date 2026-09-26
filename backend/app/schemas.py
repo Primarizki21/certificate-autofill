@@ -94,3 +94,34 @@ class UpdateKHPRuleRequest(BaseModel):
 class KHPRulesListResponse(BaseModel):
     total: int
     items: list[KHPRuleResponse]
+
+
+class KHPFieldSelection(BaseModel):
+    id: int | None = None
+    label: str | None = None
+
+
+class ExtractedCertificateData(BaseModel):
+    nama_kegiatan_sertifikasi: str | None = None
+    nomor_bukti_fisik_nomor_sertifikasi: str | None = None
+    penyelenggara_kegiatan: str | None = None
+    jenis_penyelenggara: str | None = None
+    waktu_mulai_pelaksanaan: str | None = None
+    waktu_selesai_pelaksanaan: str | None = None
+    bukti_fisik: str | None = "Sertifikat"
+    tahun_akademik: str | None = None
+    kelompok_kegiatan: KHPFieldSelection | None = None
+    jenis_kegiatan: KHPFieldSelection | None = None
+    tingkat: KHPFieldSelection | None = None
+    prestasi_partisipasi_jabatan: KHPFieldSelection | None = None
+    id_kegiatan_2: int | None = None
+
+
+class ExtractV1Response(BaseModel):
+    status: str = "success"
+    needs_review: bool = False
+    data: ExtractedCertificateData
+    confidence: dict[str, float] = Field(default_factory=dict)
+    sources: dict[str, str] = Field(default_factory=dict)
+    review_reasons: list[str] = Field(default_factory=list)
+    parser_engine: str | None = None
