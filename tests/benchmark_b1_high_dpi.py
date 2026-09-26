@@ -244,7 +244,7 @@ def main() -> None:
         # D. B1-module (path produksi high_dpi_crop — search_for + psm 6)
         t0 = time.perf_counter()
         try:
-            from app.services.high_dpi_crop import crop_and_ocr_number_region
+            from tests.high_dpi_crop import crop_and_ocr_number_region
 
             with open(os.path.join(REPO, manifest[stem]), "rb") as f:
                 pdf_bytes = f.read()
