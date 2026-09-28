@@ -40,6 +40,10 @@ class Settings:
     # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur
     # lazy (nomor hilang) = 0/18 gain; varian penuh ~+2-10s/cert utk +3pt.
     enable_ocr_number_2pass: bool = os.getenv("ENABLE_OCR_NUMBER_2PASS", "false").lower() == "true"
+    # EXP-OCR-LATENCY-001: thread intra-op ONNX Runtime untuk RapidOCR.
+    # 0 = otomatis mengikuti kuota CPU cgroup container; -1 = default library
+    # (jumlah core host, oversubscribe bila container dibatasi --cpus).
+    ocr_rapid_threads: int = int(os.getenv("OCR_RAPID_THREADS", "0"))
     # PROD-002 (port produksi organizer v3+R6+format + nomor, 0 LLM): normalisasi
     # pasca-organizer_v2 (R0/PREFIX_HELD/R2/R6 + F1 alias + F3 BEM FKM + nomor
     # SERT/dot/space). DEFAULT FALSE — eksperimen belum final (handoff v29);
