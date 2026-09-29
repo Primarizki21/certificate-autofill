@@ -8,8 +8,11 @@ import pytesseract
 
 from app.config import settings
 from app.services.field_extractor import extract_certificate_number
-from app.services.pdf_fast_path import render_pdf_pages_to_png_bytes
-
+from app.services.pdf_fast_path import (
+    PageImageBuffer,
+    render_pdf_pages_to_image_buffers,
+    render_pdf_pages_to_png_bytes,
+)
 ZOOM = 3.0  # render halaman (konsisten dgn eksperimen)
 CRENDER_ZOOM = 6.0  # NC-001: re-render region nomor di zoom tinggi (piksel nyata)
 _KEYWORD_RE = re.compile(r"\bNOMOR\b|\bNO\.\b|\bNUMBER\b", re.I)
@@ -17,13 +20,12 @@ _NUMBER_LINE_RE = re.compile(r"[0-9]{1,6}\s*/\s*[A-Z0-9]", re.I)
 
 
 def extract_text_with_ocr(pdf_bytes: bytes) -> str:
-    # Pakai zoom lebih tinggi agar teks kecil seperti tanggal pelaksanaan
-    # di bagian bawah sertifikat lebih sering terbaca OCR.
-    page_images = render_pdf_pages_to_png_bytes(pdf_bytes, zoom=ZOOM)
+    # Pakai render direct buffer in-memory untuk mengeliminasi overhead encode/decode PNG di RAM
+    page_buffers = render_pdf_pages_to_image_buffers(pdf_bytes, zoom=ZOOM)
     all_text: list[str] = []
 
     rapidocr_engine = _load_rapidocr()
-    for image_bytes in page_images:
+    for buf in page_buffers:
         # Jangan berhenti di RapidOCR saja. Pada beberapa sertifikat, RapidOCR
         # membaca nama/nomor tetapi melewatkan tanggal. Gabungkan RapidOCR +
         # Tesseract agar field tanggal punya peluang terbaca lebih tinggi.
@@ -31,10 +33,10 @@ def extract_text_with_ocr(pdf_bytes: bytes) -> str:
         # memperlambat keduanya karena berebut kuota CPU (EXP-OCR-LATENCY-001).
         page_texts: list[str] = []
         if rapidocr_engine is not None:
-            rapid_text = _ocr_with_rapidocr(rapidocr_engine, image_bytes)
+            rapid_text = _ocr_with_rapidocr(rapidocr_engine, buf.to_bgr_ndarray())
             if rapid_text.strip():
                 page_texts.append(rapid_text)
-        tess_text = _ocr_with_tesseract(image_bytes)
+        tess_text = _ocr_with_tesseract(buf.to_pil())
         if tess_text.strip():
             page_texts.append(tess_text)
         all_text.append(merge_unique_lines(page_texts))
@@ -49,10 +51,10 @@ def extract_text_with_ocr(pdf_bytes: bytes) -> str:
     if (
         settings.enable_ocr_number_2pass
         and rapidocr_engine is not None
-        and page_images
+        and page_buffers
     ):
         base_num = extract_certificate_number(full)
-        recovered = _recover_number_region(pdf_bytes, page_images[0], rapidocr_engine)
+        recovered = _recover_number_region(pdf_bytes, page_buffers[0].to_png_bytes(), rapidocr_engine)
         crop_num = extract_certificate_number(re.sub(r"\s+", "", recovered))
         if crop_num and crop_num != base_num:
             full = f"NOMOR : {crop_num}\n{full}".strip()
@@ -204,9 +206,9 @@ def _load_rapidocr():
     _RAPIDOCR_INITIALIZED = True
     return _RAPIDOCR_INSTANCE
 
-def _ocr_with_rapidocr(engine, image_bytes: bytes) -> str:
+def _ocr_with_rapidocr(engine, image_input) -> str:
     try:
-        result, _ = engine(image_bytes)
+        result, _ = engine(image_input)
         if not result:
             return ""
         lines = []
@@ -218,9 +220,16 @@ def _ocr_with_rapidocr(engine, image_bytes: bytes) -> str:
         return ""
 
 
-def _ocr_with_tesseract(image_bytes: bytes) -> str:
+def _ocr_with_tesseract(image_input) -> str:
     try:
-        with Image.open(BytesIO(image_bytes)) as image:
+        if isinstance(image_input, Image.Image):
+            image = image_input
+            need_close = False
+        else:
+            image = Image.open(BytesIO(image_input))
+            need_close = True
+
+        try:
             # Berdasarkan evaluasi empiris EXP-OCR-PSM-DPI-001 (Unified N=104),
             # Single PSM 6 terbukti menghasilkan Macro Exact 67.31% (+0.64pt vs multi-PSM 66.67%),
             # mempertahankan 100% nomor sertifikat (66/104) dan tanggal (73/104),
@@ -230,5 +239,8 @@ def _ocr_with_tesseract(image_bytes: bytes) -> str:
             except Exception:
                 text = pytesseract.image_to_string(image, lang="eng", config="--psm 6").strip()
             return text
+        finally:
+            if need_close:
+                image.close()
     except Exception:
         return ""

@@ -4,7 +4,7 @@ Prototype sistem ekstraksi multi-format sertifikat mahasiswa (PDF, JPG, JPEG, PN
 
 **Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR Engine:** PyMuPDF (fast text + resolution clamping) + Tesseract OCR (Single-Pass PSM 6 teroptimasi) + RapidOCR
+- **Text & OCR Engine:** PyMuPDF (fast text + direct buffer in-memory + resolution clamping) + Tesseract OCR (Single-Pass PSM 6 teroptimasi) + RapidOCR (cgroup CPU thread-aligned)
 - **Persepsi Semantik (LLM):** Google Gemini (`gemini-3.1-flash-lite`) untuk ekstraksi fakta teks sertifikat dan penentuan tingkat cakupan
 - **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas secara bilingual (Indonesia & Inggris, mencakup normalisasi tingkat, peran/prestasi, jabatan kepengurusan universal, dan pengelompokan kegiatan resmi)
 - **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
@@ -258,7 +258,22 @@ Eksperimen `EXP-OCR-PSM-DPI-001` menguji 12 kombinasi skala rendering (*Zoom* 2.
 2. **Resolution Clamping Guard**: Pembatasan dimensi maksimum rendering PDF (`max_allowed = 2500px` long-edge pada `pdf_fast_path.py`) untuk menjamin dokumen dengan ukuran fisik cetak besar tidak memicu *Out of Memory* (OOM).
 ---
 
-### 7. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
+### 7. Optimasi Alur Buffer Gambar In-Memory & Latensi OCR (Dataset Terpadu $N=104$)
+Eksperimen `EXP-OCR-LATENCY-001` mengevaluasi efisiensi alur transmisi buffer gambar di memori (*Direct Buffer Pipeline*) serta alokasi thread CPU terhadap latensi *end-to-end* pada 104 sertifikat terpadu:
+
+| Varian Alur Buffer | Waktu Buffer Prep | Waktu RapidOCR | Waktu Tesseract | Waktu Total / Dokumen | Penghematan | Status Evaluasi |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| **Direct Buffer In-Memory (`PageImageBuffer`)** | **6.4 ms** | **2.76s** | **1.09s** | **4.03s** | **-257 ms (-6.0%)** | **PASS — Diadopsi**. Zero-loss bit-for-bit, 100% identik dengan kontrol |
+| Baseline (PNG Byte Encode/Decode di RAM) | 263.9 ms | 2.76s | 1.09s | 4.28s | Baseline | CONTROL — Terbebani siklus kompresi/dekompresi PNG di memori |
+| Direct Buffer + Grayscale Tesseract | 8.7 ms | 2.76s | 0.67s | 3.61s | -680 ms (-15.9%) | FAIL — Ditolak akibat penurunan performa nomor sertifikat (-0.96pt) |
+
+**Keunggulan Produksi Direct Buffer**:
+1. **Zero-Copy View**: Matriks piksel mentah PyMuPDF langsung dipetakan ke NumPy array format BGR untuk RapidOCR dan PIL RGB Image untuk Tesseract tanpa proses encode/decode PNG.
+2. **Eliminasi Latensi Murni**: Memangkas waktu persiapan gambar sebesar **97.6% (dari 264 ms ke 6.4 ms)** tanpa mengubah satu karakter pun pada hasil ekstraksi teks.
+
+---
+
+### 8. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
