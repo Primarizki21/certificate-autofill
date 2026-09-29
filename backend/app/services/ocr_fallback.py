@@ -1,5 +1,7 @@
+import os
 import re
 from io import BytesIO
+from pathlib import Path
 from PIL import Image
 import fitz
 import pytesseract
@@ -25,6 +27,8 @@ def extract_text_with_ocr(pdf_bytes: bytes) -> str:
         # Jangan berhenti di RapidOCR saja. Pada beberapa sertifikat, RapidOCR
         # membaca nama/nomor tetapi melewatkan tanggal. Gabungkan RapidOCR +
         # Tesseract agar field tanggal punya peluang terbaca lebih tinggi.
+        # Sengaja berurutan: menjalankan Tesseract paralel dengan RapidOCR
+        # memperlambat keduanya karena berebut kuota CPU (EXP-OCR-LATENCY-001).
         page_texts: list[str] = []
         if rapidocr_engine is not None:
             rapid_text = _ocr_with_rapidocr(rapidocr_engine, image_bytes)
@@ -158,6 +162,31 @@ _RAPIDOCR_INSTANCE = None
 _RAPIDOCR_INITIALIZED = False
 
 
+def _cgroup_cpu_quota() -> int | None:
+    """Kuota CPU container (cgroup v2 `cpu.max`), mis. `400000 100000` -> 4."""
+    try:
+        quota, period = Path("/sys/fs/cgroup/cpu.max").read_text().split()[:2]
+        if quota != "max":
+            return max(1, int(int(quota) / int(period)))
+    except (OSError, ValueError):
+        pass
+    return None
+
+
+def _rapidocr_thread_kwargs() -> dict[str, int]:
+    """Thread ONNX Runtime untuk RapidOCR.
+
+    Default library (-1) memakai jumlah core host; di container ber-`--cpus`
+    thread tsb saling berebut kuota dan inferensi melambat (EXP-OCR-LATENCY-001).
+    """
+    threads = settings.ocr_rapid_threads
+    if threads < 0:
+        return {}
+    if threads == 0:
+        threads = _cgroup_cpu_quota() or os.cpu_count() or 1
+    return {"intra_op_num_threads": threads, "inter_op_num_threads": 1}
+
+
 def _load_rapidocr():
     """Cache singleton engine RapidOCR agar model ONNX tidak dimuat ulang per dokumen."""
     global _RAPIDOCR_INSTANCE, _RAPIDOCR_INITIALIZED
@@ -165,7 +194,7 @@ def _load_rapidocr():
         return _RAPIDOCR_INSTANCE
     try:
         from rapidocr_onnxruntime import RapidOCR
-        _RAPIDOCR_INSTANCE = RapidOCR()
+        _RAPIDOCR_INSTANCE = RapidOCR(**_rapidocr_thread_kwargs())
     except Exception:
         try:
             from rapidocr import RapidOCR

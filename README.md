@@ -113,6 +113,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
 | `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
+| `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
