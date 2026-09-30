@@ -1,0 +1,87 @@
+name: CI
+
+"on":
+  push:
+    branches:
+      - main
+      - "**"
+  pull_request:
+    branches:
+      - main
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-audit:
+    name: Security & Secret Leak Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Audit git tracked files for sensitive/forbidden files
+        run: |
+          echo "Scanning tracked files for forbidden private files..."
+          FORBIDDEN_FILES=$(git ls-files | grep -E '^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/' || true)
+          if [ -n "$FORBIDDEN_FILES" ]; then
+            echo "❌ ERROR: File rahasia atau privat terdeteksi masuk ke git tracking:"
+            echo "$FORBIDDEN_FILES"
+            exit 1
+          fi
+          echo "✅ Git tracking bersih dari file sensitif."
+
+      - name: Scan tracked files for hardcoded secrets & API keys
+        run: |
+          echo "Scanning tracked files for API keys and secrets..."
+          LEAKED_KEYS=$(git grep -I -E 'AIza[0-9A-Za-z_-]{35}|(sk|rk)_(live|test)_[0-9A-Za-z_-]{20,}' || true)
+          if [ -n "$LEAKED_KEYS" ]; then
+            echo "❌ ERROR: Terdeteksi pola API key atau kredensial pada file berikut:"
+            echo "$LEAKED_KEYS"
+            exit 1
+          fi
+          echo "✅ Tidak ditemukan kebocoran API key pada kode."
+
+  test:
+    name: Lint & Pytest Suite
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      DATABASE_URL: "sqlite:///:memory:"
+      GOOGLE_API_KEY: "dummy-test-key-ci"
+      ENABLE_TESSERACT_GEMINI: "false"
+      ENABLE_COMBINED_V4_2: "true"
+      PYTHONPATH: ".:backend"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies (Tesseract OCR & Libraries)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ind libgl1
+
+      - name: Install Python dependencies
+        run: uv sync --frozen
+
+      - name: Python syntax & bytecode compilation check
+        run: uv run python -m compileall backend/ tests/ -q
+
+      - name: Run Pytest test suite
+        run: uv run pytest tests/ -v --durations=10
