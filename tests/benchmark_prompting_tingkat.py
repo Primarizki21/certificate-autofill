@@ -105,7 +105,7 @@ def load_ocr_texts_map(texts_source: Path) -> dict[str, str]:
                 raise ValueError(f"Deteksi duplikasi/konflik teks OCR untuk file: '{fn}'")
             texts_map[norm_fn] = txt
     elif texts_source.is_dir():
-        for p in texts_source.glob("*.txt"):
+        for p in sorted(texts_source.glob("*.txt")):
             txt = p.read_text(encoding="utf-8", errors="replace").strip()
             norm_name = p.name.lower()
             if norm_name in texts_map and texts_map[norm_name] != txt:
