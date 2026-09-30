@@ -26,13 +26,13 @@ jobs:
       - name: Audit git tracked files for sensitive/forbidden files
         run: |
           echo "Scanning tracked files for forbidden private files..."
-          FORBIDDEN_FILES=$(git ls-files | grep -E '^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/' || true)
+          FORBIDDEN_FILES=$(git ls-files | grep -E '\.pdf$|^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/|^khp/' | grep -v '^khp/aucc\.sql\.example$' || true)
           if [ -n "$FORBIDDEN_FILES" ]; then
-            echo "❌ ERROR: File rahasia atau privat terdeteksi masuk ke git tracking:"
+            echo "❌ ERROR: File rahasia, file PDF, atau data AUCC privat terdeteksi masuk ke git tracking:"
             echo "$FORBIDDEN_FILES"
             exit 1
           fi
-          echo "✅ Git tracking bersih dari file sensitif."
+          echo "✅ Git tracking bersih dari file PDF, rahasia, dan data AUCC privat."
 
       - name: Scan tracked files for hardcoded secrets & API keys
         run: |
