@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import urllib.request
+import pytest
 
 from app.config import settings
 from app.master_data import KHP_MASTER_OPTIONS, KHP_TINGKAT_LABELS
