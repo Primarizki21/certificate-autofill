@@ -85,3 +85,19 @@ jobs:
 
       - name: Run Pytest test suite
         run: uv run pytest tests/ -v --durations=10
+
+  docker-build:
+    name: Docker Compose Build Check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Validate Docker Compose configuration
+        run: docker compose config -q
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build Docker images
+        run: docker compose build

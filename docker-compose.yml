@@ -25,6 +25,7 @@ services:
   backend:
     build:
       context: ./backend
+    image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
     env_file:
@@ -72,8 +73,7 @@ services:
         max-file: "5"
 
   worker:
-    build:
-      context: ./backend
+    image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
     command: python -m app.worker
     env_file:
@@ -104,6 +104,8 @@ services:
           cpus: "4.0"
           memory: 4G
     depends_on:
+      backend:
+        condition: service_started
       postgres:
         condition: service_healthy
     logging:
