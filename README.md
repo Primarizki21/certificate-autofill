@@ -1,5 +1,7 @@
 # Certificate Autofill Prototype
 
+[![CI](https://github.com/Primarizki21/certificate-autofill/actions/workflows/ci.yml/badge.svg)](https://github.com/Primarizki21/certificate-autofill/actions/workflows/ci.yml)
+
 Prototype sistem ekstraksi multi-format sertifikat mahasiswa (PDF, JPG, JPEG, PNG, WEBP) dan autofill form Kartu Hasil Prestasi (KHP) terintegrasi taksonomi resmi universitas.
 
 **Stack & Arsitektur Utama:**
