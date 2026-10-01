@@ -1,5 +1,6 @@
 """Regression tests for ORG-TESS-V8-001 organizer repairs."""
 
+import pytest
 from app.services.field_extractor import ExtractedValue, extract_certificate_fields
 from tests.composite_v4_candidate import apply_composite_v4_candidate
 from tests.organizer_tess_v8 import extract_organizer_v8, extract_organizer_v8_result
@@ -10,6 +11,8 @@ FIXTURE_DIR = RAW_TEXT_DIR
 
 def read_fixture(stem: str) -> str:
     path = FIXTURE_DIR / f"{stem}.txt"
+    if not path.exists():
+        pytest.skip(f"Fixture {stem}.txt tidak ditemukan (artefak eksperimen di-ignore)")
     return "\n".join(line for line in path.read_text(encoding="utf-8").splitlines() if not line.startswith("#")).strip()
 
 

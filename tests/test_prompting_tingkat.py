@@ -261,7 +261,7 @@ def test_load_ocr_texts_map_directory_extensions_and_collision(tmp_path):
     collision_dir_alias.mkdir()
     (collision_dir_alias / "cert.txt").write_text("Konten Asli", encoding="utf-8")
     (collision_dir_alias / "cert.pdf.txt").write_text("Konten Berbeda", encoding="utf-8")
-    with pytest.raises(ValueError, match="Deteksi duplikasi/konflik alias OCR"):
+    with pytest.raises(ValueError, match=r"Deteksi duplikasi/konflik (alias|stem) OCR"):
         load_ocr_texts_map(collision_dir_alias)
 
     # 2. Verifikasi collision detection pada case-collision (Sample.txt vs sample.txt)

@@ -1,6 +1,7 @@
 """Unit tests for Prompt Optimization V2 & V3 Benchmark Runner (EXP-PROMPT-OPT-002)."""
 
 import pytest
+from pathlib import Path
 from tests.benchmark_prompt_opt_v2_v3 import (
     ACTIVE_VARIANTS,
     ALL_6_FIELDS,
@@ -161,10 +162,15 @@ def test_run_benchmark_mock_smoke(tmp_path):
     """Memastikan run_benchmark dengan backend mock menyelesaikan end-to-end evaluasi dan menghasilkan seluruh artefak."""
     from tests.benchmark_prompt_opt_v2_v3 import run_benchmark
 
+    manifest_path = Path("certs_unified/manifest.json")
+    gt_path = Path("Ground_Truth_Unified.csv")
+    if not manifest_path.exists() or not gt_path.exists():
+        pytest.skip("certs_unified/manifest.json atau Ground_Truth_Unified.csv tidak ditemukan (data privat)")
+
     out_dir = tmp_path / "smoke_out"
     res = run_benchmark(
-        manifest_path="certs_unified/manifest.json",
-        gt_path="Ground_Truth_Unified.csv",
+        manifest_path=str(manifest_path),
+        gt_path=str(gt_path),
         output_dir=str(out_dir),
         backend="mock",
         limit=2,

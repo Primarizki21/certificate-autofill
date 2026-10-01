@@ -120,15 +120,13 @@ def calibrate_v4_2_confidence(
 
     return out
 
-
+if __name__ == "__main__":
     import os
     import sys
-+
-+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
-+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
-     from app.services.field_extractor import extract_certificate_fields
-    from app.services.field_extractor import extract_certificate_fields
 
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), "../backend"))
+    from app.services.field_extractor import extract_certificate_fields
     t = "Nomor: 123/FTMM/1/2024, dilaksanakan pada 5/3/2024 oleh BEM FTMM"
     fields = extract_certificate_fields(t)
     cal = calibrate_v4_2_confidence(fields, t)

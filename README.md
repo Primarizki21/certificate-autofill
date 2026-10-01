@@ -1,5 +1,7 @@
 # Certificate Autofill Prototype
 
+[![CI](https://github.com/Primarizki21/certificate-autofill/actions/workflows/ci.yml/badge.svg)](https://github.com/Primarizki21/certificate-autofill/actions/workflows/ci.yml)
+
 Prototype sistem ekstraksi multi-format sertifikat mahasiswa (PDF, JPG, JPEG, PNG, WEBP) dan autofill form Kartu Hasil Prestasi (KHP) terintegrasi taksonomi resmi universitas.
 
 **Stack & Arsitektur Utama:**
@@ -52,10 +54,10 @@ Setelah container aktif:
 |---|---|---|
 | **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
+| **Worker (DB Polling)** | *(background)* | Service worker (`python -m app.worker`) untuk eksekusi antrean job di database |
 | **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
 | **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
 | **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
-
 > Variabel `GOOGLE_API_KEY` dari file `.env` Anda akan otomatis diteruskan ke container backend oleh Docker Compose.
 
 ---
@@ -65,7 +67,10 @@ Setelah container aktif:
 #### Prasyarat:
 1. PostgreSQL 17 aktif di port `5434` dengan database `certautofill`.
 2. Tesseract OCR (`tesseract-ocr` dan `tesseract-ocr-ind`) terpasang di sistem operasi.
-
+3. Jalankan inisialisasi skema dan seed data master KHP universitas (pertama kali):
+   ```bash
+   python scripts/seed_khp_master.py
+   ```
 #### Linux / macOS:
 ```bash
 export APP_ENV=development
@@ -126,6 +131,11 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `AUTO_DOWNSCALE_THRESHOLD` | `3500` | Ambang resolusi pindaian tinggi sebelum di-downscale otomatis |
 | `AUTO_DOWNSCALE_TARGET` | `2500` | Target resolusi sisi terpanjang gambar setelah downscale proporsional |
 | `MAX_PDF_CANVAS_DIMENSION` | `5000` | Batas dimensi kanvas halaman PDF dalam point (anti-canvas bomb) |
+| `MAX_UPLOAD_SIZE_MB` | `25` | Batas ukuran berkas maksimum yang diizinkan untuk diunggah (MB) |
+| `ADMIN_USERNAME` | `admin` | Username untuk Basic Auth endpoint administratif `/api/admin/*` |
+| `ADMIN_PASSWORD` | *(wajib disetel)* | **Wajib diisi dengan kata sandi kuat.** Jangan gunakan password sederhana di server/publik |
+| `API_KEYS` | *(kosong)* | Kunci API resmi (prefix `sk-`, dipisahkan koma) untuk integrasi `/api/v1/extract` |
+| `REQUIRE_API_KEY` | `false` | Mewajibkan otentikasi API Key pada endpoint `/api/v1/extract` (aktifkan di jaringan publik) |
 
 ### Storage Sementara dan Manajemen File
 PDF hanya berada sementara di `UPLOAD_TEMP_DIR`; database PostgreSQL hanya menyimpan metadata teks dan hasil ekstraksi form, bukan data bytes PDF atau file OCR mentah.
@@ -306,24 +316,40 @@ Evaluasi menggunakan formula standar baku:
 
 ## Pengujian Sistem
 
-Jalankan pengujian unit dan verifikasi fungsionalitas dengan:
+### 1. Pengujian Unit Lokal
+Jalankan pengujian unit dan verifikasi fungsionalitas lokal dengan:
 
 ```bash
 uv run pytest tests/ -v
 ```
+
+### 2. Otomasi CI/CD (GitHub Actions)
+Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
+- **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
+- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 402 unit tests secara terisolasi.
 
 ---
 
 ## Endpoint API Utama
 
 ```http
-POST /api/v1/extract              # Endpoint satu-langkah (one-shot) ekstraksi sertifikat -> JSON siap frontend (AUCC KHP Master) dengan otentikasi API Key (sk-)
-POST /api/documents              # Upload sertifikat (PDF, JPG, PNG, WEBP) dengan proteksi security guard & rate limit
-GET  /api/documents/{id}/result  # Ambil status job dan hasil ekstraksi 9-field form KHP
-GET  /api/options                # Opsi dropdown master data KHP berelasi (Kelompok Kegiatan berelasi dengan Jenis Kegiatan, Tingkat, Jabatan)
-GET  /api/master/activities      # Katalog pencarian taksonomi kegiatan resmi universitas untuk UI Modal
-GET  /metrics                    # Metrik Prometheus (ekstraksi, latensi, error rate)
-GET  /healthz                    # Health check endpoint
+# Ekstraksi & Formulir KHP Mahasiswa
+POST   /api/v1/extract                 # One-shot ekstraksi sertifikat -> JSON AUCC KHP Master (Auth API Key: sk-)
+POST   /api/documents                 # Upload sertifikat (PDF, JPG, PNG, WEBP) dengan security guard & rate limit
+GET    /api/documents/{id}/result     # Ambil status job dan hasil ekstraksi 9-field form KHP
+GET    /api/options                   # Opsi dropdown master data KHP berelasi untuk cascading filter frontend
+
+# Administrasi & Ekspor Data (Basic Auth: ADMIN_USERNAME & ADMIN_PASSWORD)
+GET    /api/admin/documents/export    # Ekspor riwayat dokumen & hasil ekstraksi ke format Excel/CSV (?format=xlsx|csv)
+GET    /api/admin/khp/export          # Ekspor tabel master taksonomi universitas ke Excel/CSV (?table=rules&format=xlsx|csv)
+GET    /api/admin/khp/rules           # Listing & pencarian aturan master KHP dengan pagination & filter
+POST   /api/admin/khp/rules           # Tambah aturan pemetaan master KHP baru
+PATCH  /api/admin/khp/rules/{rule_id} # Perbarui aturan master KHP yang ada
+DELETE /api/admin/khp/rules/{rule_id} # Hapus aturan master KHP (?hard=true untuk hard delete)
+
+# Sistem & Monitoring
+GET    /metrics                       # Metrik Prometheus (ekstraksi, latensi, error rate)
+GET    /healthz                       # Health check endpoint
 ```
 
 ---

@@ -71,11 +71,16 @@ class TestGeminiExtractorProduction:
     def test_pipeline_option_a_toggle_off(self):
         """Ketika toggle false, pipeline memakai mode offline tanpa menyentuh Gemini."""
         sample_pdf_dir = os.path.join(REPO_ROOT, "Sertifikat_Ground_Truth", "Peserta Seminar")
-        sample_files = [f for f in os.listdir(sample_pdf_dir) if f.endswith(".pdf")]
-        assert len(sample_files) > 0
-        pdf_path = os.path.join(sample_pdf_dir, sample_files[0])
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+        if os.path.isdir(sample_pdf_dir) and (sample_files := [f for f in os.listdir(sample_pdf_dir) if f.endswith(".pdf")]):
+            pdf_path = os.path.join(sample_pdf_dir, sample_files[0])
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+        else:
+            import fitz
+            doc = fitz.open()
+            page = doc.new_page()
+            page.insert_text((50, 100), "Sertifikat Seminar Nasional Artificial Intelligence 2024")
+            pdf_bytes = doc.tobytes()
 
         orig_val = settings.enable_tesseract_gemini
         try:
@@ -89,10 +94,16 @@ class TestGeminiExtractorProduction:
     def test_pipeline_option_a_graceful_fallback_on_error(self):
         """Ketika Gemini error (misal jaringan down), pipeline fallback otomatis ke offline."""
         sample_pdf_dir = os.path.join(REPO_ROOT, "Sertifikat_Ground_Truth", "Peserta Seminar")
-        sample_files = [f for f in os.listdir(sample_pdf_dir) if f.endswith(".pdf")]
-        pdf_path = os.path.join(sample_pdf_dir, sample_files[0])
-        with open(pdf_path, "rb") as f:
-            pdf_bytes = f.read()
+        if os.path.isdir(sample_pdf_dir) and (sample_files := [f for f in os.listdir(sample_pdf_dir) if f.endswith(".pdf")]):
+            pdf_path = os.path.join(sample_pdf_dir, sample_files[0])
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+        else:
+            import fitz
+            doc = fitz.open()
+            page = doc.new_page()
+            page.insert_text((50, 100), "Sertifikat Seminar Nasional Artificial Intelligence 2024")
+            pdf_bytes = doc.tobytes()
 
         # Simulasikan Gemini error
         with patch("app.services.gemini_extractor.extract_fields_with_gemini", return_value=(None, {"error": "Connection refused"})):
