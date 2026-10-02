@@ -1,0 +1,75 @@
+# ==============================================================================
+# Graphify Knowledge Graph Scoping (.graphifyignore)
+# ==============================================================================
+# Inherits standard gitignore rules, plus surgical exclusions for non-architectural
+# historical experiment runners, literature surveys, and report generators.
+
+# Standard project ignore rules (from .gitignore)
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv
+.codegraph/
+papers/
+Sertifikat_Ground_Truth/
+certs_test/
+certs_unified/
+data/
+.cache/
+.env
+.env.*
+scripts/.paper_search_state.json
+*:Zone.Identifier
+tests/benchmark_runs/
+tests/benchmark_results.json
+tests/bio_labels/
+tests/ner_model/
+*.docx
+*.xlsx
+input_marker_paper/
+output_marker/
+khp/*
+!khp/aucc.sql.example
+docs/report/
+docs/experiments/
+docs/screenshots/
+old_docs/
+docs/pipeline_pr_3/
+docs/security*/
+docs/handoff*
+docs/experiments_ledger*
+AGENTS.md
+*_PLAN.md
+*PLAN*.md
+CHANGELOG_RULES_*.md
+cloudflared*
+*.tunnel.log
+graphify-out/
+.graphify_*
+laporan_pkl/
+
+# ==============================================================================
+# Surgical Non-Architectural Exclusions
+# ==============================================================================
+# 1. Historical one-off benchmark experiment runners (keeping 41 unit tests test_*.py)
+tests/benchmark_*.py
+tests/*probe*.py
+tests/*worker*.py
+tests/kb/
+
+# 2. Test data manifests (certificate filenames)
+tests/layout_manifest.json
+
+# 3. Static asset duplicate (canonical frontend code is in frontend/)
+backend/app/static/
+
+# 4. Academic literature survey & paper citation summaries
+docs/paper_findings.md
+docs/paper_findings.json
+docs/instruksi_generate_rangkuman.md
+
+# 5. One-off report generator scripts
+scripts/
