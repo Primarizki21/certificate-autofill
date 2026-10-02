@@ -113,3 +113,8 @@ ADMIN_GUIDE.md
 cloudflared
 cloudflared-linux-*
 *.tunnel.log
+
+# Graphify knowledge graph outputs and sidecars
+graphify-out/
+.graphify_*
+laporan_pkl/
