@@ -169,9 +169,9 @@ def normalize_organizer_v6(value: str | None, raw_text: str) -> str | None:
             return "Telkom University Purwokerto"
         return v
 
-    # OCR Spacing / Acronym Cleaners
-    v = re.sub(r"\bUs\s+U\b|\bUS\s+U\b", "USU", v)
-    v = re.sub(r"\bS1\s+Akuntansi\b", "S-1 Akuntansi", v, flags=re.IGNORECASE)
+    # OCR Spacing / Acronym Cleaners & S-1 Canonicalization
+    v = re.sub(r"\bUs\s+U\b|\bUS\s+U\b", "USU", v, flags=re.IGNORECASE)
+    v = re.sub(r"\bS\s*1\b", "S-1", v)
     v = re.sub(r"\(\s*[iI]\s*[rR][iI][sS]\s*\)", "(IRIS)", v)
     v = re.sub(
         r"\s+on\s+(?:January|February|March|April|May|June|July|August|September|October|November|December)\s+\d+.*$",
@@ -191,27 +191,30 @@ def normalize_organizer_v6(value: str | None, raw_text: str) -> str | None:
         v = "Himpunan Mahasiswa Statistika"
 
     return v
+
+
 def normalize_organizer_v7(value: str | None, raw_text: str) -> str | None:
-    v = normalize_organizer_v6(value, raw_text)
-    if not v:
-        return None
-
-    # Canonicalize S1 -> S-1 in program names (e.g. HIMA S1 Akuntansi -> HIMA S-1 Akuntansi)
-    v = re.sub(r"\bS\s*1\b", "S-1", v)
-
-    # Case repair for specific acronyms
-    v = re.sub(r"\(\s*i\s*Ris\s*\)", "(IRIS)", v, flags=re.IGNORECASE)
-
-    # OCR acronym spacing collapse (e.g. Us U -> USU)
-    v = re.sub(r"\bUs\s+U\b", "USU", v, flags=re.IGNORECASE)
-
-    return v
+    """Normalisasi penyelenggara v7: canonicalization S-1, IRIS, dan USU (konsolidasi v6)."""
+    return normalize_organizer_v6(value, raw_text)
 
 
 
 # ==============================================================================
 # 3. Branch 5 Component: Certificate Number Normalization v3 (NUM-003)
 # ==============================================================================
+_ROMAN_REPAIRS = {
+    "XI1": "XII",
+    "XIL": "XII",
+    "X1": "XI",
+    "V1": "VI",
+    "VII1": "VIII",
+    "1X": "IX",
+    "1V": "IV",
+    "V11": "VII",
+    "V111": "VIII",
+}
+
+
 def _repair_roman_month(num: str) -> str:
     if not num:
         return num
@@ -221,7 +224,10 @@ def _repair_roman_month(num: str) -> str:
         roman_raw = m.group(2)
         slash2 = m.group(3)
         year = m.group(4)
-        r = roman_raw.upper().replace("1", "I").replace("L", "I").replace("|", "I")
+        raw_upper = roman_raw.upper()
+        if raw_upper in _ROMAN_REPAIRS:
+            return f"{prefix}{_ROMAN_REPAIRS[raw_upper]}{slash2}{year}"
+        r = raw_upper.replace("1", "I").replace("L", "I").replace("|", "I")
         valid_romans = {"I", "II", "III", "IV", "V", "VI", "VII", "VIII", "IX", "X", "XI", "XII"}
         if r in valid_romans:
             return f"{prefix}{r}{slash2}{year}"
@@ -270,31 +276,7 @@ def normalize_nomor_v4(raw_text: str) -> str | None:
 
 def normalize_nomor_v5(raw_text: str) -> str | None:
     """Normalisasi nomor sertifikat v5: perbaikan universal OCR angka Romawi bulan pada surat dinas."""
-    base = normalize_nomor_v4(raw_text)
-    if not base:
-        return None
-
-    def _rep_roman(m):
-        prefix = m.group(1)
-        r = m.group(2).upper()
-        slash2 = m.group(3)
-        year = m.group(4)
-        roman_map = {
-            "XI1": "XII",
-            "XIL": "XII",
-            "X1": "XI",
-            "V1": "VI",
-            "VII1": "VIII",
-            "1X": "IX",
-            "1V": "IV",
-            "V11": "VII",
-            "V111": "VIII",
-        }
-        r_clean = roman_map.get(r, r)
-        return f"{prefix}{r_clean}{slash2}{year}"
-
-    cleaned = re.sub(r"(/)([IVXLCDM1l|]{1,5})(/)(\d{4})$", _rep_roman, base)
-    return cleaned
+    return normalize_nomor_v4(raw_text)
 
 def normalize_for_date_v2(text: str) -> str:
     t = re.sub(r"2[oO0]2([0-9])", r"202\1", text)
