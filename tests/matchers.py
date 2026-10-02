@@ -8,6 +8,14 @@ DEGREE_NORM = re.compile(r"\b([sd])\s*[-–—]?\s*([0-9])\b", re.IGNORECASE)
 # Kata sambung/filler yang tidak memberi sinyal pembeda organisasi.
 ABBR_STOPWORDS = {"dan", "dengan", "di", "yang", "of", "the", "for", "and", "de", "in", "pada", "part", "by"}
 
+EMPTY_GT_VALUES = frozenset({"-", "--", "—", "", "none", "null"})
+FALLBACK_PLACEHOLDERS_SET = frozenset({
+    "tanpa nomor",
+    "tanpa tanggal",
+    "tanpa penyelenggara",
+    "tanpa nama kegiatan",
+})
+
 KNOWN_PORTMANTEAUS = {
     "unair": [["universitas", "airlangga"]],
     "unesa": [["universitas", "negeri", "surabaya"]],
@@ -234,6 +242,39 @@ def abbreviation_match(expected: str, actual: str | None) -> bool:
 
 
 def match_field(expected: str, actual: str | None, field_name: str) -> dict:
+    field_name = field_name.replace(" ", "_")
+    exp_clean = (expected or "").strip().lower()
+    act_clean = (actual or "").strip().lower() if actual is not None else ""
+
+    # Keterangan Evaluasi & Benchmark:
+    # Jika Ground Truth menandai field kosong ("-", "", "null") dan sistem
+    # menghasilkan fallback placeholder "Tanpa X" atau None/kosong, maka evaluasi
+    # dicatat sebagai MATCH (True Negative). Ini memastikan benchmark tidak salah
+    # mempenalti model saat autofill menggunakan teks placeholder.
+    if exp_clean in EMPTY_GT_VALUES:
+        is_empty_or_placeholder = (
+            not act_clean
+            or act_clean in EMPTY_GT_VALUES
+            or act_clean in FALLBACK_PLACEHOLDERS_SET
+        )
+        if is_empty_or_placeholder:
+            return {
+                "exact": True,
+                "contains": True,
+                "token_overlap": 1.0,
+                "fuzzy": True,
+                "wer": 0.0,
+                "cer": 0.0,
+            }
+        return {
+            "exact": False,
+            "contains": False,
+            "token_overlap": 0.0,
+            "fuzzy": False,
+            "wer": 1.0,
+            "cer": 1.0,
+        }
+
     if not actual:
         return {
             "exact": False, "contains": False, "token_overlap": 0.0, "fuzzy": False,
