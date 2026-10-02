@@ -365,6 +365,26 @@ Sistem menyediakan endpoint satu-langkah `POST /api/v1/extract` yang dirancang u
 > Silakan baca [Panduan Integrasi API & Cloudflare Tunnel](docs/API_INTEGRATION_GUIDE.md) untuk spesifikasi kamus data lengkap, contoh pemanggilan cURL, JavaScript Fetch/Axios, Python requests, dan cara menjalankan Cloudflare Tunnel.
 
 ---
+## Visualisasi Arsitektur & Knowledge Graph (Graphify)
+
+Repositori ini mendukung pemetaan dependensi modul dan relasi fungsi menggunakan **Graphify** untuk menghasilkan graf pengetahuan interaktif (*interactive knowledge graph*) dari seluruh fungsi, relasi antar-berkas, dan alur pipeline ekstraksi.
+
+### 1. Menghasilkan Knowledge Graph Lokal
+Pastikan `uv` sudah terpasang, lalu jalankan:
+
+```bash
+# Jalankan ekstraksi AST & clustering graf lokal
+uv tool run graphifyy
+```
+
+### 2. Output & Navigasi Graf
+Hasil analisis disimpan di folder `graphify-out/` (otomatis terabaikan oleh `.gitignore` sehingga tidak mengotori repositori):
+
+- **`graphify-out/graph.html`**: Visualisasi interaktif graf 2D/3D mandiri yang dapat dibuka langsung di browser (tanpa perlu web server tambahan).
+- **`graphify-out/GRAPH_REPORT.md`**: Laporan audit arsitektur lengkap, mencakup *God Nodes* (abstraksi inti), koneksi tak terduga (*surprising connections*), dan metrik kohesi modul.
+- **`graphify-out/graph.json`**: Data graf terstruktur untuk kueri traversal dependensi kode.
+
+---
 
 ## Dokumentasi Terkait
 
@@ -374,3 +394,4 @@ Sistem menyediakan endpoint satu-langkah `POST /api/v1/extract` yang dirancang u
 | [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API |
 | [Frontend Guide](frontend/README_FRONTEND.md) | Panduan antarmuka web, penanganan cascading dropdown, dan modal pencarian kegiatan |
 | [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) | Panduan lengkap integrasi endpoint `/api/v1/extract`, format API Key, contoh cURL/JS/Python, dan setup Cloudflare Tunnel |
+| **Knowledge Graph Arsitektur** | Peta interaktif graf dependensi fungsi dan arsitektur pipeline via Graphify (lihat panduan di atas) |
