@@ -10,6 +10,14 @@ OPTIONAL_EMPTY_FIELDS = frozenset(
     }
 )
 
+FALLBACK_PLACEHOLDERS = {
+    "nomor_bukti_fisik_nomor_sertifikasi": "Tanpa Nomor",
+    "waktu_mulai_pelaksanaan": "Tanpa Tanggal",
+    "waktu_selesai_pelaksanaan": "Tanpa Tanggal",
+    "penyelenggara_kegiatan": "Tanpa Penyelenggara",
+    "nama_kegiatan_sertifikasi": "Tanpa Nama Kegiatan",
+}
+
 
 def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str, bukti_fisik: str) -> dict[str, ExtractedValue]:
     full_text = (extracted.get("full_text") or ExtractedValue("", 0, "")).value or ""
@@ -45,8 +53,13 @@ def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str
         "nomor_bukti_fisik_nomor_sertifikasi",
     ]
     for field in passthrough_fields:
-        mapped[field] = extracted.get(field, ExtractedValue(None, 0.0, "missing"))
-
+        ev = extracted.get(field, ExtractedValue(None, 0.0, "missing"))
+        val_str = str(ev.value).strip() if ev.value is not None else ""
+        if not val_str or val_str.lower() in {"-", "null", "none"}:
+            placeholder = FALLBACK_PLACEHOLDERS.get(field)
+            if placeholder:
+                ev = ExtractedValue(placeholder, 0.0, "placeholder")
+        mapped[field] = ev
     jenis_penyelenggara = map_jenis_penyelenggara(upper, tingkat)
     mapped["jenis_penyelenggara"] = ExtractedValue(jenis_penyelenggara, 0.90, "rule_mapper_strict")
 
@@ -283,18 +296,23 @@ def validate_with_needs_review(fields: dict[str, ExtractedValue]) -> dict[str, E
         "nomor_bukti_fisik_nomor_sertifikasi",
     }
     for key in required_fields:
-        if key not in fields:
-            fields[key] = ExtractedValue(None, 0.0, "missing")
+        if key not in fields or fields[key].value is None or str(fields[key].value).strip().lower() in {"", "-", "null", "none"}:
+            placeholder = FALLBACK_PLACEHOLDERS.get(key)
+            if placeholder:
+                fields[key] = ExtractedValue(placeholder, 0.0, "placeholder")
+            elif key not in fields:
+                fields[key] = ExtractedValue(None, 0.0, "missing")
     return fields
 
 
 def field_needs_review(field_name: str, value: str | None, confidence: float) -> bool:
     if field_name in {"tahun_akademik", "bukti_fisik"}:
         return False
+    val_clean = str(value).strip().lower() if value is not None else ""
     if field_name in OPTIONAL_EMPTY_FIELDS and (
-        not value or str(value).strip().lower() in {"-", "null"}
+        not val_clean or val_clean in {"-", "null", "none", "tanpa tanggal"}
     ):
         return False
-    if not value:
+    if not val_clean or str(value).strip() in FALLBACK_PLACEHOLDERS.values():
         return True
     return confidence < 0.80

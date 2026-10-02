@@ -90,3 +90,18 @@ def test_extract_role_juara_and_menteri():
 
     text_menteri = "DIBERIKAN KEPADA ATAS PENGABDIANNYA SEBAGAI MENTERI KOORDINATOR BEM"
     assert extract_role(text_menteri) == "MENTERI KOORDINATOR BEM"
+
+
+def test_fallback_placeholders_for_empty_fields():
+    mapped = map_fields_to_form({}, "2024/2025 - Ganjil", "Sertifikat")
+    assert mapped["nomor_bukti_fisik_nomor_sertifikasi"].value == "Tanpa Nomor"
+    assert mapped["nomor_bukti_fisik_nomor_sertifikasi"].source == "placeholder"
+    assert mapped["waktu_mulai_pelaksanaan"].value == "Tanpa Tanggal"
+    assert mapped["waktu_selesai_pelaksanaan"].value == "Tanpa Tanggal"
+    assert mapped["penyelenggara_kegiatan"].value == "Tanpa Penyelenggara"
+    assert mapped["nama_kegiatan_sertifikasi"].value == "Tanpa Nama Kegiatan"
+    assert field_needs_review("nomor_bukti_fisik_nomor_sertifikasi", mapped["nomor_bukti_fisik_nomor_sertifikasi"].value, 0.0) is True
+    assert field_needs_review("penyelenggara_kegiatan", mapped["penyelenggara_kegiatan"].value, 0.0) is True
+    assert field_needs_review("nama_kegiatan_sertifikasi", mapped["nama_kegiatan_sertifikasi"].value, 0.0) is True
+    assert field_needs_review("waktu_mulai_pelaksanaan", mapped["waktu_mulai_pelaksanaan"].value, 0.0) is False
+    assert field_needs_review("waktu_selesai_pelaksanaan", mapped["waktu_selesai_pelaksanaan"].value, 0.0) is False

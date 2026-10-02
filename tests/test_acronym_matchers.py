@@ -78,3 +78,19 @@ def test_strict_negative_discrimination():
         r = match_field(a, b, "penyelenggara_kegiatan")
         assert r["exact"] is False, f"False positive match_field exact for {a} vs {b}"
         assert r["fuzzy"] is False, f"False positive match_field fuzzy for {a} vs {b}"
+
+
+def test_match_field_empty_gt_and_placeholders():
+    """Uji kecocokan True Negative saat Ground Truth kosong dan hasil berupa placeholder."""
+    # True Negative: GT kosong/strip dan actual adalah placeholder atau None/strip -> MATCH
+    assert match_field("-", "Tanpa Nomor", "nomor_bukti_fisik_nomor_sertifikasi")["exact"] is True
+    assert match_field("", "Tanpa Tanggal", "waktu_mulai_pelaksanaan")["exact"] is True
+    assert match_field("-", None, "nomor_bukti_fisik_nomor_sertifikasi")["exact"] is True
+    assert match_field("-", "-", "penyelenggara_kegiatan")["exact"] is True
+
+    # False Negative: GT memiliki nilai asli, tetapi model mengeluarkan placeholder -> MISMATCH
+    assert match_field("001/UNAIR/2024", "Tanpa Nomor", "nomor_bukti_fisik_nomor_sertifikasi")["exact"] is False
+    assert match_field("20/08/2024", "Tanpa Tanggal", "waktu_mulai_pelaksanaan")["exact"] is False
+
+    # False Positive: GT kosong, tetapi model halusinasi nomor palsu -> MISMATCH
+    assert match_field("-", "999/BEM/2024", "nomor_bukti_fisik_nomor_sertifikasi")["exact"] is False

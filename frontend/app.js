@@ -32,6 +32,14 @@ const selectOptionMap = {
   jenis_penyelenggara: 'jenis_penyelenggara',
 };
 
+const TEXT_FIELD_FALLBACKS = {
+  nomor_bukti_fisik_nomor_sertifikasi: 'Tanpa Nomor',
+  waktu_mulai_pelaksanaan: 'Tanpa Tanggal',
+  waktu_selesai_pelaksanaan: 'Tanpa Tanggal',
+  penyelenggara_kegiatan: 'Tanpa Penyelenggara',
+  nama_kegiatan_sertifikasi: 'Tanpa Nama Kegiatan',
+};
+
 function el(id) { return document.getElementById(id); }
 
 async function init() {
@@ -317,7 +325,10 @@ function applyResult(data) {
     const item = fields[fieldId];
     const element = el(fieldId);
     if (!element) return;
-    const rawVal = item ? (item.value || '') : '';
+    let rawVal = item ? (item.value || '') : '';
+    if (!rawVal.trim() && TEXT_FIELD_FALLBACKS[fieldId]) {
+      rawVal = TEXT_FIELD_FALLBACKS[fieldId];
+    }
     const value = normalizeDateForDisplay(fieldId, rawVal);
     if (element.tagName === 'SELECT') {
       if (value) {
