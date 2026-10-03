@@ -1,7 +1,7 @@
 import asyncio
 import logging
 import sys
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 _backend_dir = str(Path(__file__).resolve().parent.parent)
@@ -59,24 +59,11 @@ from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
 
-app = FastAPI(title="Certificate Autofill Prototype", version="0.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
 UPLOAD_COUNT = Counter("cert_autofill_uploads_total", "Total uploaded PDFs")
 UPLOAD_SIZE = Histogram("cert_autofill_upload_size_bytes", "PDF upload size in bytes")
-logger = logging.getLogger("certificate-main")
-
 static_dir = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-
 async def _storage_cleanup_loop() -> None:
     cleanup_interval = max(1, settings.storage_cleanup_interval_seconds)
     while True:
@@ -87,9 +74,26 @@ async def _storage_cleanup_loop() -> None:
             logger.exception("Periodic ephemeral-storage cleanup failed.")
 
 
-@app.on_event("startup")
+def _run_auto_migrations() -> None:
+    """Run Alembic database migrations to head if configuration is present."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+        backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+        ini_path = root_ini if root_ini.exists() else backend_ini
+        if ini_path.exists():
+            cfg = Config(str(ini_path))
+            command.upgrade(cfg, "head")
+            logger.info("Alembic database migrations applied successfully to head.")
+    except Exception as exc:
+        logger.debug("Alembic migration skipped or failed: %s", exc)
+
+
 async def on_startup() -> None:
     init_db()
+    _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog
 
@@ -98,13 +102,35 @@ async def on_startup() -> None:
     app.state.storage_cleanup_task = asyncio.create_task(_storage_cleanup_loop())
 
 
-@app.on_event("shutdown")
 async def on_shutdown() -> None:
     task = getattr(app.state, "storage_cleanup_task", None)
     if task is not None:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await on_startup()
+    try:
+        yield
+    finally:
+        await on_shutdown()
+
+app = FastAPI(
+    title="Certificate Autofill Prototype",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
