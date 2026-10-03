@@ -27,7 +27,7 @@ services:
       context: ./backend
     image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
     env_file:
       - path: .env.docker.example
         required: false
@@ -155,6 +155,21 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    profiles: ["monitoring"]
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+    depends_on:
+      - loki
     logging:
       driver: "json-file"
       options:

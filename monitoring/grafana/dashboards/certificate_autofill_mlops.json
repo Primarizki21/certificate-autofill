@@ -19,17 +19,17 @@
   "graphTooltip": 1,
   "id": null,
   "links": [],
-  "liveNow": false,
+  "liveNow": true,
   "panels": [
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
       "id": 1,
-      "title": "Pipeline Overview & Traffic",
+      "title": "Pipeline Overview & Traffic KPIs",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -51,10 +51,9 @@
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
         "textMode": "auto"
       },
-      "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
           "expr": "cert_autofill_uploads_total or vector(0)",
           "legendFormat": "Total Uploads",
@@ -66,17 +65,19 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" },
+          "color": { "mode": "thresholds" },
           "mappings": [],
+          "max": 20,
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 5 },
-              { "color": "red", "value": 20 }
+              { "color": "#EAB839", "value": 3 },
+              { "color": "red", "value": 10 }
             ]
           }
         },
@@ -85,17 +86,14 @@
       "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
       "id": 3,
       "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "auto",
         "orientation": "auto",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "textMode": "auto"
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
       },
-      "pluginVersion": "10.0.0",
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
           "expr": "cert_queue_jobs_count{status=\"queued\"} or vector(0)",
           "legendFormat": "Queued Jobs",
@@ -103,11 +101,11 @@
           "refId": "A"
         }
       ],
-      "title": "Pending Queue Depth",
-      "type": "stat"
+      "title": "Worker Queue Gauge (Pending)",
+      "type": "gauge"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
@@ -116,8 +114,8 @@
             "mode": "absolute",
             "steps": [
               { "color": "blue", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 10 }
+              { "color": "#EAB839", "value": 0.5 },
+              { "color": "red", "value": 5 }
             ]
           }
         },
@@ -135,7 +133,7 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
           "expr": "sum(cert_llm_cost_usd_total) or vector(0)",
           "legendFormat": "Total LLM Cost ($)",
@@ -147,10 +145,26 @@
       "type": "stat"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisLabel": "",
+            "axisPlacement": "auto",
+            "barAlignment": 0,
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "opacity",
+            "lineInterpolation": "smooth",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": true
+          },
           "unit": "reqps"
         }
       },
@@ -162,155 +176,226 @@
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum(rate(cert_autofill_requests_total[5m])) by (endpoint)",
+          "expr": "sum(rate(cert_autofill_requests_total[1m])) by (endpoint)",
           "legendFormat": "{{endpoint}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "HTTP Request Rate by Endpoint",
+      "title": "HTTP Traffic Rate (1m window)",
       "type": "timeseries"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
       "id": 6,
-      "title": "Pipeline Latency & Stage Performance",
+      "title": "Pipeline Latency & Route Composition",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
           "custom": {
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "smooth",
-            "lineWidth": 2
+            "lineWidth": 2,
+            "spanNulls": true
           },
           "unit": "s"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 6 },
       "id": 7,
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" },
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["lastNotNull", "max"] },
         "tooltip": { "mode": "multi" }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.95, sum(rate(cert_pipeline_stage_duration_seconds_bucket[5m])) by (le, stage))",
+          "expr": "histogram_quantile(0.95, sum(rate(cert_pipeline_stage_duration_seconds_bucket[1m])) by (le, stage))",
           "legendFormat": "p95 {{stage}}",
           "range": true,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "histogram_quantile(0.50, sum(rate(cert_pipeline_stage_duration_seconds_bucket[5m])) by (le, stage))",
+          "expr": "histogram_quantile(0.50, sum(rate(cert_pipeline_stage_duration_seconds_bucket[1m])) by (le, stage))",
           "legendFormat": "p50 {{stage}}",
           "range": true,
           "refId": "B"
         }
       ],
-      "title": "Stage Duration Latency (p95 & p50)",
+      "title": "Pipeline Stage Latency (p95 & p50)",
       "type": "timeseries"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "palette-classic" }
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "axisBorderShow": false,
+            "axisCenteredZero": false,
+            "axisColorMode": "text",
+            "axisPlacement": "auto",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1
+          }
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 6 },
       "id": 8,
       "options": {
+        "barRadius": 0.1,
+        "barWidth": 0.6,
+        "fullHighlight": false,
+        "groupWidth": 0.7,
         "legend": { "displayMode": "list", "placement": "bottom" },
-        "tooltip": { "mode": "multi" }
+        "orientation": "horizontal",
+        "showValue": "always",
+        "stacking": "none",
+        "tooltip": { "mode": "single" },
+        "xTickLabelRotation": 0
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum(increase(cert_extraction_route_total[1h])) by (engine)",
+          "expr": "sum(cert_extraction_route_total) by (engine)",
           "legendFormat": "{{engine}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Extraction Route Distribution (Hourly)",
-      "type": "timeseries"
+      "title": "Extraction Route Distribution (Engine Count)",
+      "type": "barchart"
     },
     {
       "collapsed": false,
       "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
       "id": 9,
-      "title": "MLOps Token Accounting & Human Review Quality",
+      "title": "LLM Token Breakdown & Review Anomaly Detection",
       "type": "row"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 15 },
+      "gridPos": { "h": 8, "w": 10, "x": 0, "y": 15 },
       "id": 10,
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" }
+        "displayLabels": ["percent", "name"],
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "donut",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "tooltip": { "mode": "single" }
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum(rate(cert_llm_tokens_total[5m])) by (model, token_type)",
-          "legendFormat": "{{model}} - {{token_type}}",
+          "expr": "sum(cert_llm_tokens_total) by (token_type)",
+          "legendFormat": "{{token_type}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "LLM Token Consumption Rate (tokens/sec)",
-      "type": "timeseries"
+      "title": "LLM Token Usage Breakdown (Donut)",
+      "type": "piechart"
     },
     {
-      "datasource": { "type": "prometheus", "uid": "Prometheus" },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
           "color": { "mode": "palette-classic" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "#EAB839", "value": 5 },
+              { "color": "red", "value": 15 }
+            ]
+          },
           "unit": "short"
         }
       },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 15 },
+      "gridPos": { "h": 8, "w": 14, "x": 10, "y": 15 },
       "id": 11,
       "options": {
-        "legend": { "displayMode": "table", "placement": "bottom" }
+        "displayMode": "gradient",
+        "minVizHeight": 10,
+        "minVizWidth": 0,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "showUnfilled": true,
+        "valueMode": "color"
       },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "Prometheus" },
+          "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "sum(increase(cert_field_needs_review_total[1h])) by (field)",
-          "legendFormat": "Review: {{field}}",
+          "expr": "sum(cert_field_needs_review_total) by (field)",
+          "legendFormat": "{{field}}",
           "range": true,
           "refId": "A"
         }
       ],
-      "title": "Human Review Flags Raised per Field (Hourly)",
-      "type": "timeseries"
+      "title": "Review Required Flags per Field (Bar Gauge)",
+      "type": "bargauge"
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 12,
+      "title": "Live Stream Container Logs (Loki)",
+      "type": "row"
+    },
+    {
+      "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
+      "id": 13,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": true,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "P8E80F9AEF21F6940" },
+          "editorMode": "code",
+          "expr": "{container=~\"certificate-autofill.*\"}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Real-time Backend & Worker Execution Logs",
+      "type": "logs"
     }
   ],
   "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
   "tags": ["mlops", "certificate-autofill", "extraction-pipeline"],
-  "time": { "from": "now-1h", "to": "now" },
+  "time": { "from": "now-30m", "to": "now" },
   "timepicker": {
     "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
   },
