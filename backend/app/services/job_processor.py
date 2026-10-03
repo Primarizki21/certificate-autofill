@@ -203,6 +203,13 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
             if confidence_needs_review:
                 confidence_review_fields += 1
             needs_review = semantic_needs_review or confidence_needs_review
+            if needs_review:
+                try:
+                    from app.services.metrics import FIELD_NEEDS_REVIEW
+
+                    FIELD_NEEDS_REVIEW.labels(field=field_name).inc()
+                except Exception:
+                    pass
             any_review = any_review or needs_review
             db.add(
                 ExtractedField(

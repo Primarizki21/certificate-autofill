@@ -1,7 +1,7 @@
 import re
 
 from app.config import settings
-from app.master_data import BUMN_KEYWORDS, FOREIGN_UNIVERSITY_HINTS, FORM_OPTIONS, PTN_KEYWORDS, PTS_KEYWORDS
+from app.master_data import BUMN_KEYWORDS, FOREIGN_UNIVERSITY_HINTS, PTN_KEYWORDS, PTS_KEYWORDS
 from app.services.field_extractor import ExtractedValue
 OPTIONAL_EMPTY_FIELDS = frozenset(
     {

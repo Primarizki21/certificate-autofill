@@ -8,7 +8,6 @@ _backend_dir = str(Path(__file__).resolve().parent.parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 import csv
-import hashlib
 import json
 import io
 import secrets
@@ -43,7 +42,6 @@ from app.schemas import (
     CreateKHPRuleRequest,
     ExtractV1Response,
     ExtractedCertificateData,
-    ExtractionResult,
     FieldResult,
     KHPFieldSelection,
     KHPRuleResponse,
@@ -121,7 +119,22 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/metrics")
-def metrics() -> Response:
+def metrics(db: Session = Depends(get_db)) -> Response:
+    try:
+        from app.models import ExtractionJob
+        from app.services.metrics import QUEUE_JOBS
+
+        counts = dict(
+            db.query(ExtractionJob.status, func.count(ExtractionJob.id))
+            .filter(ExtractionJob.status.in_(["queued", "processing"]))
+            .group_by(ExtractionJob.status)
+            .all()
+        )
+        QUEUE_JOBS.labels(status="queued").set(counts.get("queued", 0))
+        QUEUE_JOBS.labels(status="processing").set(counts.get("processing", 0))
+    except Exception as exc:
+        logger.debug("Prometheus queue gauge update skipped: %s", exc)
+
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

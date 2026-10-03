@@ -146,6 +146,25 @@ def _log_telemetry(meta: dict[str, Any], level: int = logging.INFO) -> None:
         float(meta.get("cost_idr", 0.0) or 0.0),
         meta.get("error_type"),
     )
+    try:
+        from app.services.metrics import LLM_TOKENS, LLM_COST_USD, STAGE_DURATION
+
+        model_name = str(meta.get("model") or "unknown")
+        status_name = str(meta.get("status") or "unknown")
+        calls = int(meta.get("calls_count", 0) or 0)
+        if calls > 0:
+            for t_type in ("prompt", "candidates", "cached", "thoughts"):
+                cnt = int(meta.get(f"{t_type}_tokens", 0) or 0)
+                if cnt > 0:
+                    LLM_TOKENS.labels(model=model_name, token_type=t_type).inc(cnt)
+            cost_usd = float(meta.get("cost_usd", 0.0) or 0.0)
+            if cost_usd > 0:
+                LLM_COST_USD.labels(model=model_name).inc(cost_usd)
+        lat = float(meta.get("latency_s", 0.0) or 0.0)
+        if lat > 0:
+            STAGE_DURATION.labels(stage="llm_gemini", status=status_name).observe(lat)
+    except Exception as exc:
+        logger.debug("Prometheus metric record skipped: %s", exc)
 
 
 def _error_meta(
