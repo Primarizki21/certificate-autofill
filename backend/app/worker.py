@@ -38,6 +38,15 @@ def main() -> None:
     signal.signal(signal.SIGTERM, handle_shutdown)
     signal.signal(signal.SIGINT, handle_shutdown)
 
+    try:
+        from prometheus_client import start_http_server
+
+        worker_metrics_port = int(os.getenv("WORKER_METRICS_PORT", "8001"))
+        start_http_server(worker_metrics_port)
+        logger.info("Worker Prometheus metrics server listening on port %d", worker_metrics_port)
+    except Exception as exc:
+        logger.warning("Could not start worker metrics server: %s", exc)
+
     init_db()
     next_cleanup = 0.0
     logger.info(

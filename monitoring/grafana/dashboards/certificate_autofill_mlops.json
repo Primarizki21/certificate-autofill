@@ -56,7 +56,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "cert_autofill_uploads_total",
+          "expr": "cert_autofill_uploads_total or vector(0)",
           "legendFormat": "Total Uploads",
           "range": true,
           "refId": "A"
@@ -97,7 +97,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "cert_queue_jobs_count{status=\"queued\"}",
+          "expr": "cert_queue_jobs_count{status=\"queued\"} or vector(0)",
           "legendFormat": "Queued Jobs",
           "range": true,
           "refId": "A"
@@ -137,7 +137,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "Prometheus" },
           "editorMode": "code",
-          "expr": "sum(cert_llm_cost_usd_total)",
+          "expr": "sum(cert_llm_cost_usd_total) or vector(0)",
           "legendFormat": "Total LLM Cost ($)",
           "range": true,
           "refId": "A"
@@ -306,11 +306,11 @@
       "type": "timeseries"
     }
   ],
-  "refresh": "10s",
+  "refresh": "5s",
   "schemaVersion": 38,
   "style": "dark",
   "tags": ["mlops", "certificate-autofill", "extraction-pipeline"],
-  "time": { "from": "now-6h", "to": "now" },
+  "time": { "from": "now-1h", "to": "now" },
   "timepicker": {
     "refresh_intervals": ["5s", "10s", "30s", "1m", "5m"]
   },
