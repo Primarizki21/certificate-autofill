@@ -55,7 +55,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "cert_autofill_uploads_total or vector(0)",
+          "expr": "sum(cert_autofill_uploads_total) or vector(0)",
           "legendFormat": "Total Uploads",
           "range": true,
           "refId": "A"
@@ -95,7 +95,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
           "editorMode": "code",
-          "expr": "cert_queue_jobs_count{status=\"queued\"} or vector(0)",
+          "expr": "sum(cert_queue_jobs_count{status=\"queued\"}) or vector(0)",
           "legendFormat": "Queued Jobs",
           "range": true,
           "refId": "A"
