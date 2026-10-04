@@ -48,7 +48,7 @@ jobs:
       - name: Audit git tracked files for sensitive/forbidden files
         run: |
           echo "Scanning tracked files for forbidden private files..."
-          FORBIDDEN_FILES=$(git ls-files | grep -E '\.pdf$|^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/|^khp/' | grep -v '^khp/aucc\.sql\.example$' || true)
+          FORBIDDEN_FILES=$(git ls-files | grep -E '\.pdf$|^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/|^khp/|^docs/stress_test/' | grep -v '^khp/aucc\.sql\.example$' || true)
           if [ -n "$FORBIDDEN_FILES" ]; then
             echo "❌ ERROR: File rahasia, file PDF, atau data AUCC privat terdeteksi masuk ke git tracking:"
             echo "$FORBIDDEN_FILES"
@@ -103,13 +103,13 @@ jobs:
         run: uv sync --frozen
 
       - name: Python code linting (Ruff)
-        run: uv run ruff check backend/ tests/test_*.py
+        run: uv run ruff check backend/ tests/test_*.py scripts/stress_test.py scripts/run_stress_matrix.py
 
       - name: Database migration baseline check (Alembic)
         run: uv run alembic -x url="sqlite:///:memory:" upgrade head
 
       - name: Python syntax & bytecode compilation check
-        run: uv run python -m compileall backend/ tests/ -q
+        run: uv run python -m compileall backend/ tests/ scripts/stress_test.py scripts/run_stress_matrix.py -q
 
       - name: Run Pytest test suite
         run: uv run pytest tests/ -v --durations=10
