@@ -5,6 +5,7 @@ from app.services.gemini_extractor import _log_telemetry
 from app.services.metrics import (
     EXTRACTION_ROUTE,
     FIELD_NEEDS_REVIEW,
+    HTTP_REQUEST_DURATION,
     LLM_COST_USD,
     LLM_TOKENS,
     QUEUE_JOBS,
@@ -20,6 +21,8 @@ def test_metrics_definitions_and_labels():
     FIELD_NEEDS_REVIEW.labels(field="nomor").inc()
     QUEUE_JOBS.labels(status="queued").set(5)
 
+    HTTP_REQUEST_DURATION.labels(method="GET", endpoint="/healthz", status_code="200").observe(0.002)
+    assert HTTP_REQUEST_DURATION is not None
     assert STAGE_DURATION is not None
     assert EXTRACTION_ROUTE is not None
     assert FIELD_NEEDS_REVIEW is not None
@@ -65,3 +68,4 @@ def test_metrics_endpoint_returns_prometheus_format():
     assert "cert_extraction_route_total" in body
     assert "cert_field_needs_review_total" in body
     assert "cert_queue_jobs_count" in body
+    assert "cert_http_request_duration_seconds" in body

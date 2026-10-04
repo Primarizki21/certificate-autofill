@@ -11,6 +11,7 @@ import csv
 import json
 import io
 import secrets
+import time
 import uuid
 from datetime import datetime
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -58,6 +59,7 @@ from app.services.job_processor import cleanup_expired_jobs_and_uploads, process
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
+from app.services.metrics import HTTP_REQUEST_DURATION
 
 logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
@@ -130,6 +132,31 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+def _normalize_metric_path(path: str) -> str:
+    """Normalize dynamic URL paths to fixed endpoint templates to prevent high cardinality."""
+    if path.startswith("/api/documents/") and path.endswith("/result"):
+        return "/api/documents/{document_id}/result"
+    if path.startswith("/api/admin/khp/rules/"):
+        return "/api/admin/khp/rules/{rule_id}"
+    return path
+
+
+@app.middleware("http")
+async def measure_http_latency(request: Request, call_next):
+    start_time = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration = time.perf_counter() - start_time
+        endpoint = _normalize_metric_path(request.url.path)
+        HTTP_REQUEST_DURATION.labels(
+            method=request.method,
+            endpoint=endpoint,
+            status_code=str(status_code),
+        ).observe(duration)
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/", response_class=HTMLResponse)
