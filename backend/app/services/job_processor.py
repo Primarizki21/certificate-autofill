@@ -52,6 +52,32 @@ def _claim_job(db: Session, job_id: str, document_id: str, worker_id: str) -> Ex
     return job
 
 
+def _claim_next_job(db: Session, worker_id: str) -> ExtractionJob | None:
+    now = utcnow()
+    job = db.execute(
+        select(ExtractionJob)
+        .where(
+            ExtractionJob.status == "queued",
+            (ExtractionJob.available_at.is_(None)) | (ExtractionJob.available_at <= now),
+        )
+        .order_by(ExtractionJob.created_at.asc())
+        .with_for_update(skip_locked=True)
+        .limit(1)
+    ).scalar_one_or_none()
+    if job is None:
+        return None
+
+    job.status = "processing"
+    job.started_at = now
+    job.available_at = None
+    job.worker_id = worker_id
+    job.lease_expires_at = now + timedelta(seconds=settings.job_lease_seconds)
+    document = db.get(Document, job.document_id)
+    if document is not None:
+        document.status = "processing"
+    db.commit()
+    return job
+
 def _lock_owned_job(db: Session, job_id: str, worker_id: str) -> ExtractionJob | None:
     return db.execute(
         select(ExtractionJob)
@@ -117,7 +143,11 @@ def _run_lease_heartbeat(job_id: str, worker_id: str, stop_event: threading.Even
             return
 
 
-def process_document_job(job_id: str, document_id: str, worker_id: str | None = None) -> None:
+def process_document_job(
+    job_id: str | None = None,
+    document_id: str | None = None,
+    worker_id: str | None = None,
+) -> bool:
     """Process a queued job once while holding its database lease."""
     db: Session = SessionLocal()
     owner = worker_id or _new_worker_id()
@@ -126,10 +156,16 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
     heartbeat_stop: threading.Event | None = None
     heartbeat: threading.Thread | None = None
     try:
-        job = _claim_job(db, job_id, document_id, owner)
-        if job is None:
-            return
+        if job_id is not None:
+            job = _claim_job(db, job_id, document_id or "", owner)
+        else:
+            job = _claim_next_job(db, owner)
 
+        if job is None:
+            return False
+
+        job_id = job.id
+        document_id = job.document_id
         temp_key = job.temp_file_key
         if not temp_key:
             raise RuntimeError(f"Job ({job_id}) tidak memiliki temp_file_key.")
@@ -249,6 +285,7 @@ def process_document_job(job_id: str, document_id: str, worker_id: str | None = 
             semantic_review_fields,
             confidence_review_fields,
         )
+        return True
     except Exception as exc:
         db.rollback()
         terminal_status = _mark_owned_job_failed(db, job_id, owner, str(exc))

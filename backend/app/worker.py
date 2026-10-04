@@ -5,10 +5,8 @@ import socket
 import threading
 import time
 from datetime import datetime, timezone
-from sqlalchemy import or_
 from app.config import settings
-from app.database import SessionLocal, init_db
-from app.models import ExtractionJob
+from app.database import init_db
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -32,6 +30,21 @@ def handle_shutdown(signum: int, frame: object) -> None:
     )
     shutdown_event.set()
 
+def worker_thread_loop(thread_id: int) -> None:
+    """Individual worker thread loop executing concurrently within one worker process."""
+    sub_id = f"{WORKER_ID}-t{thread_id}"
+    logger.info("Worker thread started: %s", sub_id)
+    while not shutdown_event.is_set():
+        try:
+            processed = process_document_job(worker_id=sub_id)
+            if not processed:
+                shutdown_event.wait(timeout=settings.db_worker_poll_seconds)
+        except Exception as exc:
+            logger.exception("Worker thread %s error: %s", sub_id, exc)
+            shutdown_event.wait(timeout=settings.db_worker_poll_seconds)
+    logger.info("Worker thread stopped: %s", sub_id)
+
+
 
 def main() -> None:
     """Poll and claim queued jobs without RabbitMQ, with graceful shutdown support."""
@@ -49,45 +62,45 @@ def main() -> None:
 
     init_db()
     next_cleanup = 0.0
+    concurrency = max(1, settings.worker_concurrency)
     logger.info(
-        "DB worker started without RabbitMQ. worker_id=%s polling=%ss",
+        "DB worker started without RabbitMQ. worker_id=%s polling=%ss concurrency=%d",
         WORKER_ID,
         settings.db_worker_poll_seconds,
+        concurrency,
     )
 
-    while not shutdown_event.is_set():
-        db = SessionLocal()
-        try:
-            if time.monotonic() >= next_cleanup:
-                cleanup_expired_jobs_and_uploads()
-                next_cleanup = time.monotonic() + max(1, settings.storage_cleanup_interval_seconds)
+    if concurrency == 1:
+        while not shutdown_event.is_set():
+            try:
+                if time.monotonic() >= next_cleanup:
+                    cleanup_expired_jobs_and_uploads()
+                    next_cleanup = time.monotonic() + max(1, settings.storage_cleanup_interval_seconds)
 
-            job = (
-                db.query(ExtractionJob)
-                .filter(
-                    ExtractionJob.status == "queued",
-                    or_(ExtractionJob.available_at.is_(None), ExtractionJob.available_at <= utcnow()),
-                )
-                .order_by(ExtractionJob.created_at.asc())
-                .first()
-            )
-            if job is None:
-                db.close()
+                processed = process_document_job(worker_id=WORKER_ID)
+                if not processed:
+                    shutdown_event.wait(timeout=settings.db_worker_poll_seconds)
+            except Exception as exc:
+                logger.exception("DB worker loop error: %s", exc)
                 shutdown_event.wait(timeout=settings.db_worker_poll_seconds)
-                continue
+    else:
+        threads: list[threading.Thread] = []
+        for i in range(1, concurrency + 1):
+            t = threading.Thread(target=worker_thread_loop, args=(i,), daemon=True)
+            t.start()
+            threads.append(t)
 
-            job_id = job.id
-            document_id = job.document_id
-            db.close()
+        while not shutdown_event.is_set():
+            try:
+                if time.monotonic() >= next_cleanup:
+                    cleanup_expired_jobs_and_uploads()
+                    next_cleanup = time.monotonic() + max(1, settings.storage_cleanup_interval_seconds)
+            except Exception as exc:
+                logger.warning("Cleanup error: %s", exc)
+            shutdown_event.wait(timeout=1.0)
 
-            logger.info("Worker %s claimed job %s for document %s", WORKER_ID, job_id, document_id)
-            process_document_job(job_id=job_id, document_id=document_id, worker_id=WORKER_ID)
-        except Exception as exc:
-            logger.exception("DB worker loop error: %s", exc)
-            shutdown_event.wait(timeout=settings.db_worker_poll_seconds)
-        finally:
-            db.close()
-
+        for t in threads:
+            t.join(timeout=5)
     logger.info("DB worker stopped cleanly. worker_id=%s", WORKER_ID)
 
 
