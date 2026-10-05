@@ -58,8 +58,16 @@ Setelah container aktif:
 | **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
 | **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
 | **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
+| **Promtail** | *(internal)* | Log shipper kontainer Docker ke Loki (aktif dengan profile `monitoring`) |
 > Variabel `GOOGLE_API_KEY` dari file `.env` Anda akan otomatis diteruskan ke container backend oleh Docker Compose.
 
+
+#### Menjalankan Worker Paralel (Horizontal Scaling):
+Untuk mempercepat pengosongan antrean dokumen, jumlah kontainer worker dapat diskalakan secara dinamis:
+```bash
+# Menjalankan 2 kontainer worker paralel (kapasitas 4 thread pemrosesan)
+docker compose --profile monitoring up -d --scale worker=2
+```
 ---
 
 ### 3. Menjalankan secara Manual (Tanpa Docker)
@@ -118,6 +126,10 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
 | `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
+| `DB_WORKER_POLL_SECONDS` | `2` | Jeda waktu polling worker saat antrean database kosong |
+| `WORKER_CONCURRENCY` | `1` | Jumlah thread pemrosesan paralel per worker (disarankan `2` untuk utilisasi optimal) |
+| `DB_POOL_SIZE` | `20` | Kapasitas connection pool tetap PostgreSQL (SQLAlchemy) |
+| `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
@@ -144,6 +156,13 @@ Untuk pemeliharaan storage atau database lama:
 ```bash
 uv run python scripts/migrate_ephemeral_storage.py
 ```
+
+### Migrasi Skema Database (Alembic)
+Perubahan skema database dikelola melalui migrasi Alembic yang otomatis dijalankan saat aplikasi menyala. Untuk eksekusi manual:
+```bash
+uv run alembic upgrade head
+```
+Dokumentasi lengkap migrasi tersedia di [Panduan Migrasi Database](docs/DATABASE_MIGRATIONS.md).
 
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
 Cukup ubah baris berikut di `.env`:
@@ -326,8 +345,20 @@ uv run pytest tests/ -v
 ### 2. Otomasi CI/CD (GitHub Actions)
 Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
 - **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
-- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 402 unit tests secara terisolasi.
+- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 410 unit tests secara terisolasi.
 
+
+### 3. Pengujian Beban & Profiling Latensi (Stress Testing)
+Sistem menyediakan perangkat pengujian beban asinkron untuk mengukur persentil latensi P50, P90, P95, P99 pada HTTP Ingestion dan End-to-End Processing:
+
+```bash
+# Pengujian beban berkas tunggal / kelompok (contoh: 50 dokumen, 5 koneksi simultan)
+uv run python scripts/stress_test.py --total-requests 50 --concurrency 5
+
+# Pengujian bertahap matriks terpadu (Matriks A: Ingestion, B: Worker Scaling, C: Peak 1.000)
+uv run python scripts/run_stress_matrix.py --scenarios A1 A2 B1 B2
+```
+Seluruh artefak hasil uji beban (`summary.json`, `latencies.csv`, `report.md`) tersimpan terisolasi di direktori `docs/stress_test/`.
 ---
 
 ## Endpoint API Utama
