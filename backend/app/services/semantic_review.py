@@ -278,8 +278,8 @@ def merge_semantic_reviews(
 ) -> dict[str, SemanticReviewAnnotation]:
     """Gabungkan flag dari tahap sebelum dan sesudah boundary."""
     merged_reasons: dict[str, list[str]] = {}
-    for annotations in annotation_maps:
-        for field_name, annotation in annotations.items():
+    for current_map in annotation_maps:
+        for field_name, annotation in current_map.items():
             field_reasons = merged_reasons.setdefault(field_name, [])
             for reason in annotation.reasons:
                 if reason not in field_reasons:

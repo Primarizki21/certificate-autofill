@@ -37,7 +37,8 @@ RUN useradd -u 10001 -m -s /bin/bash appuser && \
 
 COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser app /app/app
-
+COPY --chown=appuser:appuser alembic /app/alembic
+COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
 # Pre-warm RapidOCR ONNX model weights in build layer (ensures offline campus operation)
 USER appuser
 RUN python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR()" || true

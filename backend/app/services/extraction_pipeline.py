@@ -1,7 +1,7 @@
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
-
 from app.config import settings
 from app.services.field_extractor import ExtractedValue, extract_certificate_fields
 from app.services.form_mapper import map_fields_to_form
@@ -133,13 +133,23 @@ def run_extraction_pipeline(
     tahun_akademik: str,
     bukti_fisik: str,
 ) -> PipelineResult:
+    t_start = time.perf_counter()
     is_image = (
         pdf_bytes.startswith(b"\xff\xd8\xff")
         or pdf_bytes.startswith(b"\x89PNG\r\n\x1a\n")
         or (len(pdf_bytes) >= 12 and pdf_bytes.startswith(b"RIFF") and pdf_bytes[8:12] == b"WEBP")
     )
+    t_fast = time.perf_counter()
     fast = extract_text_with_pymupdf(pdf_bytes)
     raw_text = fast.text
+    try:
+        from app.services.metrics import STAGE_DURATION
+
+        STAGE_DURATION.labels(stage="fast_path", status="success").observe(
+            time.perf_counter() - t_fast
+        )
+    except Exception as exc:
+        logger.debug("Prometheus fast_path metric skipped: %s", exc)
     parser_engine = "image_ocr" if is_image else "pymupdf_fast_path"
     raw_markdown = None
     raw_json: dict[str, Any] | None = None
@@ -157,7 +167,16 @@ def run_extraction_pipeline(
         is_image or len(raw_text.strip()) < settings.min_text_length or date_missing
     )
     if should_run_ocr:
+        t_ocr = time.perf_counter()
         ocr_text = extract_text_with_ocr(pdf_bytes)
+        try:
+            from app.services.metrics import STAGE_DURATION
+
+            STAGE_DURATION.labels(
+                stage="ocr", status="success" if ocr_text.strip() else "empty"
+            ).observe(time.perf_counter() - t_ocr)
+        except Exception as exc:
+            logger.debug("Prometheus ocr metric skipped: %s", exc)
         if ocr_text.strip():
             raw_text = f"{raw_text}\n{ocr_text}".strip()
             if is_image:
@@ -275,6 +294,18 @@ def run_extraction_pipeline(
         review_annotations,
         _build_semantic_review(raw_text, mapped),
     )
+    try:
+        from app.services.metrics import EXTRACTION_ROUTE, STAGE_DURATION
+
+        engine_label = "gemini" if gemini_used else (
+            offline_engine if "offline_engine" in locals() else "offline_rules"
+        )
+        EXTRACTION_ROUTE.labels(engine=engine_label, status="success").inc()
+        STAGE_DURATION.labels(stage="pipeline_total", status="success").observe(
+            time.perf_counter() - t_start
+        )
+    except Exception as exc:
+        logger.debug("Prometheus pipeline_total metric skipped: %s", exc)
     return PipelineResult(
         parser_engine=parser_engine,
         raw_text=raw_text,

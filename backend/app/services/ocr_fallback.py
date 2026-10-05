@@ -8,11 +8,7 @@ import pytesseract
 
 from app.config import settings
 from app.services.field_extractor import extract_certificate_number
-from app.services.pdf_fast_path import (
-    PageImageBuffer,
-    render_pdf_pages_to_image_buffers,
-    render_pdf_pages_to_png_bytes,
-)
+from app.services.pdf_fast_path import render_pdf_pages_to_image_buffers
 ZOOM = 3.0  # render halaman (konsisten dgn eksperimen)
 CRENDER_ZOOM = 6.0  # NC-001: re-render region nomor di zoom tinggi (piksel nyata)
 _KEYWORD_RE = re.compile(r"\bNOMOR\b|\bNO\.\b|\bNUMBER\b", re.I)

@@ -259,16 +259,21 @@ function showDocumentPreview(file) {
 }
 
 function pollResult(documentId) {
-  if (state.pollTimer) clearInterval(state.pollTimer);
+  if (state.pollTimer) {
+    clearTimeout(state.pollTimer);
+    state.pollTimer = null;
+  }
 
-  state.pollTimer = setInterval(async () => {
+  let attempt = 0;
+
+  async function check() {
+    attempt++;
     try {
       const response = await fetch(`${API_BASE}/api/documents/${documentId}/result`);
       if (!response.ok) throw new Error(`Gagal mengambil hasil parsing. HTTP ${response.status}`);
       const data = await response.json();
 
       if (data.status === 'failed') {
-        clearInterval(state.pollTimer);
         state.pollTimer = null;
         setLoading(false);
         setStatus('Ekstraksi dokumen tidak berhasil. Silakan coba kembali.');
@@ -276,22 +281,25 @@ function pollResult(documentId) {
       }
 
       if (['completed', 'needs_review'].includes(data.status)) {
-        clearInterval(state.pollTimer);
         state.pollTimer = null;
         applyResult(data);
         applyStrictOrganizerRuleFromLevel();
         setLoading(false);
         setStatus(data.needs_review ? 'Pengisian form selesai otomatis. Silakan periksa kembali isian sebelum menyimpan.' : 'Pengisian form selesai otomatis.');
-      } else {
-        setStatus('Sedang memproses dokumen...');
+        return;
       }
+
+      setStatus('Sedang memproses dokumen...');
+      const nextDelay = attempt === 1 ? 1000 : (attempt <= 5 ? 2000 : 2500);
+      state.pollTimer = setTimeout(check, nextDelay);
     } catch (error) {
-      clearInterval(state.pollTimer);
       state.pollTimer = null;
       setLoading(false);
       setStatus('Terjadi kendala saat memproses dokumen. Silakan coba kembali.');
     }
-  }, 1200);
+  }
+
+  state.pollTimer = setTimeout(check, 1000);
 }
 
 function applyResult(data) {

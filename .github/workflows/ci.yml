@@ -13,6 +13,29 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: Detect Changed Paths
+    runs-on: ubuntu-latest
+    outputs:
+      pipeline: ${{ steps.filter.outputs.pipeline }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Path Filter
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            pipeline:
+              - 'backend/app/services/**'
+              - 'backend/app/master_data.py'
+              - 'backend/app/config.py'
+              - 'tests/test_benchmark_v2_production_equivalent.py'
+              - 'tests/test_combined_v4_2.py'
+              - 'tests/test_structural_act_robustness.py'
+              - 'tests/test_router_disambig_hardening.py'
+
   security-audit:
     name: Security & Secret Leak Check
     runs-on: ubuntu-latest
@@ -25,7 +48,7 @@ jobs:
       - name: Audit git tracked files for sensitive/forbidden files
         run: |
           echo "Scanning tracked files for forbidden private files..."
-          FORBIDDEN_FILES=$(git ls-files | grep -E '\.pdf$|^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/|^khp/' | grep -v '^khp/aucc\.sql\.example$' || true)
+          FORBIDDEN_FILES=$(git ls-files | grep -E '\.pdf$|^\.env$|^\.env\.google$|^\.env\.(local|production|development|test)$|\.key$|Ground_Truth.*\.csv|Sertifikat_Ground_Truth/|certs_test/|certs_unified/|^khp/|^docs/stress_test/' | grep -v '^khp/aucc\.sql\.example$' || true)
           if [ -n "$FORBIDDEN_FILES" ]; then
             echo "❌ ERROR: File rahasia, file PDF, atau data AUCC privat terdeteksi masuk ke git tracking:"
             echo "$FORBIDDEN_FILES"
@@ -45,7 +68,7 @@ jobs:
           echo "✅ Tidak ditemukan kebocoran API key pada kode."
 
   test:
-    name: Lint & Pytest Suite
+    name: Lint, Migrations & Pytest Suite
     runs-on: ubuntu-latest
     env:
       APP_ENV: test
@@ -79,11 +102,65 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --frozen
 
+      - name: Python code linting (Ruff)
+        run: uv run ruff check backend/ tests/test_*.py scripts/stress_test.py scripts/run_stress_matrix.py
+
+      - name: Database migration baseline check (Alembic)
+        run: uv run alembic -x url="sqlite:///:memory:" upgrade head
+
       - name: Python syntax & bytecode compilation check
-        run: uv run python -m compileall backend/ tests/ -q
+        run: uv run python -m compileall backend/ tests/ scripts/stress_test.py scripts/run_stress_matrix.py -q
 
       - name: Run Pytest test suite
         run: uv run pytest tests/ -v --durations=10
+
+  ml-quality-gate:
+    name: ML Quality & Robustness Gate
+    needs: changes
+    if: ${{ needs.changes.outputs.pipeline == 'true' }}
+    runs-on: ubuntu-latest
+    env:
+      APP_ENV: test
+      DATABASE_URL: "sqlite:///:memory:"
+      ENABLE_TESSERACT_GEMINI: "false"
+      ENABLE_COMBINED_V4_2: "true"
+      PYTHONPATH: ".:backend"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install system dependencies (Tesseract OCR & Libraries)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y tesseract-ocr tesseract-ocr-ind libgl1
+
+      - name: Install Python dependencies
+        run: uv sync --frozen
+
+      - name: Run Synthetic ML Evaluation & Robustness Invariants
+        run: |
+          uv run pytest \
+            tests/test_benchmark_v2_production_equivalent.py \
+            tests/test_v2_staging_steps.py \
+            tests/test_combined_v4_2.py \
+            tests/test_structural_act_robustness.py \
+            tests/test_nomor_v6.py \
+            tests/test_router_disambig_hardening.py \
+            tests/test_validate_v2_production_equivalent.py \
+            -v
 
   docker-build:
     name: Docker Compose Build Check

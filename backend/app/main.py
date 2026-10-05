@@ -1,17 +1,17 @@
 import asyncio
 import logging
 import sys
-from contextlib import suppress
+from contextlib import asynccontextmanager, suppress
 from pathlib import Path
 
 _backend_dir = str(Path(__file__).resolve().parent.parent)
 if _backend_dir not in sys.path:
     sys.path.insert(0, _backend_dir)
 import csv
-import hashlib
 import json
 import io
 import secrets
+import time
 import uuid
 from datetime import datetime
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
@@ -43,7 +43,6 @@ from app.schemas import (
     CreateKHPRuleRequest,
     ExtractV1Response,
     ExtractedCertificateData,
-    ExtractionResult,
     FieldResult,
     KHPFieldSelection,
     KHPRuleResponse,
@@ -60,25 +59,13 @@ from app.services.job_processor import cleanup_expired_jobs_and_uploads, process
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
+from app.services.metrics import HTTP_REQUEST_DURATION
 
-app = FastAPI(title="Certificate Autofill Prototype", version="0.1.0")
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
+logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
 UPLOAD_COUNT = Counter("cert_autofill_uploads_total", "Total uploaded PDFs")
 UPLOAD_SIZE = Histogram("cert_autofill_upload_size_bytes", "PDF upload size in bytes")
-logger = logging.getLogger("certificate-main")
-
 static_dir = Path(__file__).parent / "static"
-app.mount("/static", StaticFiles(directory=static_dir), name="static")
-
-
 async def _storage_cleanup_loop() -> None:
     cleanup_interval = max(1, settings.storage_cleanup_interval_seconds)
     while True:
@@ -89,9 +76,26 @@ async def _storage_cleanup_loop() -> None:
             logger.exception("Periodic ephemeral-storage cleanup failed.")
 
 
-@app.on_event("startup")
+def _run_auto_migrations() -> None:
+    """Run Alembic database migrations to head if configuration is present."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+        backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+        ini_path = root_ini if root_ini.exists() else backend_ini
+        if ini_path.exists():
+            cfg = Config(str(ini_path))
+            command.upgrade(cfg, "head")
+            logger.info("Alembic database migrations applied successfully to head.")
+    except Exception as exc:
+        logger.debug("Alembic migration skipped or failed: %s", exc)
+
+
 async def on_startup() -> None:
     init_db()
+    _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog
 
@@ -100,13 +104,60 @@ async def on_startup() -> None:
     app.state.storage_cleanup_task = asyncio.create_task(_storage_cleanup_loop())
 
 
-@app.on_event("shutdown")
 async def on_shutdown() -> None:
     task = getattr(app.state, "storage_cleanup_task", None)
     if task is not None:
         task.cancel()
         with suppress(asyncio.CancelledError):
             await task
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await on_startup()
+    try:
+        yield
+    finally:
+        await on_shutdown()
+
+app = FastAPI(
+    title="Certificate Autofill Prototype",
+    version="0.1.0",
+    lifespan=lifespan,
+)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+def _normalize_metric_path(path: str) -> str:
+    """Normalize dynamic URL paths to fixed endpoint templates to prevent high cardinality."""
+    if path.startswith("/api/documents/") and path.endswith("/result"):
+        return "/api/documents/{document_id}/result"
+    if path.startswith("/api/admin/khp/rules/"):
+        return "/api/admin/khp/rules/{rule_id}"
+    return path
+
+
+@app.middleware("http")
+async def measure_http_latency(request: Request, call_next):
+    start_time = time.perf_counter()
+    status_code = 500
+    try:
+        response = await call_next(request)
+        status_code = response.status_code
+        return response
+    finally:
+        duration = time.perf_counter() - start_time
+        endpoint = _normalize_metric_path(request.url.path)
+        HTTP_REQUEST_DURATION.labels(
+            method=request.method,
+            endpoint=endpoint,
+            status_code=str(status_code),
+        ).observe(duration)
+app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
 @app.get("/", response_class=HTMLResponse)
 def index() -> str:
@@ -121,7 +172,22 @@ def healthz() -> dict[str, str]:
 
 
 @app.get("/metrics")
-def metrics() -> Response:
+def metrics(db: Session = Depends(get_db)) -> Response:
+    try:
+        from app.models import ExtractionJob
+        from app.services.metrics import QUEUE_JOBS
+
+        counts = dict(
+            db.query(ExtractionJob.status, func.count(ExtractionJob.id))
+            .filter(ExtractionJob.status.in_(["queued", "processing"]))
+            .group_by(ExtractionJob.status)
+            .all()
+        )
+        QUEUE_JOBS.labels(status="queued").set(counts.get("queued", 0))
+        QUEUE_JOBS.labels(status="processing").set(counts.get("processing", 0))
+    except Exception as exc:
+        logger.debug("Prometheus queue gauge update skipped: %s", exc)
+
     return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
 
 

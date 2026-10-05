@@ -101,6 +101,8 @@ docs/screenshots
 docs/pipeline_pr_3
 docs/security*/
 docs/security*
+docs/stress_test/
+docs/stress_test
 project_source
 # Agents Instructions and internal notes
 AGENTS.md

@@ -27,7 +27,7 @@ services:
       context: ./backend
     image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 2
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
     env_file:
       - path: .env.docker.example
         required: false
@@ -47,6 +47,8 @@ services:
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
       - API_KEYS=${API_KEYS:-}
       - REQUIRE_API_KEY=${REQUIRE_API_KEY:-false}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -95,6 +97,9 @@ services:
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
       - ENABLE_KHP_MASTER_STAGING=${ENABLE_KHP_MASTER_STAGING:-true}
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
+      - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-1}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
@@ -139,6 +144,8 @@ services:
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - grafana_data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/etc/grafana/dashboards:ro
     logging:
       driver: "json-file"
       options:
@@ -153,6 +160,21 @@ services:
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  promtail:
+    image: grafana/promtail:2.9.8
+    profiles: ["monitoring"]
+    command: -config.file=/etc/promtail/config.yml
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./monitoring/promtail-config.yml:/etc/promtail/config.yml:ro
+    depends_on:
+      - loki
     logging:
       driver: "json-file"
       options:

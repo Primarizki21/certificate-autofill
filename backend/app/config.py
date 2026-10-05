@@ -21,6 +21,8 @@ class Settings:
         "DATABASE_URL",
         "postgresql+psycopg2://postgres:changeme@127.0.0.1:5434/certautofill",
     )
+    db_pool_size: int = int(os.getenv("DB_POOL_SIZE", "20"))
+    db_max_overflow: int = int(os.getenv("DB_MAX_OVERFLOW", "20"))
     max_upload_size_mb: int = int(os.getenv("MAX_UPLOAD_SIZE_MB", "25"))
     max_pdf_pages: int = int(os.getenv("MAX_PDF_PAGES", "3"))
     max_image_dimension: int = int(os.getenv("MAX_IMAGE_DIMENSION", "8000"))
@@ -34,6 +36,7 @@ class Settings:
     temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
     storage_cleanup_interval_seconds: int = int(os.getenv("STORAGE_CLEANUP_INTERVAL_SECONDS", "300"))
+    worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "1"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
