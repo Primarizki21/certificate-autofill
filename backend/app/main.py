@@ -278,6 +278,13 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtract
     document = db.get(Document, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
+    if document.status in ("queued", "processing", "failed"):
+        return PublicExtractionResult(
+            document_id=document_id,
+            status=document.status,
+            needs_review=False,
+            fields={},
+        )
 
     fields = db.query(ExtractedField).filter(ExtractedField.document_id == document_id).all()
 
