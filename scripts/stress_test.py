@@ -131,8 +131,11 @@ async def worker_task(
         return record
 
     t_poll_start = time.perf_counter()
+    attempt = 0
     while True:
-        await asyncio.sleep(poll_interval)
+        attempt += 1
+        delay = poll_interval if attempt == 1 else (2.0 if attempt <= 5 else 2.5)
+        await asyncio.sleep(delay)
         try:
             res_poll = await client.get(
                 f"{base_url}/api/documents/{document_id}/result",
