@@ -126,8 +126,8 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
 | `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
-| `DB_WORKER_POLL_SECONDS` | `2` | Jeda waktu polling worker saat antrean database kosong |
-| `WORKER_CONCURRENCY` | `1` | Jumlah thread pemrosesan paralel per worker (disarankan `2` untuk utilisasi optimal) |
+| `DB_WORKER_POLL_SECONDS` | `1` | Jeda waktu polling worker saat antrean database kosong |
+| `WORKER_CONCURRENCY` | `2` | Jumlah thread pemrosesan paralel per worker (default `2` untuk utilisasi optimal) |
 | `DB_POOL_SIZE` | `20` | Kapasitas connection pool tetap PostgreSQL (SQLAlchemy) |
 | `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |

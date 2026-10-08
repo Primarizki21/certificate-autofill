@@ -119,3 +119,26 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
     raw_json_str = json.dumps(payload)
     for forbidden in ["id_kegiatan_2", "kegiatan_2", "master_rule", "reasons", "lookup_status", "rule_status"]:
         assert forbidden not in raw_json_str, f"Forbidden internal property '{forbidden}' found in serialized payload"
+
+
+def test_get_result_short_circuits_unready_status() -> None:
+    for unready_status in ("queued", "processing", "failed"):
+        mock_db = MagicMock()
+        doc = Document(
+            id=f"doc-{unready_status}",
+            original_file_name="test.pdf",
+            checksum_sha256="fake_sha",
+            tahun_akademik="2024/2025",
+            mime_type="application/pdf",
+            file_size=1024,
+            status=unready_status,
+        )
+        mock_db.get.return_value = doc
+
+        result = get_result(f"doc-{unready_status}", db=mock_db)
+
+        assert result.document_id == f"doc-{unready_status}"
+        assert result.status == unready_status
+        assert result.needs_review is False
+        assert result.fields == {}
+        mock_db.query.assert_not_called()
