@@ -36,7 +36,7 @@ class Settings:
     temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
     storage_cleanup_interval_seconds: int = int(os.getenv("STORAGE_CLEANUP_INTERVAL_SECONDS", "300"))
-    worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "1"))
+    worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
@@ -68,7 +68,7 @@ class Settings:
     enable_combined_v4_2: bool = os.getenv("ENABLE_COMBINED_V4_2", "true").lower() == "true"
     max_job_retries: int = int(os.getenv("MAX_JOB_RETRIES", "3"))
     processing_mode: str = os.getenv("PROCESSING_MODE", "background").lower()
-    db_worker_poll_seconds: int = int(os.getenv("DB_WORKER_POLL_SECONDS", "2"))
+    db_worker_poll_seconds: int = int(os.getenv("DB_WORKER_POLL_SECONDS", "1"))
     # v8: LLM tingkat (Ollama) + router. Default LLM off agar produksi tetap
     # deterministik tanpa Ollama; aktifkan via ENABLE_LLM_TINGKAT=true.
     enable_llm_tingkat: bool = os.getenv("ENABLE_LLM_TINGKAT", "false").lower() == "true"
