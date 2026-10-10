@@ -89,5 +89,6 @@ class Settings:
     # API Key Authentication (prefix sk-, optional for internal mode)
     api_keys: str = os.getenv("API_KEYS", os.getenv("API_KEY", ""))
     require_api_key: bool = os.getenv("REQUIRE_API_KEY", "false").lower() == "true"
+    cors_allowed_origins: str = os.getenv("CORS_ALLOWED_ORIGINS", "")
 
 settings = Settings()
