@@ -1,0 +1,45 @@
+# Git & GitHub
+.git
+.gitignore
+.github
+
+# Python bytecode & virtual environments
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.cache/
+
+# Environment files
+.env
+.env.*
+!.env.docker.example
+!.env.example
+
+# Test suites, benchmarks, and private datasets
+tests/
+certs_test/
+Sertifikat_Ground_Truth/
+Ground_Truth*.csv
+output_marker/
+input_marker_paper/
+papers/
+
+# Documentation & reports
+docs/
+*.md
+
+# Frontend standalone & temporary prototypes
+frontend/
+UI_pilihan/
+
+# Monitoring, scripts, and host data
+monitoring/
+scripts/
+khp/

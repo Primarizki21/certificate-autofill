@@ -1,3 +1,6 @@
+# Staging Overlay Compose
+# Jalankan bersama docker-compose.yml utama:
+#   docker compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 services:
   backend_staging:
     image: certificate-autofill-dev-backend:latest

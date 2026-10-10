@@ -1,0 +1,22 @@
+# docker-compose.override.yml.example
+# Salin file ini menjadi 'docker-compose.override.yml' untuk lingkungan pengembangan lokal:
+#   cp docker-compose.override.yml.example docker-compose.override.yml
+#
+# Docker Compose akan secara otomatis menggabungkan file override ini saat menjalankan:
+#   docker compose up
+
+services:
+  backend:
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ./backend/app:/app/app:ro
+      - ./backend/alembic:/app/alembic:ro
+      - ./backend/alembic.ini:/app/alembic.ini:ro
+
+  worker:
+    environment:
+      - APP_ENV=development
+    volumes:
+      - ./backend/app:/app/app:ro

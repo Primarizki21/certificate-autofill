@@ -104,6 +104,12 @@ services:
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9102/metrics >/dev/null 2>&1 || pgrep -f 'app.worker' >/dev/null 2>&1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     deploy:
       resources:
         limits:
@@ -121,7 +127,7 @@ services:
         max-file: "5"
 
   prometheus:
-    image: prom/prometheus:latest
+    image: prom/prometheus:v2.54.1
     profiles: ["monitoring"]
     ports:
       - "${PROMETHEUS_PORT:-9090}:9090"
@@ -136,7 +142,7 @@ services:
         max-file: "5"
 
   grafana:
-    image: grafana/grafana:latest
+    image: grafana/grafana:11.2.0
     profiles: ["monitoring"]
     ports:
       - "${GRAFANA_PORT:-3000}:3000"
