@@ -14,7 +14,7 @@ import secrets
 import time
 import uuid
 from datetime import datetime
-from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -125,10 +125,25 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+def _get_cors_origins() -> list[str]:
+    raw = (settings.cors_allowed_origins or "").strip()
+    if raw:
+        return [origin.strip() for origin in raw.split(",") if origin.strip()]
+    return [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+    ]
+
+
+_cors_origins = _get_cors_origins()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=_cors_origins,
+    allow_credentials="*" not in _cors_origins,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -201,6 +216,7 @@ def get_options() -> OptionsResponse:
 @app.post("/api/documents", response_model=UploadResponse)
 def upload_document(
     request: Request,
+    response: Response,
     background_tasks: BackgroundTasks,
     tahun_akademik: str = Form(...),
     bukti_fisik: str = Form("Sertifikat"),
@@ -208,7 +224,7 @@ def upload_document(
     db: Session = Depends(get_db),
 ) -> UploadResponse:
     REQUEST_COUNT.labels(endpoint="/api/documents").inc()
-    enforce_upload_rate_limit(request)
+    enforce_upload_rate_limit(request, response)
     if not file.filename:
         raise HTTPException(status_code=400, detail="File wajib diunggah.")
 
@@ -267,6 +283,7 @@ def upload_document(
         background_tasks.add_task(process_document_job, job_id, document_id)
         response_status = "queued"
 
+    response.headers["Location"] = f"/api/documents/{document_id}/result"
     UPLOAD_COUNT.inc()
     UPLOAD_SIZE.observe(len(content))
     return UploadResponse(document_id=document_id, job_id=job_id, status=response_status)
@@ -327,13 +344,14 @@ def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtract
 @app.post("/api/v1/extract", response_model=ExtractV1Response)
 def extract_certificate_v1(
     request: Request,
+    response: Response,
     file: UploadFile = File(..., description="File sertifikat mahasiswa (.pdf, .jpg, .jpeg, .png, .webp)"),
     tahun_akademik: str = Form("2035/2036 - Genap", description="Tahun akademik"),
     bukti_fisik: str = Form("Sertifikat", description="Jenis bukti fisik"),
     _api_key: str | None = Depends(require_api_key),
 ) -> ExtractV1Response:
     REQUEST_COUNT.labels(endpoint="/api/v1/extract").inc()
-    enforce_upload_rate_limit(request)
+    enforce_upload_rate_limit(request, response)
 
     if not file.filename:
         raise HTTPException(status_code=400, detail="File sertifikat wajib diunggah.")
@@ -758,8 +776,8 @@ def list_khp_rules(
     id_kegiatan_1: int | None = None,
     id_tingkat: int | None = None,
     is_active: bool | None = None,
-    limit: int = 100,
-    offset: int = 0,
+    limit: int = Query(100, ge=1, le=500, description="Jumlah item maksimal per halaman"),
+    offset: int = Query(0, ge=0, description="Offset data"),
     admin: str = Depends(verify_admin),
     db: Session = Depends(get_db),
 ):
@@ -809,10 +827,10 @@ def list_khp_rules(
 @app.post("/api/admin/khp/rules", response_model=KHPRuleResponse, status_code=201)
 def create_khp_rule(
     req: CreateKHPRuleRequest,
+    response: Response,
     admin: str = Depends(verify_admin),
     db: Session = Depends(get_db),
 ):
-    REQUEST_COUNT.labels(endpoint="/api/admin/khp/rules").inc()
     # Validasi keberadaan dimensi
     kelompok = db.query(KHPKelompokKegiatan).filter_by(id_kelompok_kegiatan=req.id_kelompok_kegiatan).first()
     if not kelompok:
@@ -878,6 +896,7 @@ def create_khp_rule(
     db.commit()
     db.refresh(new_rule)
 
+    response.headers["Location"] = f"/api/admin/khp/rules/{new_rule.id}"
     return KHPRuleResponse(
         id=new_rule.id,
         source_no=new_rule.source_no,

@@ -44,6 +44,21 @@ Klien dapat mengirimkan API Key melalui salah satu dari dua cara berikut:
   ```
 * **Mode Pengembangan Lokal (Development):** Anda dapat menonaktifkan autentikasi sementara untuk pengujian lokal dengan menyetel `REQUIRE_API_KEY=false`. Pastikan menyetel `REQUIRE_API_KEY=true` saat layanan diekspos ke jaringan publik atau staging.
 
+
+### Kebijakan CORS (*Cross-Origin Resource Sharing*)
+Jika API dipanggil dari aplikasi berbasis browser di domain berbeda:
+* **Default Lokal:** Mengizinkan `http://localhost:5173`, `http://localhost:3000`, dan `http://localhost:8000`.
+* **Kustomisasi Server:** Tetapkan daftar domain yang diizinkan pada variabel `CORS_ALLOWED_ORIGINS` di file `.env`:
+  ```env
+  CORS_ALLOWED_ORIGINS="https://khp.unair.ac.id,https://frontend.kampus.ac.id"
+  ```
+  *(Sesuai standar W3C, origin spesifik digunakan untuk mencegah pemblokiran kredensial oleh browser).*
+
+### Header Respons Transparansi Rate Limit
+Setiap request ke endpoint ekstraksi dan upload mengembalikan header transparansi kuota:
+* **`X-RateLimit-Limit`**: Kuota maksimal per IP (default: 30 request/menit).
+* **`X-RateLimit-Remaining`**: Sisa kuota request yang masih dapat digunakan.
+* **`X-RateLimit-Reset`**: Durasi jendela waktu sliding window (dalam detik).
 ---
 
 ## 3. Spesifikasi Parameter Request
@@ -286,4 +301,5 @@ Untuk menutup akses publik kapan saja:
 | **`401 Unauthorized`** | Kredensial Salah / Hilang | Header `X-API-Key` atau Bearer token tidak disertakan atau nilai API Key salah. |
 | **`413 Payload Too Large`** | Ukuran File Terlalu Besar | Ukuran dokumen melebihi batas (default: 25 MB). Kompresi dokumen sebelum mengunggah jika melebihi batas. |
 | **`422 Unprocessable Entity`** | Validasi Skema Gagal | Parameter form wajib (`file`) tidak ditemukan dalam payload request. |
+| **`429 Too Many Requests`** | Batas Kuota Terlampaui | Melebihi ambang batas upload (30 req/menit/IP). Tunggu durasi yang tertera pada header `Retry-After`. |
 | **`500 Internal Server Error`** | Kesalahan Server | Terjadi kendala internal pada server saat mengekstrak teks. |

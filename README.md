@@ -68,6 +68,14 @@ Untuk mempercepat pengosongan antrean dokumen, jumlah kontainer worker dapat dis
 # Menjalankan 2 kontainer worker paralel (kapasitas 4 thread pemrosesan)
 docker compose --profile monitoring up -d --scale worker=2
 ```
+
+#### Mode Pengembangan Lokal (Live Hot-Reload):
+Untuk pengembangan tanpa perlu me-rebuild kontainer setiap kali mengubah kode:
+```bash
+cp docker-compose.override.yml.example docker-compose.override.yml
+docker compose up
+```
+Docker Compose otomatis me-mount kode sumber `./backend/app` secara live dan mengaktifkan flag `--reload`.
 ---
 
 ### 3. Menjalankan secara Manual (Tanpa Docker)
@@ -378,6 +386,10 @@ POST   /api/admin/khp/rules           # Tambah aturan pemetaan master KHP baru
 PATCH  /api/admin/khp/rules/{rule_id} # Perbarui aturan master KHP yang ada
 DELETE /api/admin/khp/rules/{rule_id} # Hapus aturan master KHP (?hard=true untuk hard delete)
 
+# Kepatuhan REST API:
+# - Header 'Location' dikembalikan pada POST /api/documents dan POST /api/admin/khp/rules.
+# - Header transparansi rate limit ('X-RateLimit-Limit', 'X-RateLimit-Remaining', 'X-RateLimit-Reset') disertakan pada endpoint upload/ekstrak.
+# - Paginasi GET /api/admin/khp/rules terikat maksimal 500 item per request (?limit=1..500).
 # Sistem & Monitoring
 GET    /metrics                       # Metrik Prometheus (ekstraksi, latensi, error rate)
 GET    /healthz                       # Health check endpoint
