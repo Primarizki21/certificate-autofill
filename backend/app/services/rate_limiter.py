@@ -12,7 +12,7 @@ import threading
 import time
 from typing import NamedTuple
 
-from fastapi import HTTPException, Request
+from fastapi import HTTPException, Request, Response
 
 from app.config import settings
 
@@ -108,7 +108,7 @@ def get_client_ip(request: Request) -> str:
     return client.host if client else "127.0.0.1"
 
 
-def enforce_upload_rate_limit(request: Request) -> None:
+def enforce_upload_rate_limit(request: Request, response: Response | None = None) -> RateLimitResult:
     """Dependency / guard that enforces upload rate limits."""
     client_ip = get_client_ip(request)
     res = upload_rate_limiter.check(client_ip)
@@ -124,5 +124,15 @@ def enforce_upload_rate_limit(request: Request) -> None:
                 f"Terlalu banyak permintaan upload dari perangkat Anda ({res.limit}/menit). "
                 f"Harap tunggu {res.retry_after} detik sebelum mencoba kembali."
             ),
-            headers={"Retry-After": str(res.retry_after)},
+            headers={
+                "Retry-After": str(res.retry_after),
+                "X-RateLimit-Limit": str(res.limit),
+                "X-RateLimit-Remaining": "0",
+                "X-RateLimit-Reset": str(res.retry_after),
+            },
         )
+    if response is not None:
+        response.headers["X-RateLimit-Limit"] = str(res.limit)
+        response.headers["X-RateLimit-Remaining"] = str(res.remaining)
+        response.headers["X-RateLimit-Reset"] = "60"
+    return res
