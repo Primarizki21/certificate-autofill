@@ -54,7 +54,7 @@ def main() -> None:
     try:
         from prometheus_client import start_http_server
 
-        worker_metrics_port = int(os.getenv("WORKER_METRICS_PORT", "8001"))
+        worker_metrics_port = int(os.getenv("WORKER_METRICS_PORT", "9102"))
         start_http_server(worker_metrics_port)
         logger.info("Worker Prometheus metrics server listening on port %d", worker_metrics_port)
     except Exception as exc:

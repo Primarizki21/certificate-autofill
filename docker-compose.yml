@@ -102,6 +102,7 @@ services:
       - DB_WORKER_POLL_SECONDS=${DB_WORKER_POLL_SECONDS:-1}
       - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
+      - WORKER_METRICS_PORT=${WORKER_METRICS_PORT:-9102}
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
