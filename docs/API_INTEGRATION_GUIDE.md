@@ -1,17 +1,17 @@
-# Panduan Integrasi API Ekstraksi Sertifikat (`/api/v1/extract`) & Pengujian Jarak Jauh
+# Panduan Integrasi API Ekstraksi Sertifikat & Layanan KHP Universitas
 
 Dokumen teknis ini ditujukan untuk pengembang aplikasi frontend atau sistem eksternal yang ingin mengintegrasikan layanan ekstraksi sertifikat mahasiswa dan pemetaan otomatis ke taksonomi resmi **Kartu Hasil Prestasi (KHP) AUCC Universitas**.
 
 ---
 
-## 1. Ringkasan Endpoint
+## 1. Ringkasan Endpoint Utama
 
 * **URL Path:** `/api/v1/extract`
 * **HTTP Method:** `POST`
 * **Content-Type:** `multipart/form-data`
 * **Format Respons:** `application/json`
 * **Karakteristik:** *Stateless & One-Shot* (file diproses langsung di memori dan balikan JSON dikirim seketika tanpa memerlukan polling atau penyimpanan file privat di database, mengutamakan keamanan dan privasi data).
-
+* **Dokumentasi Interaktif (Swagger UI):** Tersedia langsung di browser pada path `/docs` (misal: `http://localhost:8000/docs`).
 ---
 
 ## 2. Autentikasi & Format API Key
@@ -19,11 +19,10 @@ Dokumen teknis ini ditujukan untuk pengembang aplikasi frontend atau sistem ekst
 Endpoint ini dilindungi oleh mekanisme autentikasi **API Key**.
 
 ### Spesifikasi Kunci (Key Format)
-* API Key diawali dengan awalan (*prefix*) **`sk-`** diikuti token acak alfanumerik aman (minimal 16 karakter).
+* API Key diawali dengan awalan (*prefix*) **`sk-`** atau **`sk_`** diikuti token acak alfanumerik aman (minimal 16 karakter).
 * Contoh format yang valid (placeholder dokumentasi):
   * `sk-test-sample-key-for-development-01`
-  * `sk-prod-sample-key-for-production-01`
-
+  * `sk_prod_sample_key_for_production_01`
 ### Cara Mengirimkan API Key dari Client
 Klien dapat mengirimkan API Key melalui salah satu dari dua cara berikut:
 
@@ -68,8 +67,8 @@ Request dikirimkan menggunakan format `multipart/form-data`:
 | Nama Parameter | Tipe | Status | Deskripsi |
 |---|:---:|:---:|---|
 | **`file`** | File Binary | **Wajib** | File dokumen sertifikat. Format yang didukung: `.pdf`, `.jpg`, `.jpeg`, `.png`, `.webp`. Ukuran maksimal default **25 MB**. |
-| `tahun_akademik` | String | Opsional | Format tahun akademik pelaporan. Contoh: `"2024/2025 - Genap"`. Default: `"2035/2036 - Genap"`. |
-| `bukti_fisik` | String | Opsional | Jenis bukti fisik. Default: `"Sertifikat"`. |
+| `tahun_akademik` | String | Opsional | Format tahun akademik pelaporan. Contoh: `"2024/2025 - Genap"`. Nilai bawaan sistem adalah placeholder `"2035/2036 - Genap"`; aplikasi pemanggil sangat disarankan mengirimkan semester berjalan secara dinamis. |
+| `bukti_fisik` | String | Opsional | Jenis bukti fisik (contoh: `"Sertifikat"`, `"Surat Keputusan"`). Default: `"Sertifikat"`. |
 
 ---
 
@@ -245,9 +244,96 @@ Contoh payload balikan sukses (`200 OK`):
    * `prestasi_partisipasi_jabatan`: Peranan mahasiswa (misal ID 6: Peserta, ID 1: Juara 1).
 9. **`data.id_kegiatan_2`**: ID integer relasi tunggal pada tabel referensi `aucc.kegiatan_2`. Nilai ini adalah kunci utama (*Primary Key*) yang menentukan bobot poin SKP pada database KHP.
 
+### Kamus Tag Alasan Peninjauan (`review_reasons`)
+Jika `needs_review` bernilai `true`, array `review_reasons` akan memuat satu atau beberapa tag standar berikut untuk mempermudah frontend memberi tanda visual (misal highlight kuning pada input tertentu):
+
+| Tag `review_reasons` | Kategori | Arti & Tindakan Frontend |
+|---|---|---|
+| `low_confidence_<field_name>` | Akurasi OCR | Skor keyakinan field tertentu berada di bawah ambang batas (`< 0.80`). Disarankan menandai input `<field_name>` terkait. |
+| `master_role_activity_invariant_violation` | Validasi AUCC | Kombinasi peran dan kegiatan melanggar aturan matriks integritas resmi KHP (misal: kegiatan PKKMB tetapi memilih peranan Panitia). |
+| `master_kegiatan_2_not_found` | Lookup AUCC | Tuple 3 dimensi `(kegiatan_1, tingkat, jabatan)` tidak ditemukan di basis data `aucc.kegiatan_2`. Admin/mahasiswa perlu memilih ulang dropdown. |
+| `master_kegiatan_2_blocked_by_missing_field` | Lookup AUCC | Salah satu field penentu relasi (kegiatan, tingkat, atau jabatan) tidak terdeteksi dari teks sertifikat. |
+| `master_bukti_fisik_not_allowed` | Validasi Bukti | Jenis bukti fisik yang dipilih tidak diizinkan oleh aturan resmi kegiatan tersebut. |
+| `master_resolution_pending` | Staging AUCC | Resolusi relasi KHP belum selesai dipetakan ke basis data master. |
 ---
 
-## 6. Panduan Menjalankan Cloudflare Tunnel (Pengujian Publik Terbatas)
+## 6. Katalog Endpoint Pendukung & Pengujian Interaktif
+
+Selain endpoint ekstraksi `/api/v1/extract`, server menyediakan endpoint standar pendukung operasional:
+
+### A. Dokumentasi Interaktif Swagger UI (`GET /docs`)
+Pengembang dapat menguji langsung seluruh endpoint melalui antarmuka visual tanpa menulis kode:
+* Buka `http://localhost:8000/docs` (atau domain/URL tunnel Anda).
+* Klik tombol **Authorize** di kanan atas untuk memasukkan API Key.
+* Pilih endpoint `/api/v1/extract`, klik **Try it out**, pilih file sertifikat, dan klik **Execute**.
+* Spesifikasi alternatif ReDoc tersedia di `http://localhost:8000/redoc`.
+
+### B. Master Opsi Dropdown KHP (`GET /api/options`)
+Mengambil seluruh daftar taksonomi resmi dropdown KHP AUCC langsung dari database master. Berguna agar frontend kampus me-render opsi dropdown secara dinamis tanpa *hardcode*.
+
+```bash
+curl -X GET "http://localhost:8000/api/options"
+```
+
+Contoh potongan respon JSON (`200 OK`):
+```json
+{
+  "options": {
+    "kelompok_kegiatan": [
+      { "id": 1, "label": "Kegiatan Wajib Universitas", "active": true },
+      { "id": 2, "label": "Kegiatan Bidang Organisasi dan Kepemimpinan", "active": true },
+      { "id": 3, "label": "Kegiatan Bidang Penalaran dan Keilmuan", "active": true }
+    ],
+    "jenis_kegiatan": [
+      { "id": 41, "label": "PKKMB", "active": true, "group_id": 1 },
+      { "id": 71, "label": "Panitia Dalam Suatu Kegiatan Kemahasiswaan", "active": true, "group_id": 2 }
+    ],
+    "tingkat": [
+      { "id": 1, "label": "Internasional", "active": true },
+      { "id": 2, "label": "Nasional", "active": true },
+      { "id": 4, "label": "Universitas", "active": true }
+    ],
+    "prestasi_partisipasi_jabatan": [
+      { "id": 1, "label": "Ketua", "active": true },
+      { "id": 6, "label": "Peserta", "active": true },
+      { "id": 21, "label": "Panitia", "active": true }
+    ],
+    "tahun_akademik": [
+      "2023/2024 - Ganjil",
+      "2023/2024 - Genap",
+      "2024/2025 - Ganjil",
+      "2024/2025 - Genap"
+    ],
+    "bukti_fisik": [
+      "Sertifikat",
+      "Surat Keputusan",
+      "Surat Perintah"
+    ]
+  }
+}
+```
+
+### C. Health Check Probe (`GET /healthz`)
+Digunakan oleh tim DevOps kampus, reverse proxy (Nginx), atau Kubernetes untuk memantau kesiapan server.
+
+```bash
+curl -X GET "http://localhost:8000/healthz"
+```
+Respon (`200 OK`):
+```json
+{
+  "status": "ok"
+}
+```
+
+### D. Jalur Pemrosesan Asinkron / Background Queue (Opsional)
+Bagi sistem yang menginginkan arsitektur antrean non-blocking saat beban puncak:
+1. **Unggah Berkas:** `POST /api/documents` (mengembalikan `document_id` dan `job_id`).
+2. **Ambil Hasil:** `GET /api/documents/{document_id}/result` (polling status hingga `"completed"`).
+
+---
+
+## 7. Panduan Menjalankan Cloudflare Tunnel (Pengujian Publik Terbatas)
 
 Untuk pengujian jarak jauh oleh rekan penguji tanpa memerlukan konfigurasi public IP atau router port-forwarding, Anda dapat memanfaatkan Cloudflare Tunnel sementara.
 
@@ -292,8 +378,7 @@ Untuk menutup akses publik kapan saja:
 
 ---
 
-## 7. Tabel Kode Status HTTP & Penanganan Kesalahan
-
+## 8. Tabel Kode Status HTTP & Format Respons Kesalahan
 | Kode Status | Arti | Penyebab & Solusi |
 |:---:|---|---|
 | **`200 OK`** | Berhasil | Dokumen berhasil diproses dan JSON dikembalikan. |
@@ -303,3 +388,34 @@ Untuk menutup akses publik kapan saja:
 | **`422 Unprocessable Entity`** | Validasi Skema Gagal | Parameter form wajib (`file`) tidak ditemukan dalam payload request. |
 | **`429 Too Many Requests`** | Batas Kuota Terlampaui | Melebihi ambang batas upload (30 req/menit/IP). Tunggu durasi yang tertera pada header `Retry-After`. |
 | **`500 Internal Server Error`** | Kesalahan Server | Terjadi kendala internal pada server saat mengekstrak teks. |
+
+### Format Payload Respons Kesalahan (JSON)
+
+FastAPI mengembalikan standar objek JSON bersarang pada properti `detail`:
+
+#### A. Kesalahan Pesan Tunggal (400, 401, 413, 429, 500)
+```json
+{
+  "detail": "Ukuran file melebihi batas maksimal 25 MB."
+}
+```
+Contoh pada kasus 401 Unauthorized:
+```json
+{
+  "detail": "Kunci API tidak valid atau belum terdaftar."
+}
+```
+
+#### B. Kesalahan Validasi Skema / Parameter Kurang (422 Unprocessable Entity)
+```json
+{
+  "detail": [
+    {
+      "type": "missing",
+      "loc": ["body", "file"],
+      "msg": "Field required",
+      "input": null
+    }
+  ]
+}
+```
