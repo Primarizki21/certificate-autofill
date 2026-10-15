@@ -137,13 +137,10 @@ LLM Call → Timeout (3x) → Circuit Breaker Open
 
 ## C. Extraction Robustness
 
-- [ ] **C1 — Document Preprocessing**
-  *Tambahkan preprocessing untuk meningkatkan kualitas OCR.*
+- [x] **C1 — In-Memory Direct Buffer & Lightweight OCR Preprocessing**
+  *Eliminasi disk I/O dan adopsi model transformer ultra-ringan.*
   - Prioritas: **Tinggi**
-  - Paper: Group D
-  - Detail: Deskew, denoise, contrast enhancement, binarization.
-    Integrasikan ke `ocr_fallback.py`.
-
+  - Detail: Direct buffer `PageImageBuffer` in-memory (`to_grayscale_ndarray()`), resolusi clamping 2500px, dan integrasi Indra OCR 1M-parameter ONNX CPU di `ocr_fallback.py` (latensi OCR terpangkas 7.5x ke 0.42s).
 - [ ] **C2 — Cross-Field Validation**
   *Validasi logis antar field.*
   - Prioritas: **Menengah**
@@ -169,13 +166,10 @@ LLM Call → Timeout (3x) → Circuit Breaker Open
 
 ## D. Performance & Scale
 
-- [ ] **D1 — Throughput Benchmark**
-  *Benchmark throughput pipeline untuk estimasi capacity.*
+- [x] **D1 — Latency & Throughput Benchmark**
+  *Benchmark throughput dan latensi pipeline per tier.*
   - Prioritas: **Tinggi**
-  - Paper: Group I
-  - Detail: Ukur latensi per tier (PyMuPDF, Docling, OCR, regex, mapper).
-    Hitung throughput maksimal per worker. Dokumentasikan.
-
+  - Detail: Terukur pada PERF-001 s/d PERF-005, EXP-OCR-LATENCY-001, EXP-OCR-INDRA-001, dan EXP-INDRA-LLM-001. Latensi OCR 0.42s, total e2e LLM pipeline 5.26s, live extraction 1.33s.
 - [ ] **D2 — Result Caching**
   *Cache hasil extraction berdasarkan content hash.*
   - Prioritas: **Menengah**
