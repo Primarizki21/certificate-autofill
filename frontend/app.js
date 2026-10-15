@@ -81,6 +81,8 @@ function bindEvents() {
   el('modalGroupFilter')?.addEventListener('change', filterAndRenderModalTable);
 }
 function applyStrictOrganizerRuleFromLevel() {
+  const currentVal = el('jenis_penyelenggara')?.value;
+  if (currentVal && currentVal.trim()) return;
   const tingkat = selectedOptionLabel(el('tingkat'));
   if (['Fakultas', 'Departemen/Program Studi', 'UKM'].includes(tingkat)) {
     ensureOptionAndSet(el('jenis_penyelenggara'), 'PTN di Indonesia');
@@ -283,7 +285,7 @@ function pollResult(documentId) {
       if (['completed', 'needs_review'].includes(data.status)) {
         state.pollTimer = null;
         applyResult(data);
-        applyStrictOrganizerRuleFromLevel();
+        // applyResult sets all fields from backend extraction; do not overwrite with hardcoded fallback.
         setLoading(false);
         setStatus(data.needs_review ? 'Pengisian form selesai otomatis. Silakan periksa kembali isian sebelum menyimpan.' : 'Pengisian form selesai otomatis.');
         return;

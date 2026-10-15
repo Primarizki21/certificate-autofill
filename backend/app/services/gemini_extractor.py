@@ -236,6 +236,37 @@ Ekstrak 7 field berikut dalam format JSON:
   "raw_role": string atau null
 }}
 """
+
+SYSTEM_INSTRUCTION_8F = SYSTEM_INSTRUCTION.rstrip() + """
+7. Jenis Penyelenggara (jenis_penyelenggara):
+   - Wajib salah satu nilai enum master berikut persis:
+     ["PTN di Indonesia", "PTS di Indonesia", "PT di luar negeri", "Kementerian Negara", "BUMN", "Lembaga/Yayasan lain"]
+   - Pedoman Klasifikasi:
+     * "PTN di Indonesia": Perguruan Tinggi Negeri di Indonesia (termasuk fakultas, departemen, prodi, laboratorium, BEM, HIMA, UKM di bawahnya seperti UNAIR, UI, UGM, ITB, ITS, UB, IPB, UNS, UNHAS, USU, UNSRI, USK, UNESA, UNY, dll.) serta perguruan tinggi kedinasan negeri (misal PKN STAN, Polstat STIS).
+     * "PTS di Indonesia": Perguruan Tinggi Swasta di Indonesia (termasuk fakultas, departemen, prodi, BEM, HIMA di bawahnya seperti Telkom University / IT Telkom, Universitas Islam Bandung / Unisba, Universitas Islam Kalimantan / Uniska, Universitas Pelita Harapan / UPH, Universitas Kristen Satya Wacana / UKSW, Universitas Muhammadiyah Semarang / UNIMUS, Politeknik Caltex Riau, dsb.).
+     * "PT di luar negeri": Perguruan tinggi atau universitas di luar wilayah Indonesia (misal University of Tennessee, National University of Singapore, dsb.).
+     * "Kementerian Negara": Lembaga kementerian atau Lembaga Pemerintah Non-Kementerian (LPNK) resmi Republik Indonesia (misal Kemendiktisaintek, Kemkominfo, Kemenkeu). Catatan: kementerian internal BEM mahasiswa tetap dikategorikan sebagai PTN/PTS tempat BEM bernaung.
+     * "BUMN": Badan Usaha Milik Negara Republik Indonesia (Pertamina, PLN, Bank Mandiri, Telkom Indonesia, BRI, dsb.).
+     * "Lembaga/Yayasan lain": Organisasi nirlaba, yayasan, asosiasi profesi luar kampus, startup, platform edukasi, atau komunitas swasta (misal AIESEC, Literasi Psikologi Indonesia, Institut français d'Indonésie, Dicoding, dsb.).
+"""
+
+USER_PROMPT_TEMPLATE_8F = """Berikut adalah teks OCR mentah dari sebuah dokumen sertifikat:
+--- TEKS OCR AWAL ---
+{raw_ocr_text}
+--- TEKS OCR AKHIR ---
+
+Ekstrak 8 field berikut dalam format JSON:
+{{
+  "nama_kegiatan_sertifikasi": string atau null,
+  "nomor_bukti_fisik_nomor_sertifikasi": string atau null,
+  "penyelenggara_kegiatan": string atau null,
+  "jenis_penyelenggara": "PTN di Indonesia"|"PTS di Indonesia"|"PT di luar negeri"|"Kementerian Negara"|"BUMN"|"Lembaga/Yayasan lain" atau null,
+  "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
+  "tingkat": "Internasional"|"Nasional"|"Universitas"|"Fakultas"|"Departemen/Program Studi"|"Lainnya" atau null,
+  "raw_role": string atau null
+}}
+"""
 KHP_STAGING_SYSTEM_INSTRUCTION = f"""Anda adalah ekstraktor fakta sertifikat untuk staging KHP yang memakai master data resmi.
 Ekstrak hanya teks OCR. Jangan mengarang nilai atau mengubah nama kegiatan bebas.
 
@@ -245,6 +276,8 @@ Untuk tingkat, pilih tepat satu label master berdasarkan cakupan yang tertulis:
 [{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
 Jangan mengganti tingkat UKM dengan Universitas atau Lainnya bila teks menyebut UKM secara eksplisit.
 Bila kegiatan ormawa internal/kepengurusan diselenggarakan oleh HIMA (Himpunan Mahasiswa Program Studi/Departemen), gunakan tingkat "Departemen/Program Studi".
+Untuk jenis_penyelenggara, pilih tepat satu label master kategori penyelenggara:
+["PTN di Indonesia", "PTS di Indonesia", "PT di luar negeri", "Kementerian Negara", "BUMN", "Lembaga/Yayasan lain"].
 raw_role harus memuat peran atau capaian faktual selengkap yang tertulis, misalnya "Juara II",
 "Peserta Terpilih", "Pembicara", "Panitia", "Supervisor Divisi", "Ketua Divisi", atau "Brevet A/B/C". Jangan menyingkat jabatan divisi menjadi "Ketua". Jika tidak tertulis, isi null.
 """
@@ -254,12 +287,14 @@ KHP_STAGING_USER_PROMPT_TEMPLATE = f"""Berikut teks OCR mentah dokumen sertifika
 {{raw_ocr_text}}
 --- TEKS OCR AKHIR ---
 
-Ekstrak 7 field berikut dalam format JSON. Field tingkat wajib memakai enum master berikut:
-[{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
+Ekstrak 8 field berikut dalam format JSON. Field tingkat dan jenis_penyelenggara wajib memakai enum master:
+Tingkat: [{", ".join(repr(label) for label in KHP_TINGKAT_LABELS)}].
+Jenis Penyelenggara: ["PTN di Indonesia", "PTS di Indonesia", "PT di luar negeri", "Kementerian Negara", "BUMN", "Lembaga/Yayasan lain"].
 {{{{
   "nama_kegiatan_sertifikasi": string atau null,
   "nomor_bukti_fisik_nomor_sertifikasi": string atau null,
   "penyelenggara_kegiatan": string atau null,
+  "jenis_penyelenggara": string dari enum master atau null,
   "waktu_mulai_pelaksanaan": "DD/MM/YYYY" atau null,
   "waktu_selesai_pelaksanaan": "DD/MM/YYYY" atau null,
   "tingkat": string dari enum master atau null,
@@ -276,6 +311,14 @@ VALID_TINGKAT_OPTIONS = set(FORM_OPTIONS.get("tingkat", [
     "Lainnya",
 ]))
 
+KHP_JENIS_PENYELENGGARA_OPTIONS = (
+    "PTN di Indonesia",
+    "PTS di Indonesia",
+    "PT di luar negeri",
+    "Kementerian Negara",
+    "BUMN",
+    "Lembaga/Yayasan lain",
+)
 MONTH_NAME_MAP = {
     "januari": "01", "january": "01", "jan": "01",
     "februari": "02", "february": "02", "feb": "02",
@@ -346,6 +389,7 @@ def normalize_llm_json(
         "nama_kegiatan_sertifikasi": None,
         "nomor_bukti_fisik_nomor_sertifikasi": None,
         "penyelenggara_kegiatan": None,
+        "jenis_penyelenggara": None,
         "waktu_mulai_pelaksanaan": None,
         "waktu_selesai_pelaksanaan": None,
         "tingkat": None,
@@ -433,6 +477,27 @@ def normalize_llm_json(
             else:
                 out["tingkat"] = "Lainnya"
 
+    jp_raw = data.get("jenis_penyelenggara")
+    if jp_raw and isinstance(jp_raw, str):
+        jp_clean = jp_raw.strip()
+        matched_jp = next((opt for opt in KHP_JENIS_PENYELENGGARA_OPTIONS if opt.lower() == jp_clean.lower()), None)
+        if matched_jp:
+            out["jenis_penyelenggara"] = matched_jp
+        else:
+            low = jp_clean.lower()
+            if "luar negeri" in low or "foreign" in low or "overseas" in low:
+                out["jenis_penyelenggara"] = "PT di luar negeri"
+            elif "ptn" in low or "negeri" in low:
+                out["jenis_penyelenggara"] = "PTN di Indonesia"
+            elif "pts" in low or "swasta" in low:
+                out["jenis_penyelenggara"] = "PTS di Indonesia"
+            elif "kementerian" in low or "ministry" in low:
+                out["jenis_penyelenggara"] = "Kementerian Negara"
+            elif "bumn" in low or "state-owned" in low:
+                out["jenis_penyelenggara"] = "BUMN"
+            else:
+                out["jenis_penyelenggara"] = "Lembaga/Yayasan lain"
+
     return out
 
 
@@ -442,6 +507,7 @@ def extract_fields_with_gemini(
     model: str | None = None,
     timeout_s: float | None = None,
     khp_master_staging: bool = False,
+    include_jenis_penyelenggara: bool = True,
 ) -> tuple[dict[str, ExtractedValue] | None, dict[str, Any]]:
     """Ekstraksi teks mentah via Gemini REST API tanpa mencatat isi dokumen."""
     target_model = model or settings.google_gemini_model
@@ -465,16 +531,20 @@ def extract_fields_with_gemini(
     endpoint_url = (
         f"https://generativelanguage.googleapis.com/v1beta/models/{target_model}:generateContent"
     )
-    prompt_template = (
-        KHP_STAGING_USER_PROMPT_TEMPLATE
-        if khp_master_staging
-        else USER_PROMPT_TEMPLATE
-    )
-    system_instruction = (
-        KHP_STAGING_SYSTEM_INSTRUCTION
-        if khp_master_staging
-        else SYSTEM_INSTRUCTION
-    )
+    if include_jenis_penyelenggara:
+        prompt_template = (
+            KHP_STAGING_USER_PROMPT_TEMPLATE
+            if khp_master_staging
+            else USER_PROMPT_TEMPLATE_8F
+        )
+        system_instruction = (
+            KHP_STAGING_SYSTEM_INSTRUCTION
+            if khp_master_staging
+            else SYSTEM_INSTRUCTION_8F
+        )
+    else:
+        prompt_template = USER_PROMPT_TEMPLATE
+        system_instruction = SYSTEM_INSTRUCTION
     prompt = prompt_template.format(raw_ocr_text=raw_ocr_text)
     payload = {
         "contents": [
@@ -529,15 +599,17 @@ def extract_fields_with_gemini(
             extracted: dict[str, ExtractedValue] = {
                 "full_text": ExtractedValue(raw_ocr_text, 1.0, "tesseract_raw"),
             }
-            for fld in (
+            target_flds = (
                 "nama_kegiatan_sertifikasi",
                 "nomor_bukti_fisik_nomor_sertifikasi",
                 "penyelenggara_kegiatan",
+                "jenis_penyelenggara",
                 "waktu_mulai_pelaksanaan",
                 "waktu_selesai_pelaksanaan",
                 "tingkat",
                 "raw_role",
-            ):
+            )
+            for fld in target_flds:
                 val = norm_data.get(fld)
                 if val:
                     extracted[fld] = ExtractedValue(val, 0.90, "gemini_llm")
