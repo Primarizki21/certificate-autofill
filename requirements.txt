@@ -11,3 +11,4 @@ pytesseract
 Pillow
 rapidocr-onnxruntime
 openpyxl
+indra-ocr

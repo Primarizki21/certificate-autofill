@@ -39,6 +39,12 @@ class Settings:
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
+    # EXP-INDRA-LLM-001: Indra OCR (datalab-to/indra-ocr, 1M param ONNX CPU).
+    # Default TRUE untuk memangkas latensi OCR (~0.4s vs 3.5s). Jika FALSE,
+    # fallback ke RapidOCR+Tesseract klasik.
+    enable_indra_ocr: bool = os.getenv("ENABLE_INDRA_OCR", "true").lower() == "true"
+    primary_ocr_engine: str = os.getenv("PRIMARY_OCR_ENGINE", "indra").lower()
+    indra_ocr_threads: int = int(os.getenv("INDRA_OCR_THREADS", "4"))
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
     # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur
     # lazy (nomor hilang) = 0/18 gain; varian penuh ~+2-10s/cert utk +3pt.

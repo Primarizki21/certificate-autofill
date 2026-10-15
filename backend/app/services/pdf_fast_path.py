@@ -46,6 +46,13 @@ class PageImageBuffer:
             return arr[:, :, ::-1]
         return arr
 
+    def to_grayscale_ndarray(self) -> Any:
+        """In-memory 2D uint8 grayscale ndarray for Indra OCR."""
+        import numpy as np
+        if self.mode == "L":
+            return np.frombuffer(self.samples, dtype=np.uint8).reshape(self.height, self.width)
+        return np.array(self.to_pil("L"))
+
 
 def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
     if not pdf_bytes.startswith(b"%PDF-"):

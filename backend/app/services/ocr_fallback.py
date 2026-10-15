@@ -19,6 +19,18 @@ def extract_text_with_ocr(pdf_bytes: bytes) -> str:
     # Pakai render direct buffer in-memory untuk mengeliminasi overhead encode/decode PNG di RAM
     page_buffers = render_pdf_pages_to_image_buffers(pdf_bytes, zoom=ZOOM)
     all_text: list[str] = []
+    if settings.enable_indra_ocr:
+        indra_engine = _load_indra_ocr()
+        if indra_engine is not None:
+            indra_pages: list[str] = []
+            for buf in page_buffers:
+                t = _ocr_with_indra(indra_engine, buf.to_grayscale_ndarray())
+                if t.strip():
+                    indra_pages.append(t)
+            full_indra = "\n".join(indra_pages).strip()
+            if full_indra:
+                return full_indra
+
 
     rapidocr_engine = _load_rapidocr()
     for buf in page_buffers:
@@ -183,6 +195,33 @@ def _rapidocr_thread_kwargs() -> dict[str, int]:
     if threads == 0:
         threads = _cgroup_cpu_quota() or os.cpu_count() or 1
     return {"intra_op_num_threads": threads, "inter_op_num_threads": 1}
+
+_INDRA_INSTANCE = None
+_INDRA_INITIALIZED = False
+
+
+def _load_indra_ocr():
+    """Cache singleton engine Indra OCR agar model ONNX tidak dimuat ulang per dokumen."""
+    global _INDRA_INSTANCE, _INDRA_INITIALIZED
+    if _INDRA_INITIALIZED:
+        return _INDRA_INSTANCE
+    try:
+        import indra_ocr
+        threads = settings.indra_ocr_threads or 4
+        _INDRA_INSTANCE = indra_ocr.load(threads=threads)
+    except Exception:
+        _INDRA_INSTANCE = None
+    _INDRA_INITIALIZED = True
+    return _INDRA_INSTANCE
+
+
+def _ocr_with_indra(engine, gray_ndarray) -> str:
+    try:
+        page = engine.ocr(gray_ndarray)
+        return (page.text or "").strip()
+    except Exception:
+        return ""
+
 
 
 def _load_rapidocr():
