@@ -21,8 +21,8 @@ Endpoint ini dilindungi oleh mekanisme autentikasi **API Key**.
 ### Spesifikasi Kunci (Key Format)
 * API Key diawali dengan awalan (*prefix*) **`sk-`** atau **`sk_`** diikuti token acak alfanumerik aman (minimal 16 karakter).
 * Contoh format yang valid (placeholder dokumentasi):
-  * `sk-test-sample-key-for-development-01`
-  * `sk_prod_sample_key_for_production_01`
+  * `sk-<YOUR_DEV_API_KEY>`
+  * `sk_<YOUR_PROD_API_KEY>`
 ### Cara Mengirimkan API Key dari Client
 Klien dapat mengirimkan API Key melalui salah satu dari dua cara berikut:
 
