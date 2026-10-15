@@ -44,7 +44,7 @@ class Settings:
     # fallback ke RapidOCR+Tesseract klasik.
     enable_indra_ocr: bool = os.getenv("ENABLE_INDRA_OCR", "true").lower() == "true"
     primary_ocr_engine: str = os.getenv("PRIMARY_OCR_ENGINE", "indra").lower()
-    indra_ocr_threads: int = int(os.getenv("INDRA_OCR_THREADS", "4"))
+    indra_ocr_threads: int = int(os.getenv("INDRA_OCR_THREADS", "2"))
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
     # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur
     # lazy (nomor hilang) = 0/18 gain; varian penuh ~+2-10s/cert utk +3pt.
