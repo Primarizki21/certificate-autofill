@@ -31,6 +31,13 @@ def test_normalize_llm_json_fuzzy_variations():
     assert normalize_llm_json({"jenis_penyelenggara": "yayasan"})["jenis_penyelenggara"] == "Lembaga/Yayasan lain"
 
 
+def test_normalize_llm_json_null_and_empty():
+    assert normalize_llm_json({"jenis_penyelenggara": None})["jenis_penyelenggara"] is None
+    assert normalize_llm_json({"jenis_penyelenggara": "null"})["jenis_penyelenggara"] is None
+    assert normalize_llm_json({"jenis_penyelenggara": "-"})["jenis_penyelenggara"] is None
+    assert normalize_llm_json({"jenis_penyelenggara": ""})["jenis_penyelenggara"] is None
+
+
 def test_form_mapper_prioritizes_gemini_extracted_value():
     extracted = {
         "nama_kegiatan_sertifikasi": ExtractedValue("Data Slayer 2.0", 0.95, "gemini_llm"),
@@ -60,3 +67,15 @@ def test_form_mapper_offline_safety_net_handles_external_ptn_and_pts():
     # Test PKN STAN
     jp_stan = map_jenis_penyelenggara("Teks sertifikat", tingkat="Nasional", organizer="Politeknik Keuangan Negara STAN")
     assert jp_stan == "PTN di Indonesia"
+
+def test_form_mapper_fallback_when_gemini_returns_null():
+    extracted = {
+        "full_text": ExtractedValue("UNIVERSITAS AIRLANGGA", 1.0, "ocr"),
+        "nama_kegiatan_sertifikasi": ExtractedValue("Seminar Nasional", 0.95, "gemini_llm"),
+        "penyelenggara_kegiatan": ExtractedValue("IPB University", 0.95, "gemini_llm"),
+        "tingkat": ExtractedValue("Nasional", 0.90, "gemini_llm"),
+        "jenis_penyelenggara": ExtractedValue(None, 0.0, "gemini_llm"),
+    }
+    mapped = map_fields_to_form(extracted, tahun_akademik="2024/2025", bukti_fisik="Sertifikat")
+    assert mapped["jenis_penyelenggara"].value == "PTN di Indonesia"
+    assert mapped["jenis_penyelenggara"].source == "rule_mapper_strict"

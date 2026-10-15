@@ -256,23 +256,24 @@ def normalize_parsed_output(parsed: dict[str, Any] | None) -> dict[str, str | No
     jp_raw = parsed.get("jenis_penyelenggara")
     if jp_raw and isinstance(jp_raw, str):
         jp_clean = jp_raw.strip()
-        matched_jp = next((opt for opt in VALID_JP_OPTIONS if opt.lower() == jp_clean.lower()), None)
-        if matched_jp:
-            out["jenis_penyelenggara"] = matched_jp
-        else:
-            low = jp_clean.lower()
-            if "luar negeri" in low or "foreign" in low or "overseas" in low:
-                out["jenis_penyelenggara"] = "PT di luar negeri"
-            elif "ptn" in low or "negeri" in low:
-                out["jenis_penyelenggara"] = "PTN di Indonesia"
-            elif "pts" in low or "swasta" in low:
-                out["jenis_penyelenggara"] = "PTS di Indonesia"
-            elif "kementerian" in low or "ministry" in low:
-                out["jenis_penyelenggara"] = "Kementerian Negara"
-            elif "bumn" in low or "state-owned" in low:
-                out["jenis_penyelenggara"] = "BUMN"
+        if jp_clean and jp_clean.lower() not in ("null", "none", "-", ""):
+            matched_jp = next((opt for opt in VALID_JP_OPTIONS if opt.lower() == jp_clean.lower()), None)
+            if matched_jp:
+                out["jenis_penyelenggara"] = matched_jp
             else:
-                out["jenis_penyelenggara"] = "Lembaga/Yayasan lain"
+                low = jp_clean.lower()
+                if "luar negeri" in low or "foreign" in low or "overseas" in low:
+                    out["jenis_penyelenggara"] = "PT di luar negeri"
+                elif "ptn" in low or "negeri" in low:
+                    out["jenis_penyelenggara"] = "PTN di Indonesia"
+                elif "pts" in low or "swasta" in low:
+                    out["jenis_penyelenggara"] = "PTS di Indonesia"
+                elif "kementerian" in low or "ministry" in low:
+                    out["jenis_penyelenggara"] = "Kementerian Negara"
+                elif "bumn" in low or "state-owned" in low:
+                    out["jenis_penyelenggara"] = "BUMN"
+                else:
+                    out["jenis_penyelenggara"] = "Lembaga/Yayasan lain"
 
     return out
 

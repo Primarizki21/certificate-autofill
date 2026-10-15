@@ -278,6 +278,13 @@ Jangan mengganti tingkat UKM dengan Universitas atau Lainnya bila teks menyebut 
 Bila kegiatan ormawa internal/kepengurusan diselenggarakan oleh HIMA (Himpunan Mahasiswa Program Studi/Departemen), gunakan tingkat "Departemen/Program Studi".
 Untuk jenis_penyelenggara, pilih tepat satu label master kategori penyelenggara:
 ["PTN di Indonesia", "PTS di Indonesia", "PT di luar negeri", "Kementerian Negara", "BUMN", "Lembaga/Yayasan lain"].
+Pedoman:
+- "PTN di Indonesia": Perguruan Tinggi Negeri di Indonesia (termasuk fakultas, departemen, prodi, BEM, HIMA, UKM) serta perguruan tinggi kedinasan negeri (misal PKN STAN, STIS).
+- "PTS di Indonesia": Perguruan Tinggi Swasta di Indonesia (termasuk fakultas, departemen, prodi, BEM, HIMA, misal Telkom University, Unisba, Uniska, UPH, UKSW, UNIMUS, Politeknik Caltex Riau).
+- "PT di luar negeri": Universitas atau perguruan tinggi di luar wilayah Indonesia.
+- "Kementerian Negara": Lembaga kementerian/LPNK resmi Republik Indonesia.
+- "BUMN": Badan Usaha Milik Negara Republik Indonesia.
+- "Lembaga/Yayasan lain": Organisasi nirlaba, yayasan, asosiasi profesi luar kampus, startup, platform edukasi, atau komunitas swasta.
 raw_role harus memuat peran atau capaian faktual selengkap yang tertulis, misalnya "Juara II",
 "Peserta Terpilih", "Pembicara", "Panitia", "Supervisor Divisi", "Ketua Divisi", atau "Brevet A/B/C". Jangan menyingkat jabatan divisi menjadi "Ketua". Jika tidak tertulis, isi null.
 """
@@ -480,24 +487,24 @@ def normalize_llm_json(
     jp_raw = data.get("jenis_penyelenggara")
     if jp_raw and isinstance(jp_raw, str):
         jp_clean = jp_raw.strip()
-        matched_jp = next((opt for opt in KHP_JENIS_PENYELENGGARA_OPTIONS if opt.lower() == jp_clean.lower()), None)
-        if matched_jp:
-            out["jenis_penyelenggara"] = matched_jp
-        else:
-            low = jp_clean.lower()
-            if "luar negeri" in low or "foreign" in low or "overseas" in low:
-                out["jenis_penyelenggara"] = "PT di luar negeri"
-            elif "ptn" in low or "negeri" in low:
-                out["jenis_penyelenggara"] = "PTN di Indonesia"
-            elif "pts" in low or "swasta" in low:
-                out["jenis_penyelenggara"] = "PTS di Indonesia"
-            elif "kementerian" in low or "ministry" in low:
-                out["jenis_penyelenggara"] = "Kementerian Negara"
-            elif "bumn" in low or "state-owned" in low:
-                out["jenis_penyelenggara"] = "BUMN"
+        if jp_clean and jp_clean.lower() not in ("null", "none", "-", ""):
+            matched_jp = next((opt for opt in KHP_JENIS_PENYELENGGARA_OPTIONS if opt.lower() == jp_clean.lower()), None)
+            if matched_jp:
+                out["jenis_penyelenggara"] = matched_jp
             else:
-                out["jenis_penyelenggara"] = "Lembaga/Yayasan lain"
-
+                low = jp_clean.lower()
+                if "luar negeri" in low or "foreign" in low or "overseas" in low:
+                    out["jenis_penyelenggara"] = "PT di luar negeri"
+                elif "ptn" in low or "negeri" in low:
+                    out["jenis_penyelenggara"] = "PTN di Indonesia"
+                elif "pts" in low or "swasta" in low:
+                    out["jenis_penyelenggara"] = "PTS di Indonesia"
+                elif "kementerian" in low or "ministry" in low:
+                    out["jenis_penyelenggara"] = "Kementerian Negara"
+                elif "bumn" in low or "state-owned" in low:
+                    out["jenis_penyelenggara"] = "BUMN"
+                else:
+                    out["jenis_penyelenggara"] = "Lembaga/Yayasan lain"
     return out
 
 
