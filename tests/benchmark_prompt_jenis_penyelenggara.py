@@ -261,12 +261,12 @@ def normalize_parsed_output(parsed: dict[str, Any] | None) -> dict[str, str | No
             out["jenis_penyelenggara"] = matched_jp
         else:
             low = jp_clean.lower()
-            if "ptn" in low or "negeri" in low:
+            if "luar negeri" in low or "foreign" in low or "overseas" in low:
+                out["jenis_penyelenggara"] = "PT di luar negeri"
+            elif "ptn" in low or "negeri" in low:
                 out["jenis_penyelenggara"] = "PTN di Indonesia"
             elif "pts" in low or "swasta" in low:
                 out["jenis_penyelenggara"] = "PTS di Indonesia"
-            elif "luar negeri" in low or "foreign" in low or "overseas" in low:
-                out["jenis_penyelenggara"] = "PT di luar negeri"
             elif "kementerian" in low or "ministry" in low:
                 out["jenis_penyelenggara"] = "Kementerian Negara"
             elif "bumn" in low or "state-owned" in low:
