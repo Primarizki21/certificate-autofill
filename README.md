@@ -132,7 +132,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini dengan prompt V2 Scope-Aware |
 | `ENABLE_INDRA_OCR` | `true` | Mengaktifkan model transformator ultra-ringan 1M-parameter Indra OCR sebagai primary engine in-memory |
 | `PRIMARY_OCR_ENGINE` | `indra` | Engine OCR utama (`indra`, `rapidocr`, `tesseract`) |
-| `INDRA_OCR_THREADS` | `4` | Jumlah thread inferensi ONNX Runtime CPU untuk Indra OCR |
+| `INDRA_OCR_THREADS` | `2` | Jumlah thread inferensi ONNX Runtime CPU untuk Indra OCR (sweet-spot 12 vCPU) |
 | `GOOGLE_API_KEY` | *(kosong)* | Kunci Google AI Studio API Anda |
 | `GOOGLE_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model Gemini yang digunakan (`gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`) |
 | `GEMINI_TIMEOUT_SECONDS` | `30.0` | Batas waktu timeout pemanggilan API Gemini sebelum fallback |
@@ -148,7 +148,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
-| `RATE_LIMIT_PER_MINUTE` | `30` | Batas maksimum unggahan per menit per IP address |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per IP address (standar 1 req/detik) |
 | `MAX_PDF_PAGES` | `3` | Batas maksimum jumlah halaman file PDF sertifikat |
 | `MAX_IMAGE_PIXELS` | `60000000` | Batas aman piksel gambar (Pillow Decompression Bomb safeguard, 60 MP) |
 | `MAX_IMAGE_DIMENSION` | `8000` | Dimensi panjang/lebar piksel maksimum gambar (anti-pixel flood) |
@@ -211,7 +211,7 @@ Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum doku
 
 5. **Rate Limiting (Sliding Window)**:
    - Endpoint upload dilindungi pembatas laju *in-memory* berbasis IP dengan jendela geser (*sliding window*).
-   - Default: **30 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 30`). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+   - Default: **60 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
 ---
 
 ## Hasil Evaluasi & Benchmark
@@ -352,7 +352,7 @@ Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 
 | mDeBERTa-v3-base Fine-Tuned | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
 | IndoBERT Pre-trained v1 (Zero-Shot) | 12.80% | 24.50% | — | Baseline tanpa penyesuaian domain sertifikat |
 
-> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Tesseract sebagai sumber OCR dan extractor produksi; GLiNER serta model NER tidak dipanggil.
+> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Indra OCR sebagai primary in-memory engine (dengan RapidOCR+Tesseract sebagai fallback otomatis) dan extractor produksi; GLiNER serta model NER tidak dipanggil.
 
 ---
 
@@ -385,7 +385,7 @@ uv run pytest tests/ -v
 ### 2. Otomasi CI/CD (GitHub Actions)
 Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
 - **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
-- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 410 unit tests secara terisolasi.
+- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 432 unit tests secara terisolasi.
 
 
 ### 3. Pengujian Beban & Profiling Latensi (Stress Testing)
@@ -395,9 +395,10 @@ Sistem menyediakan perangkat pengujian beban asinkron untuk mengukur persentil l
 # Pengujian beban berkas tunggal / kelompok (contoh: 50 dokumen, 5 koneksi simultan)
 uv run python scripts/stress_test.py --total-requests 50 --concurrency 5
 
-# Pengujian bertahap matriks terpadu (Matriks A: Ingestion, B: Worker Scaling, C: Peak 1.000)
-uv run python scripts/run_stress_matrix.py --scenarios A1 A2 B1 B2
+# Pengujian bertahap matriks terpadu (Matriks C: Saturasi Konkurensi C-05..C-40, W: Skalabilitas Worker W-01..W-04)
+uv run python scripts/run_stress_matrix.py --scenarios C-05 C-10 W-01 W-02
 ```
+
 Seluruh artefak hasil uji beban (`summary.json`, `latencies.csv`, `report.md`) tersimpan terisolasi di direktori `docs/stress_test/`.
 ---
 

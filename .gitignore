@@ -11,6 +11,8 @@ wheels/
 
 # CodeGraph local index (regenerated, machine-local)
 .codegraph/
+# OMP local project configuration and secrets
+.omp/
 
 # Downloaded arXiv PDFs
 papers/

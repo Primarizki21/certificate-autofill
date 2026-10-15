@@ -55,7 +55,7 @@ Jika API dipanggil dari aplikasi berbasis browser di domain berbeda:
 
 ### Header Respons Transparansi Rate Limit
 Setiap request ke endpoint ekstraksi dan upload mengembalikan header transparansi kuota:
-* **`X-RateLimit-Limit`**: Kuota maksimal per IP (default: 30 request/menit).
+* **`X-RateLimit-Limit`**: Kuota maksimal per IP (default: 60 request/menit, standar 1 req/detik).
 * **`X-RateLimit-Remaining`**: Sisa kuota request yang masih dapat digunakan.
 * **`X-RateLimit-Reset`**: Durasi jendela waktu sliding window (dalam detik).
 ---
@@ -386,7 +386,7 @@ Untuk menutup akses publik kapan saja:
 | **`401 Unauthorized`** | Kredensial Salah / Hilang | Header `X-API-Key` atau Bearer token tidak disertakan atau nilai API Key salah. |
 | **`413 Payload Too Large`** | Ukuran File Terlalu Besar | Ukuran dokumen melebihi batas (default: 25 MB). Kompresi dokumen sebelum mengunggah jika melebihi batas. |
 | **`422 Unprocessable Entity`** | Validasi Skema Gagal | Parameter form wajib (`file`) tidak ditemukan dalam payload request. |
-| **`429 Too Many Requests`** | Batas Kuota Terlampaui | Melebihi ambang batas upload (30 req/menit/IP). Tunggu durasi yang tertera pada header `Retry-After`. |
+| **`429 Too Many Requests`** | Batas Kuota Terlampaui | Melebihi ambang batas upload (60 req/menit/IP). Tunggu durasi yang tertera pada header `Retry-After`. |
 | **`500 Internal Server Error`** | Kesalahan Server | Terjadi kendala internal pada server saat mengekstrak teks. |
 
 ### Format Payload Respons Kesalahan (JSON)
