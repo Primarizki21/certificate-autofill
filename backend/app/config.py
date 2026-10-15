@@ -31,7 +31,7 @@ class Settings:
     auto_downscale_threshold: int = int(os.getenv("AUTO_DOWNSCALE_THRESHOLD", "3500"))
     auto_downscale_target: int = int(os.getenv("AUTO_DOWNSCALE_TARGET", "2500"))
     max_pdf_canvas_dimension: int = int(os.getenv("MAX_PDF_CANVAS_DIMENSION", "5000"))
-    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "30"))
+    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
     upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
     temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
