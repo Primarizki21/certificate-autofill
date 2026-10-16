@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import io
+import logging
 from typing import Any
 import fitz
 from PIL import Image
 
+logger = logging.getLogger("certificate-fast-path")
 
 @dataclass
 class FastPathResult:
@@ -99,9 +101,9 @@ def render_pdf_pages_to_image_buffers(
             limit = 3
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    except Exception:
+    except Exception as exc:
+        logger.warning("Gagal membuka stream dokumen PDF untuk render buffer: %s", exc)
         return []
-
     rendered: list[PageImageBuffer] = []
     try:
         for idx, page in enumerate(doc):

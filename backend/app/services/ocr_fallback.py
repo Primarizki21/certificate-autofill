@@ -1,3 +1,4 @@
+import logging
 import os
 import re
 from io import BytesIO
@@ -13,6 +14,8 @@ ZOOM = 3.0  # render halaman (konsisten dgn eksperimen)
 CRENDER_ZOOM = 6.0  # NC-001: re-render region nomor di zoom tinggi (piksel nyata)
 _KEYWORD_RE = re.compile(r"\bNOMOR\b|\bNO\.\b|\bNUMBER\b", re.I)
 _NUMBER_LINE_RE = re.compile(r"[0-9]{1,6}\s*/\s*[A-Z0-9]", re.I)
+logger = logging.getLogger("certificate-ocr-pipeline")
+
 
 
 def extract_text_with_ocr(pdf_bytes: bytes) -> str:
@@ -207,9 +210,11 @@ def _load_indra_ocr():
         return _INDRA_INSTANCE
     try:
         import indra_ocr
-        threads = settings.indra_ocr_threads or 4
+        threads = settings.indra_ocr_threads or 2
         _INDRA_INSTANCE = indra_ocr.load(threads=threads)
-    except Exception:
+        logger.info("Indra OCR engine berhasil dimuat (threads=%d).", threads)
+    except Exception as exc:
+        logger.warning("Gagal memuat engine Indra OCR: %s. Mengalihkan ke secondary OCR engine.", exc)
         _INDRA_INSTANCE = None
     _INDRA_INITIALIZED = True
     return _INDRA_INSTANCE
@@ -219,7 +224,8 @@ def _ocr_with_indra(engine, gray_ndarray) -> str:
     try:
         page = engine.ocr(gray_ndarray)
         return (page.text or "").strip()
-    except Exception:
+    except Exception as exc:
+        logger.warning("Kegagalan inferensi halaman Indra OCR: %s", exc)
         return ""
 
 
@@ -232,11 +238,14 @@ def _load_rapidocr():
     try:
         from rapidocr_onnxruntime import RapidOCR
         _RAPIDOCR_INSTANCE = RapidOCR(**_rapidocr_thread_kwargs())
-    except Exception:
+        logger.info("RapidOCR engine berhasil dimuat (rapidocr-onnxruntime).")
+    except Exception as exc:
         try:
             from rapidocr import RapidOCR
             _RAPIDOCR_INSTANCE = RapidOCR()
-        except Exception:
+            logger.info("RapidOCR engine berhasil dimuat (rapidocr fallback).")
+        except Exception as exc2:
+            logger.warning("Gagal memuat RapidOCR engine: %s / %s", exc, exc2)
             _RAPIDOCR_INSTANCE = None
     _RAPIDOCR_INITIALIZED = True
     return _RAPIDOCR_INSTANCE
@@ -251,7 +260,8 @@ def _ocr_with_rapidocr(engine, image_input) -> str:
             if len(item) >= 2:
                 lines.append(str(item[1]))
         return "\n".join(lines)
-    except Exception:
+    except Exception as exc:
+        logger.warning("Kegagalan inferensi RapidOCR: %s", exc)
         return ""
 
 
@@ -277,5 +287,6 @@ def _ocr_with_tesseract(image_input) -> str:
         finally:
             if need_close:
                 image.close()
-    except Exception:
+    except Exception as exc:
+        logger.warning("Kegagalan inferensi Tesseract OCR: %s", exc)
         return ""
