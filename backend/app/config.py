@@ -31,7 +31,7 @@ class Settings:
     auto_downscale_threshold: int = int(os.getenv("AUTO_DOWNSCALE_THRESHOLD", "3500"))
     auto_downscale_target: int = int(os.getenv("AUTO_DOWNSCALE_TARGET", "2500"))
     max_pdf_canvas_dimension: int = int(os.getenv("MAX_PDF_CANVAS_DIMENSION", "5000"))
-    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "30"))
+    rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
     upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
     temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
@@ -39,6 +39,12 @@ class Settings:
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
+    # EXP-INDRA-LLM-001: Indra OCR (datalab-to/indra-ocr, 1M param ONNX CPU).
+    # Default TRUE untuk memangkas latensi OCR (~0.4s vs 3.5s). Jika FALSE,
+    # fallback ke RapidOCR+Tesseract klasik.
+    enable_indra_ocr: bool = os.getenv("ENABLE_INDRA_OCR", "true").lower() == "true"
+    primary_ocr_engine: str = os.getenv("PRIMARY_OCR_ENGINE", "indra").lower()
+    indra_ocr_threads: int = int(os.getenv("INDRA_OCR_THREADS", "2"))
     # NC-001 (PASS eksperimen): 2-pass nomor — re-OCR region nomor (re-render
     # PDF zoom tinggi), prepend bila beda dari baseline. DEFAULT FALSE: diukur
     # lazy (nomor hilang) = 0/18 gain; varian penuh ~+2-10s/cert utk +3pt.

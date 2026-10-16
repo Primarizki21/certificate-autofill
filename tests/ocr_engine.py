@@ -177,6 +177,26 @@ def ocr_doctr(image_bytes: bytes) -> str:
 def _read_image(image_bytes: bytes) -> Image.Image:
     return Image.open(BytesIO(image_bytes)).convert("RGB")
 
+_indra_engine = None
+
+
+def _get_indra():
+    global _indra_engine
+    if _indra_engine is None:
+        import indra_ocr
+        _indra_engine = indra_ocr.load(threads=4)
+    return _indra_engine
+
+
+def ocr_indra(image_bytes: bytes) -> str:
+    """Indra OCR (datalab-to/indra-ocr) — 1M parameter lightweight CPU OCR."""
+    import numpy as np
+    engine = _get_indra()
+    img = _read_image(image_bytes).convert("L")
+    gray = np.array(img)
+    page = engine.ocr(gray)
+    return page.text.strip()
+
 
 def ocr_rapid(image_bytes: bytes) -> str:
     engine = _get_rapid()
@@ -332,6 +352,7 @@ ENGINES: dict[str, Callable[[bytes], str]] = {
     "paddle": ocr_paddle,
     "easy": ocr_easy,
     "doctr": ocr_doctr,
+    "indra": ocr_indra,
 }
 
 
@@ -339,6 +360,44 @@ def ocr_engine(key: str, image_bytes: bytes) -> str:
     """OCR satu halaman PNG. `rapid_tess` = merge rapid + tess (baseline produksi)."""
     if key == "rapid_tess":
         parts = []
+        r = ocr_rapid(image_bytes)
+        if r.strip():
+            parts.append(r)
+        if _tesseract_available():
+            try:
+                t = ocr_tess(image_bytes)
+            except Exception:
+                t = ""
+            if t.strip():
+                parts.append(t)
+        return merge_unique_lines(parts)
+    if key == "indra_tess":
+        parts = []
+        i = ocr_indra(image_bytes)
+        if i.strip():
+            parts.append(i)
+        if _tesseract_available():
+            try:
+                t = ocr_tess(image_bytes)
+            except Exception:
+                t = ""
+            if t.strip():
+                parts.append(t)
+        return merge_unique_lines(parts)
+    if key == "indra_rapid":
+        parts = []
+        i = ocr_indra(image_bytes)
+        if i.strip():
+            parts.append(i)
+        r = ocr_rapid(image_bytes)
+        if r.strip():
+            parts.append(r)
+        return merge_unique_lines(parts)
+    if key in ("trio", "indra_rapid_tess"):
+        parts = []
+        i = ocr_indra(image_bytes)
+        if i.strip():
+            parts.append(i)
         r = ocr_rapid(image_bytes)
         if r.strip():
             parts.append(r)

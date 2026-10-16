@@ -46,6 +46,8 @@ Pastikan variabel utama terkonfigurasi pada shell:
 export APP_ENV=development
 export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 export PROCESSING_MODE=background
+export ENABLE_INDRA_OCR=true
+export INDRA_OCR_THREADS=2
 export ENABLE_TESSERACT_GEMINI=true
 export ENABLE_KHP_MASTER_STAGING=true
 export ENABLE_COMBINED_V4_2=true
@@ -57,6 +59,8 @@ export GOOGLE_API_KEY=""  # Isi dengan API key Google AI Studio Anda
 $env:APP_ENV="development"
 $env:DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 $env:PROCESSING_MODE="background"
+$env:ENABLE_INDRA_OCR="true"
+$env:INDRA_OCR_THREADS="2"
 $env:ENABLE_TESSERACT_GEMINI="true"
 $env:ENABLE_KHP_MASTER_STAGING="true"
 $env:ENABLE_COMBINED_V4_2="true"

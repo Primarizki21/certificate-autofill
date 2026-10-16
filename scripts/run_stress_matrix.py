@@ -28,72 +28,71 @@ import httpx
 from scripts.stress_test import run_stress_test
 
 MATRIX_SCENARIOS: dict[str, dict[str, Any]] = {
-    # Matriks A: Ingestion Concurrency Sweep (W=2 konstan, N=100 konstan)
-    "A1": {
-        "matrix": "A",
-        "name": "Ingestion Baseline (C=1)",
-        "docs": 100,
-        "concurrency": 1,
-        "workers": 2,
-        "description": "Latensi upload sekuensial baseline (concurrency 1)",
-    },
-    "A2": {
-        "matrix": "A",
-        "name": "Ingestion Moderate (C=5)",
+    # Bagian 1: Concurrency Saturation Sweep (W=4 Worker konstan, N=100)
+    "C-05": {
+        "matrix": "C",
+        "name": "Concurrency Baseline (C=5)",
         "docs": 100,
         "concurrency": 5,
-        "workers": 2,
-        "description": "Perilaku koneksi simultan 5 klien",
+        "workers": 4,
+        "description": "Baseline konkurensi moderat 5 klien (W=4)",
     },
-    "A3": {
-        "matrix": "A",
-        "name": "Ingestion Busy (C=10)",
+    "C-10": {
+        "matrix": "C",
+        "name": "Concurrency Busy (C=10)",
         "docs": 100,
         "concurrency": 10,
-        "workers": 2,
-        "description": "Batas normal beban sibuk 10 klien simultan",
+        "workers": 4,
+        "description": "Beban sibuk normal 10 klien simultan (W=4)",
     },
-    "A4": {
-        "matrix": "A",
-        "name": "Ingestion Peak (C=15)",
+    "C-20": {
+        "matrix": "C",
+        "name": "Concurrency Saturation (C=20)",
         "docs": 100,
-        "concurrency": 15,
-        "workers": 2,
-        "description": "Batas puncak upload API 15 klien simultan",
+        "concurrency": 20,
+        "workers": 4,
+        "description": "Titik saturasi 20 klien simultan (W=4)",
     },
-    # Matriks B: Worker Horizontal Scaling Sweep (C=10 konstan, N=100 konstan)
-    "B1": {
-        "matrix": "B",
+    "C-30": {
+        "matrix": "C",
+        "name": "Concurrency Stress (C=30)",
+        "docs": 100,
+        "concurrency": 30,
+        "workers": 4,
+        "description": "Batas stres 30 klien simultan (W=4)",
+    },
+    "C-40": {
+        "matrix": "C",
+        "name": "Concurrency Pool Boundary (C=40)",
+        "docs": 100,
+        "concurrency": 40,
+        "workers": 4,
+        "description": "Batas pool DB 20+20 (40 klien simultan, W=4)",
+    },
+    # Bagian 2: Worker Scalability Check (C=15 Konstan, N=100)
+    "W-01": {
+        "matrix": "W",
         "name": "Scale Worker Single (W=1)",
         "docs": 100,
-        "concurrency": 10,
+        "concurrency": 15,
         "workers": 1,
-        "description": "Throughput baseline pemrosesan dengan 1 kontainer worker",
+        "description": "Throughput baseline dengan 1 kontainer worker (C=15)",
     },
-    "B2": {
-        "matrix": "B",
+    "W-02": {
+        "matrix": "W",
         "name": "Scale Worker Dual (W=2)",
         "docs": 100,
-        "concurrency": 10,
+        "concurrency": 15,
         "workers": 2,
-        "description": "Peningkatan throughput pemrosesan dengan 2 kontainer worker",
+        "description": "Throughput scaling dengan 2 kontainer worker (C=15)",
     },
-    "B3": {
-        "matrix": "B",
+    "W-04": {
+        "matrix": "W",
         "name": "Scale Worker Quad (W=4)",
         "docs": 100,
-        "concurrency": 10,
-        "workers": 4,
-        "description": "Peningkatan throughput puncak pemrosesan dengan 4 kontainer worker",
-    },
-    # Matriks C: Grand Peak Endurance (N=1000 puncak, C=15, W=4)
-    "C1": {
-        "matrix": "C",
-        "name": "Grand Peak Endurance (N=1000)",
-        "docs": 1000,
         "concurrency": 15,
         "workers": 4,
-        "description": "Uji ketahanan volume puncak 1.000 dokumen dengan 4 worker",
+        "description": "Throughput puncak dengan 4 kontainer worker (C=15)",
     },
 }
 
@@ -160,8 +159,8 @@ def build_markdown_summary(
         "",
         "## 1. Tabel Komparasi Menyeluruh Seluruh Skenario",
         "",
-        "| ID | Skenario | Dokumen ($N$) | Concurrency ($C$) | Workers ($W$) | Upload P50 (ms) | Upload P90 (ms) | Upload P99 (ms) | E2E P50 (s) | E2E P90 (s) | E2E P99 (s) | Total Durasi (s) | Throughput (RPS) | Sukses (%) |",
-        "|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
+        "| ID | Skenario | Dokumen ($N$) | Concurrency ($C$) | Workers ($W$) | Upload P50 (ms) | Upload P90 (ms) | Upload P95 (ms) | Upload P99 (ms) | E2E P50 (s) | E2E P90 (s) | E2E P95 (s) | E2E P99 (s) | Total Durasi (s) | Throughput (RPS) | Sukses (%) |",
+        "|:---:|---|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
     ]
 
     for sc_id, data in sorted(results_map.items()):
@@ -174,53 +173,56 @@ def build_markdown_summary(
 
         lines.append(
             f"| **{sc_id}** | {cfg['name']} | {cfg['docs']} | {cfg['concurrency']} | {cfg['workers']} | "
-            f"{http_p.get('p50', '-')} ms | {http_p.get('p90', '-')} ms | {http_p.get('p99', '-')} ms | "
-            f"{round(e2e_p.get('p50', 0) / 1000, 2)} s | {round(e2e_p.get('p90', 0) / 1000, 2)} s | {round(e2e_p.get('p99', 0) / 1000, 2)} s | "
+            f"{http_p.get('p50', '-')} ms | {http_p.get('p90', '-')} ms | {http_p.get('p95', '-')} ms | {http_p.get('p99', '-')} ms | "
+            f"{round(e2e_p.get('p50', 0) / 1000, 2)} s | {round(e2e_p.get('p90', 0) / 1000, 2)} s | {round(e2e_p.get('p95', 0) / 1000, 2)} s | {round(e2e_p.get('p99', 0) / 1000, 2)} s | "
             f"{meta.get('total_elapsed_seconds', '-')} s | {meta.get('throughput_rps', '-')} RPS | {completion_pct}% |"
         )
 
-    # Analisis Matriks B: Skalabilitas Paralel
-    if all(k in results_map for k in ("B1", "B2", "B3")):
+    # Analisis Bagian 2: Skalabilitas Horizontal Worker (Matriks W)
+    if any(k in results_map for k in ("W-01", "W-02", "W-04")):
         lines.extend([
             "",
             "---",
             "",
-            "## 2. Analisis Skalabilitas Horizontal Worker (Matriks B)",
+            "## 2. Analisis Skalabilitas Horizontal Worker (Matriks W: C=15 Konstan)",
             "",
-            "Mengukur dampak penambahan worker terhadap durasi total pemrosesan antrean ($N=100$, $C=10$):",
+            "Mengukur dampak penambahan worker terhadap durasi total pemrosesan antrean ($N=100$, $C=15$):",
             "",
             "| Skenario | Worker ($k$) | Total Durasi ($T_k$) | Throughput (RPS) | Speedup ($S = T_1 / T_k$) | Efisiensi Paralel ($E = S / k$) |",
             "|:---:|:---:|:---:|:---:|:---:|:---:|",
         ])
-        t1 = results_map["B1"]["summary"]["metadata"]["total_elapsed_seconds"]
-        for sc_id in ("B1", "B2", "B3"):
+        t1_val = results_map.get("W-01", {}).get("summary", {}).get("metadata", {}).get("total_elapsed_seconds", 0.0)
+        for sc_id in ("W-01", "W-02", "W-04"):
+            if sc_id not in results_map:
+                continue
             w = results_map[sc_id]["config"]["workers"]
             tk = results_map[sc_id]["summary"]["metadata"]["total_elapsed_seconds"]
-            speedup = round(t1 / tk, 2) if tk > 0 else 0.0
+            speedup = round(t1_val / tk, 2) if (t1_val > 0 and tk > 0) else 1.0
             efficiency = round((speedup / w) * 100, 2) if w > 0 else 0.0
             rps = results_map[sc_id]["summary"]["metadata"]["throughput_rps"]
             lines.append(f"| **{sc_id}** | {w} worker | {tk} s | {rps} RPS | **{speedup}x** | **{efficiency}%** |")
 
-    # Analisis Matriks A: Dampak Concurrency
-    lines.extend([
-        "",
-        "---",
-        "",
-        "## 3. Analisis Lapis Ingestion API (Matriks A: Concurrency Sweep)",
-        "",
-        "Mengukur ketahanan FastAPI saat menerima request simultan ($N=100$, $W=2$):",
-        "",
-        "| Skenario | Concurrency ($C$) | Upload P50 (ms) | Upload P90 (ms) | Upload P99 (ms) | Status Keberhasilan |",
-        "|:---:|:---:|:---:|:---:|:---:|:---:|",
-    ])
-    for sc_id in ("A1", "A2", "A3", "A4"):
-        if sc_id in results_map:
+    # Analisis Bagian 1: Concurrency Saturation Sweep (Matriks C: W=4 Konstan)
+    c_scenarios = [s for s in ("C-05", "C-10", "C-20", "C-30", "C-40") if s in results_map]
+    if c_scenarios:
+        lines.extend([
+            "",
+            "---",
+            "",
+            "## 3. Analisis Lapis Ingestion & Saturasi Konkurensi (Matriks C: W=4 Konstan)",
+            "",
+            "Mengukur ketahanan FastAPI saat menerima request simultan ($N=100$, $W=4$):",
+            "",
+            "| Skenario | Concurrency ($C$) | Upload P50 (ms) | Upload P90 (ms) | Upload P95 (ms) | Upload P99 (ms) | Status Keberhasilan |",
+            "|:---:|:---:|:---:|:---:|:---:|:---:|:---:|",
+        ])
+        for sc_id in c_scenarios:
             cfg = results_map[sc_id]["config"]
             http_p = results_map[sc_id]["summary"]["http_ingestion"]["latency_ms"]
             success_pct = results_map[sc_id]["summary"]["http_ingestion"]["success_rate_pct"]
             lines.append(
                 f"| **{sc_id}** | {cfg['concurrency']} | {http_p.get('p50', '-')} ms | "
-                f"{http_p.get('p90', '-')} ms | {http_p.get('p99', '-')} ms | {success_pct}% |"
+                f"{http_p.get('p90', '-')} ms | {http_p.get('p95', '-')} ms | {http_p.get('p99', '-')} ms | {success_pct}% |"
             )
 
     return "\n".join(lines) + "\n"
@@ -234,8 +236,8 @@ async def main() -> None:
     parser.add_argument(
         "--scenarios",
         nargs="+",
-        default=["A1", "A2", "A3", "A4", "B1", "B2", "B3", "C1"],
-        help="Daftar skenario yang akan dijalankan (contoh: A1 A2 B1 C1)",
+        default=["C-05", "C-10", "C-20", "C-30", "C-40", "W-01", "W-02", "W-04"],
+        help="Daftar skenario yang akan dijalankan (contoh: C-05 C-10 W-01)",
     )
     parser.add_argument("--no-scale", action="store_true", help="Nonaktifkan scaling otomatis Docker Compose")
 

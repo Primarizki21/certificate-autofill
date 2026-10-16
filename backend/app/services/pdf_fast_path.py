@@ -1,9 +1,11 @@
 from dataclasses import dataclass
 import io
+import logging
 from typing import Any
 import fitz
 from PIL import Image
 
+logger = logging.getLogger("certificate-fast-path")
 
 @dataclass
 class FastPathResult:
@@ -45,6 +47,13 @@ class PageImageBuffer:
         if self.mode == "RGB":
             return arr[:, :, ::-1]
         return arr
+
+    def to_grayscale_ndarray(self) -> Any:
+        """In-memory 2D uint8 grayscale ndarray for Indra OCR."""
+        import numpy as np
+        if self.mode == "L":
+            return np.frombuffer(self.samples, dtype=np.uint8).reshape(self.height, self.width)
+        return np.array(self.to_pil("L"))
 
 
 def extract_text_with_pymupdf(pdf_bytes: bytes) -> FastPathResult:
@@ -92,9 +101,9 @@ def render_pdf_pages_to_image_buffers(
             limit = 3
     try:
         doc = fitz.open(stream=pdf_bytes, filetype="pdf")
-    except Exception:
+    except Exception as exc:
+        logger.warning("Gagal membuka stream dokumen PDF untuk render buffer: %s", exc)
         return []
-
     rendered: list[PageImageBuffer] = []
     try:
         for idx, page in enumerate(doc):

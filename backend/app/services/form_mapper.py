@@ -60,8 +60,12 @@ def map_fields_to_form(extracted: dict[str, ExtractedValue], tahun_akademik: str
             if placeholder:
                 ev = ExtractedValue(placeholder, 0.0, "placeholder")
         mapped[field] = ev
-    jenis_penyelenggara = map_jenis_penyelenggara(upper, tingkat)
-    mapped["jenis_penyelenggara"] = ExtractedValue(jenis_penyelenggara, 0.90, "rule_mapper_strict")
+    if "jenis_penyelenggara" in extracted and extracted["jenis_penyelenggara"].value:
+        mapped["jenis_penyelenggara"] = extracted["jenis_penyelenggara"]
+    else:
+        organizer_val = (extracted.get("penyelenggara_kegiatan") or ExtractedValue("", 0, "")).value or ""
+        jenis_penyelenggara = map_jenis_penyelenggara(upper, tingkat, organizer_val)
+        mapped["jenis_penyelenggara"] = ExtractedValue(jenis_penyelenggara, 0.90, "rule_mapper_strict")
 
     return validate_with_needs_review(mapped)
 
@@ -246,34 +250,46 @@ def map_jabatan(raw_role: str | None) -> str | None:
     return raw_role.title()
 
 
-def map_jenis_penyelenggara(upper_text: str, tingkat: str | None = None) -> str:
+def map_jenis_penyelenggara(upper_text: str, tingkat: str | None = None, organizer: str | None = None) -> str:
     tingkat = tingkat or ""
+    org_upper = (organizer or "").upper()
+    search_text = f"{org_upper} {upper_text}".strip()
 
-    # Aturan ketat dari kebutuhan form:
-    # - Tingkat Fakultas / Departemen / Lainnya (UKM) adalah kegiatan internal kampus -> PTN Indonesia.
-    # - Tingkat Internasional -> PT di luar negeri.
+    if any(contains_keyword(search_text, keyword) for keyword in PTS_KEYWORDS) or any(
+        k in search_text for k in [
+            "TELKOM UNIVERSITY", "ITTP", "INSTITUT TEKNOLOGI TELKOM",
+            "PELITA HARAPAN", "SATYA WACANA", "UKSW", "UNISBA", "ISLAM BANDUNG",
+            "UNISKA", "ISLAM KALIMANTAN", "UNIMUS", "POLITEKNIK CALTEX RIAU", "CALTEX"
+        ]
+    ):
+        return "PTS di Indonesia"
+
+    if "KEMENTERIAN" in org_upper and "BEM" not in org_upper and "FAKULTAS" not in org_upper and "UNIVERSITAS" not in org_upper:
+        return "Kementerian Negara"
+    if ("KEMENTERIAN NEGARA" in upper_text or "KEMENTERIAN PENDIDIKAN" in upper_text or "KEMENTERIAN KOMUNIKASI" in upper_text) and "BEM" not in org_upper:
+        return "Kementerian Negara"
+
     if tingkat in {"Fakultas", "Departemen/Program Studi", "Lainnya", "Universitas"}:
         return "PTN di Indonesia"
     if tingkat == "Internasional":
         return "PT di luar negeri"
 
-    if "KEMENTERIAN" in upper_text or "KEMENTERIAN NEGARA" in upper_text:
-        return "Kementerian Negara"
-
-    # Prioritaskan kampus sebelum sponsor/BUMN. Sertifikat mahasiswa sering punya sponsor logo,
-    # tetapi penyelenggaranya tetap kampus/organisasi kampus.
-    if any(contains_keyword(upper_text, keyword) for keyword in PTN_KEYWORDS) or any(
-        k in upper_text for k in ["UNIVERSITAS AIRLANGGA", "UNIVERSITAS AIRLANGCA", "UNAIR", "AIRLANGGA"]
+    if any(contains_keyword(search_text, keyword) for keyword in PTN_KEYWORDS) or any(
+        k in search_text for k in [
+            "UNIVERSITAS AIRLANGGA", "UNIVERSITAS AIRLANGCA", "UNAIR", "AIRLANGGA",
+            "IPB UNIVERSITY", "INSTITUT PERTANIAN BOGOR", "IPB",
+            "SEBELAS MARET", "UNS", "HASANUDDIN", "UNHAS", "SUMATERA UTARA", "USU",
+            "SRIWIJAYA", "UNSRI", "SYIAH KUALA", "USK", "NEGERI SURABAYA", "UNESA",
+            "NEGERI YOGYAKARTA", "UNY", "POLITEKNIK KEUANGAN NEGARA STAN", "STAN",
+            "POLSTAT STIS", "STIS", "FORKAS"
+        ]
     ):
         return "PTN di Indonesia"
-    if any(contains_keyword(upper_text, keyword) for keyword in PTS_KEYWORDS):
-        return "PTS di Indonesia"
-    if any(contains_keyword(upper_text, keyword) for keyword in FOREIGN_UNIVERSITY_HINTS) and "INDONESIA" not in upper_text:
+    if any(contains_keyword(search_text, keyword) for keyword in FOREIGN_UNIVERSITY_HINTS) and "INDONESIA" not in search_text:
         return "PT di luar negeri"
-    if any(contains_keyword(upper_text, keyword) for keyword in BUMN_KEYWORDS):
+    if any(contains_keyword(search_text, keyword) for keyword in BUMN_KEYWORDS):
         return "BUMN"
     return "Lembaga/Yayasan lain"
-
 
 def contains_keyword(upper_text: str, keyword: str) -> bool:
     escaped = re.escape(keyword.upper())

@@ -6,7 +6,7 @@ Prototype sistem ekstraksi multi-format sertifikat mahasiswa (PDF, JPG, JPEG, PN
 
 **Stack & Arsitektur Utama:**
 - **Backend:** FastAPI + SQLAlchemy + PostgreSQL 17
-- **Text & OCR Engine:** PyMuPDF (fast text + direct buffer in-memory + resolution clamping) + Tesseract OCR (Single-Pass PSM 6 teroptimasi) + RapidOCR (cgroup CPU thread-aligned)
+- **Text & OCR Engine:** PyMuPDF (fast text + direct buffer in-memory + resolution clamping) + Indra OCR (model ultra-ringan 1M-parameter ONNX CPU sebagai primary in-memory engine) + Tesseract OCR (Single-Pass PSM 6) + RapidOCR (fallback/ensemble)
 - **Persepsi Semantik (LLM):** Google Gemini (`gemini-3.1-flash-lite`) untuk ekstraksi fakta teks sertifikat dan penentuan tingkat cakupan
 - **Resolver Deterministik KHP:** Modul Python deterministik untuk autofill 9-field KHP yang memetakan hasil ekstraksi ke taksonomi resmi kemahasiswaan universitas secara bilingual (Indonesia & Inggris, mencakup normalisasi tingkat, peran/prestasi, jabatan kepengurusan universal, dan pengelompokan kegiatan resmi)
 - **Antarmuka Form KHP:** Vanilla HTML/CSS/JS dengan UI Cascading Filter dinamis dan Modal Pencarian Master Kegiatan
@@ -92,6 +92,7 @@ Docker Compose otomatis me-mount kode sumber `./backend/app` secara live dan men
 export APP_ENV=development
 export DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 export PROCESSING_MODE=background
+export ENABLE_INDRA_OCR=true
 export ENABLE_TESSERACT_GEMINI=true
 export ENABLE_KHP_MASTER_STAGING=true
 export ENABLE_COMBINED_V4_2=true
@@ -104,6 +105,7 @@ uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 $env:APP_ENV="development"
 $env:DATABASE_URL="postgresql+psycopg2://postgres:postgres@localhost:5434/certautofill"
 $env:PROCESSING_MODE="background"
+$env:ENABLE_INDRA_OCR="true"
 $env:ENABLE_TESSERACT_GEMINI="true"
 $env:ENABLE_KHP_MASTER_STAGING="true"
 $env:ENABLE_COMBINED_V4_2="true"
@@ -128,6 +130,9 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | Variabel | Nilai Default | Deskripsi |
 |---|:---:|---|
 | `ENABLE_TESSERACT_GEMINI` | `true` | Mengaktifkan ekstraksi langsung teks OCR ke Google Gemini dengan prompt V2 Scope-Aware |
+| `ENABLE_INDRA_OCR` | `true` | Mengaktifkan model transformator ultra-ringan 1M-parameter Indra OCR sebagai primary engine in-memory |
+| `PRIMARY_OCR_ENGINE` | `indra` | Engine OCR utama (`indra`, `rapidocr`, `tesseract`) |
+| `INDRA_OCR_THREADS` | `2` | Jumlah thread inferensi ONNX Runtime CPU untuk Indra OCR (sweet-spot 12 vCPU) |
 | `GOOGLE_API_KEY` | *(kosong)* | Kunci Google AI Studio API Anda |
 | `GOOGLE_GEMINI_MODEL` | `gemini-3.1-flash-lite` | Model Gemini yang digunakan (`gemini-3.1-flash-lite`, `gemini-2.5-flash-lite`, `gemini-2.5-flash`) |
 | `GEMINI_TIMEOUT_SECONDS` | `30.0` | Batas waktu timeout pemanggilan API Gemini sebelum fallback |
@@ -143,7 +148,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
-| `RATE_LIMIT_PER_MINUTE` | `30` | Batas maksimum unggahan per menit per IP address |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per IP address (standar 1 req/detik) |
 | `MAX_PDF_PAGES` | `3` | Batas maksimum jumlah halaman file PDF sertifikat |
 | `MAX_IMAGE_PIXELS` | `60000000` | Batas aman piksel gambar (Pillow Decompression Bomb safeguard, 60 MP) |
 | `MAX_IMAGE_DIMENSION` | `8000` | Dimensi panjang/lebar piksel maksimum gambar (anti-pixel flood) |
@@ -206,7 +211,7 @@ Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum doku
 
 5. **Rate Limiting (Sliding Window)**:
    - Endpoint upload dilindungi pembatas laju *in-memory* berbasis IP dengan jendela geser (*sliding window*).
-   - Default: **30 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 30`). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+   - Default: **60 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
 ---
 
 ## Hasil Evaluasi & Benchmark
@@ -310,7 +315,34 @@ Eksperimen `EXP-OCR-LATENCY-001` mengevaluasi efisiensi alur transmisi buffer ga
 
 ---
 
-### 8. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
+### 8. Evaluasi Komparatif Indra OCR (Dataset GT v9, $N=74$)
+Eksperimen `EXP-OCR-INDRA-001` mengevaluasi model ultra-ringan 1M-parameter Indra OCR (`datalab-to/indra-ocr`) terhadap engine eksisting Tesseract dan RapidOCR (7 varian komparatif):
+
+| Varian / Strategi OCR | MACRO Exact | MACRO Fuzzy | Rata-rata Latensi | Speedup vs Kontrol | Status Evaluasi |
+|---|:---:|:---:|:---:|:---:|:---:|
+| `E1_TESS` (Tesseract Murni) | 67.57% | 72.30% | 3.168s | 1.7x | FAIL |
+| **`E2_INDRA` (Indra OCR Murni)** | **67.79%** | **70.95%** | **0.403s** | **13.8x** | **PASS — Pemenang Kecepatan**. Mengungguli Tesseract, penyelenggara 62.16% (+8.11pt) |
+| `E3_RAPID` (RapidOCR Murni) | 72.07% | 74.10% | 2.378s | 2.3x | PASS |
+| `E4_RAPID_TESS` (Kontrol) | 69.60% | 72.97% | 5.542s | 1.0x | CONTROL — Baseline gabungan lama |
+| `E5_INDRA_TESS` | 68.24% | 72.07% | 3.566s | 1.6x | PASS |
+| **`E6_INDRA_RAPID` (Komposit)** | **70.95%** | **74.33%** | **2.776s** | **2.0x** | **PASS — Pemenang Komposit**. (+1.35pt vs Kontrol) |
+| `E7_TRIO` (Indra+Rapid+Tess) | 68.69% | 72.52% | 5.940s | 0.9x | PASS |
+
+---
+
+### 9. Arsitektur Zero-Regex Indra OCR + Google Gemini LLM (Dataset Terpadu $N=104$)
+Eksperimen `EXP-INDRA-LLM-001` menguji arsitektur *zero-regex primary path* menggunakan kombinasi Indra OCR in-memory (~0.4s) $\to$ Google Gemini LLM dengan Combined v4.2 sebagai fallback offline safety-net:
+
+| Varian Alur Ekstraksi | MACRO Exact | MACRO Fuzzy | Total Latensi | Latensi OCR | Biaya 104 Dokumen | Status Evaluasi |
+|---|:---:|:---:|:---:|:---:|:---:|:---:|
+| `V1_TESS_GEMINI` (Kontrol Online) | 70.67% | 82.85% | 8.698s | 3.165s | Rp4,294.40 | CONTROL |
+| **`V2_INDRA_GEMINI` (Primary Path)** | **72.76% (+2.09pt)** | **83.33%** | **5.262s (-39.5%)** | **0.421s (7.5x cepat)** | **Rp4,061.51** | **PASS — Diadopsi**. Unggul di seluruh 6 field |
+| `V3_INDRA_OFFLINE` (Fallback) | 62.34% | 67.31% | 0.423s | 0.421s | Rp0.00 | Fallback offline jika API non-aktif |
+| `V4_TESS_OFFLINE` (Kontrol Offline) | 62.50% | 68.91% | 3.168s | 3.166s | Rp0.00 | Baseline offline lama |
+
+---
+
+### 10. Arsip Eksperimen Model Named Entity Recognition (Tidak Dipakai Pipeline)
 Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 sel framework non-empty):
 
 | Arsitektur / Model NER | Framework Exact | Framework Fuzzy | Ketahanan OOD Mutasi | Keterangan & Batasan |
@@ -320,7 +352,7 @@ Evaluasi token classification supervised pada 74 teks korpus OCR Tesseract (310 
 | mDeBERTa-v3-base Fine-Tuned | 34.84% | 51.29% | -7.1pt drop | Multilingual 86M, representasi entitas Indonesia kurang optimal |
 | IndoBERT Pre-trained v1 (Zero-Shot) | 12.80% | 24.50% | — | Baseline tanpa penyesuaian domain sertifikat |
 
-> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Tesseract sebagai sumber OCR dan extractor produksi; GLiNER serta model NER tidak dipanggil.
+> Eksperimen NER pada bagian ini hanya arsip. Pipeline aktif memakai Indra OCR sebagai primary in-memory engine (dengan RapidOCR+Tesseract sebagai fallback otomatis) dan extractor produksi; GLiNER serta model NER tidak dipanggil.
 
 ---
 
@@ -353,7 +385,7 @@ uv run pytest tests/ -v
 ### 2. Otomasi CI/CD (GitHub Actions)
 Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
 - **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
-- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 410 unit tests secara terisolasi.
+- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 432 unit tests secara terisolasi.
 
 
 ### 3. Pengujian Beban & Profiling Latensi (Stress Testing)
@@ -363,9 +395,10 @@ Sistem menyediakan perangkat pengujian beban asinkron untuk mengukur persentil l
 # Pengujian beban berkas tunggal / kelompok (contoh: 50 dokumen, 5 koneksi simultan)
 uv run python scripts/stress_test.py --total-requests 50 --concurrency 5
 
-# Pengujian bertahap matriks terpadu (Matriks A: Ingestion, B: Worker Scaling, C: Peak 1.000)
-uv run python scripts/run_stress_matrix.py --scenarios A1 A2 B1 B2
+# Pengujian bertahap matriks terpadu (Matriks C: Saturasi Konkurensi C-05..C-40, W: Skalabilitas Worker W-01..W-04)
+uv run python scripts/run_stress_matrix.py --scenarios C-05 C-10 W-01 W-02
 ```
+
 Seluruh artefak hasil uji beban (`summary.json`, `latencies.csv`, `report.md`) tersimpan terisolasi di direktori `docs/stress_test/`.
 ---
 

@@ -39,9 +39,10 @@ COPY --from=builder --chown=appuser:appuser /root/.local /home/appuser/.local
 COPY --chown=appuser:appuser app /app/app
 COPY --chown=appuser:appuser alembic /app/alembic
 COPY --chown=appuser:appuser alembic.ini /app/alembic.ini
-# Pre-warm RapidOCR ONNX model weights in build layer (ensures offline campus operation)
+# Pre-warm RapidOCR & Indra OCR ONNX model weights in build layer (ensures offline campus operation)
 USER appuser
 RUN python -c "from rapidocr_onnxruntime import RapidOCR; RapidOCR()" || true
+RUN python -c "import indra_ocr; indra_ocr.load(threads=2)" || true
 
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

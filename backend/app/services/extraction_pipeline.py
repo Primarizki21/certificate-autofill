@@ -180,7 +180,8 @@ def run_extraction_pipeline(
         if ocr_text.strip():
             raw_text = f"{raw_text}\n{ocr_text}".strip()
             if is_image:
-                parser_engine = "image_ocr_rapid_tesseract"
+                active_ocr = settings.primary_ocr_engine if settings.enable_indra_ocr else "rapid_tesseract"
+                parser_engine = f"image_ocr_{active_ocr}"
             else:
                 parser_engine = (
                     "ocr_fallback"
