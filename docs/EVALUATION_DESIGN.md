@@ -9,24 +9,26 @@ Dokumen ini mendefinisikan arsitektur, metrik, formula matematis, dan protokol p
 ## 1. Lingkup Evaluasi & Karakteristik Korpus
 
 ### 1.1 Objek Evaluasi
-Sistem mengekstrak field terstruktur dari dokumen PDF sertifikat untuk mengisi form Kartu Hasil Prestasi (KHP). Evaluasi dilakukan terhadap **6 field baku**:
+Sistem mengekstrak field terstruktur dari dokumen PDF sertifikat untuk mengisi form Kartu Hasil Prestasi (KHP). Evaluasi resmi dilakukan terhadap **10 field lengkap**:
 
-| Field | Tipe Data | Deskripsi |
-|---|---|---|
-| `nama_kegiatan_sertifikasi` | Teks Bebas | Nama atau judul kegiatan/event/kompetisi |
-| `waktu_mulai_pelaksanaan` | Tanggal | Tanggal mulai pelaksanaan (format baku: `DD/MM/YYYY`) |
-| `waktu_selesai_pelaksanaan` | Tanggal | Tanggal selesai pelaksanaan (format baku: `DD/MM/YYYY`) |
-| `penyelenggara_kegiatan` | Teks Organisasi | Nama lembaga/organisasi/panitia penyelenggara |
-| `nomor_bukti_fisik_nomor_sertifikasi` | Alfanumerik | Nomor resmi sertifikat / surat tugas |
-| `tingkat` | Kategorikal | Tingkat kegiatan: *Internasional*, *Nasional*, *Universitas*, *Fakultas*, *Departemen*, *Lainnya* |
+| Kategori | Field | Tipe Data | Deskripsi |
+|---|---|---|---|
+| **6 Field Dasar** | `nama_kegiatan_sertifikasi` | Teks Bebas | Nama atau judul kegiatan/event/kompetisi |
+| | `nomor_bukti_fisik_nomor_sertifikasi` | Alfanumerik | Nomor resmi sertifikat / surat tugas |
+| | `penyelenggara_kegiatan` | Teks Organisasi | Nama lembaga/organisasi/panitia penyelenggara |
+| | `waktu_mulai_pelaksanaan` | Tanggal | Tanggal mulai pelaksanaan (format baku: `DD/MM/YYYY`) |
+| | `waktu_selesai_pelaksanaan` | Tanggal | Tanggal selesai pelaksanaan (format baku: `DD/MM/YYYY`) |
+| | `tingkat` | Kategorikal | Tingkat kegiatan: *Internasional*, *Nasional*, *Universitas*, *Fakultas*, *Departemen*, *Lainnya* |
+| **3 Field AUCC** | `kelompok_kegiatan` | Taksonomi AUCC | Bidang kegiatan (Organisasi, Penalaran, Minat Bakat, dll.) |
+| | `jenis_kegiatan` | Taksonomi AUCC | Sub-kegiatan resmi (ID Kegiatan 1 pada `aucc.sql`) |
+| | `prestasi_partisipasi_jabatan` | Taksonomi AUCC | Peran/jabatan/prestasi (ID Jabatan pada `aucc.sql`) |
+| **Pedoman KHP** | `jenis_penyelenggara` | Kategorikal | 9 Kategori (Internal UNAIR, PTN Lain, PTS, BUMN, dll.) |
 
 ### 1.2 Korpus Uji dan Baseline Ground Truth
-- **Total Sampel**: 74 berkas sertifikat representatif.
-- **Karakteristik Dokumen**:
-  - **`Emb-25` (25 dokumen)**: PDF dengan layer teks digital asli (*embedded text*).
-  - **`Scan-49` (49 dokumen)**: PDF hasil scan citra raster (murni gambar, wajib melalui OCR).
-- **Ground Truth Otoritatif**: `Ground_Truth_Sertifikat_v9.csv` (berstatus *frozen baseline*, hasil audit konsistensi v8 dan v9).
-
+- **Dataset Acuan Resmi Aktif**: **`Ground_Truth_Unified_AUCC.csv` ($N=104$ sertifikat terpadu)**.
+  - Mencakup 74 sertifikat dataset primer + 30 sertifikat holdout.
+  - Memuat 13 kolom lengkap termasuk taksonomi master data AUCC dan resolusi tuple `id_kegiatan_2`.
+- **Baseline Historis Beku (*Frozen*)**: `Ground_Truth_Sertifikat_v9.csv` ($N=74$ berkas sertifikat) digunakan khusus untuk backward-compatibility dan audit historis terhadap pipeline legacy regex/NER.
 ---
 
 ## 2. Definisi dan Formula Metrik Lapisan String (`tests/matchers.py`)
@@ -71,6 +73,50 @@ Sub-komponen logika fuzzy:
 - **Character Error Rate (CER)**:
   $$\text{CER} = \min\left(\frac{\text{Levenshtein}(C_{\text{ref}}, C_{\text{hyp}})}{|C_{\text{ref}}|}, 1.0\right)$$
 
+
+### 2.5 Arsitektur Metrik Generatif Terpadu (`tests/evaluation_generative_v2.py`)
+
+Guna mengatasi keterbatasan biner *Exact Match* yang kaku dan mengeliminasi risiko *false positive* dari formula pembagi $\min()$ pada *Fuzzy Match* legacy, modul evaluator modern `tests/evaluation_generative_v2.py` mengadopsi standar metrik evaluasi generatif dan Document KIE:
+
+#### 1. Token-level Precision, Recall, dan F1 (SQuAD Multiset Overlap)
+Diterapkan pada field teks bebas (`nama_kegiatan_sertifikasi` dan `penyelenggara_kegiatan`):
+$$\text{Precision} = \frac{|T_{\text{pred}} \cap T_{\text{gold}}|}{|T_{\text{pred}}|}, \quad \text{Recall} = \frac{|T_{\text{pred}} \cap T_{\text{gold}}|}{|T_{\text{gold}}|}$$
+$$F1 = \frac{2 \cdot \text{Precision} \cdot \text{Recall}}{\text{Precision} + \text{Recall}}$$
+Menggunakan irisan *multiset* kata unik pasca-normalisasi. Presisi menghukum halusinasi/penambahan kata, dan recall menghukum pemotongan teks.
+
+#### 2. Average Normalized Levenshtein Similarity (ANLS - Standar DocVQA)
+Toleransi terhadap salah baca 1–2 karakter OCR pada teks bebas dan entitas:
+$$\text{NLS}(p, g) = 1.0 - \frac{\text{Levenshtein}(p, g)}{\max(|p|, |g|)}$$
+$$\text{ANLS}(p, g) = \begin{cases} \text{NLS}(p, g), & \text{jika } \text{NLS}(p, g) \ge 0.50 \\ 0.0, & \text{lainnya} \end{cases}$$
+
+#### 3. Canonical Date Match & Component-Level Scoring
+Diterapkan pada `waktu_mulai_pelaksanaan` dan `waktu_selesai_pelaksanaan`:
+- **Exact**: Kesetaraan absolut pasca-konversi format kanonikal ISO `YYYY-MM-DD`.
+- **Component-Level Score $[0.0, 1.0]$**: Memberi apresiasi proporsional saat Tahun dan Bulan berhasil diekstrak tepat:
+$$\text{Score}_{\text{date}} = \frac{1}{3}\mathbf{1}[\text{Tahun Cocok}] + \frac{1}{3}\mathbf{1}[\text{Bulan Cocok}] + \frac{1}{3}\mathbf{1}[\text{Hari Cocok}]$$
+
+#### 4. Delimiter-Normalized Exact Match & CharSim (Nomor Sertifikat)
+Diterapkan pada `nomor_bukti_fisik_nomor_sertifikasi`:
+- Normalisasi menghapus spasi dan tanda baca delimiter (`/`, `.`, `-`, `_`, tabulasi).
+- Menghitung kesamaan karakter ($\text{CharSim}$) dan *Character Error Rate* (CER):
+$$\text{CharSim}(p, g) = 1.0 - \frac{\text{Levenshtein}(p_{\text{norm}}, g_{\text{norm}})}{\max(|p_{\text{norm}}|, |g_{\text{norm}}|)}$$
+$$\text{CER}(p, g) = \min\left(\frac{\text{Levenshtein}(p_{\text{norm}}, g_{\text{norm}})}{|g_{\text{norm}}|}, 1.0\right)$$
+
+#### 5. Multiclass Macro-F1 (Tingkat Kegiatan)
+Diterapkan pada field kategorikal tertutup `tingkat` (6 kelas resmi KHP):
+- Menghitung confusion matrix $6 \times 6$.
+- Menghitung rata-rata tanpa bobot (*unweighted macro average*) dari F1 seluruh kelas aktif guna menghilangkan bias akibat ketimpangan jumlah data:
+$$\text{Macro-F1}_{\text{tingkat}} = \frac{1}{|C|} \sum_{c \in C} F1_c$$
+
+#### 6. AUCC Triplet Match & Resolution Rate
+Diterapkan pada taksonomi master data KHP (`kelompok_kegiatan`, `jenis_kegiatan`, `prestasi_partisipasi_jabatan`):
+- **Triplet Match**: Bernilai 1 jika ketiga komponen simultan terpetakan valid sesuai tabel `master_kegiatan_rule`.
+- **Resolution Rate**: Persentase sertifikat yang terpetakan sukses ke `id_kegiatan_2` tanpa memicu review manual.
+
+#### 7. Record-Level Exact Match (Zero-Touch Automation Rate)
+Metrik operasional riil kampus:
+$$\text{Record-EM}_i = \prod_{k \in \text{Fields}} \mathbf{1}[\text{Exact}_{i, k}]$$
+Bernilai 1 hanya jika **seluruh field wajib diekstrak benar sempurna**. Mengukur persentase sertifikat mahasiswa yang tidak memerlukan intervensi koreksi manual sama sekali.
 ---
 
 ## 3. Arsitektur Agregasi & Klarifikasi Denominator
@@ -91,16 +137,15 @@ Sub-komponen logika fuzzy:
 
 ### 3.2 Pemetaan Evaluator Resmi di Repositori
 
-| Parameter | Jalur A: Legacy Framework (`tests/evaluation_framework.py`) | Jalur B1: Stat Validation (`tests/stat_validation.py`) | Jalur B2: Production Matrix Runner (`tests/benchmark_production_input_matrix.py`) |
+| Parameter | Jalur A: Legacy Framework (`tests/evaluation_framework.py`) | Jalur B: Production Matrix (`tests/benchmark_production_input_matrix.py`) | Jalur C: Evaluator Generatif & AUCC (`tests/evaluation_generative_v2.py`) |
 |---|---|---|---|
-| **Cakupan Field** | 5 Field dasar (tanpa `tingkat`) | 6 Field lengkap (termasuk `tingkat`) | 6 Field lengkap (termasuk `tingkat`) |
-| **Denominator** | Dinamis ($\approx 370$ sel valid GT) | Dinamis ($\approx 440$ sel valid GT) | Fixed $N_{\text{docs}} \times 6 = 444$ sel |
-| **Sifat Agregasi "Macro"** | **Pooled micro-ratio over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **Pooled micro-ratio over cells**: $\frac{\sum \text{exact\_ok}}{\sum \text{total}}$ | **All-Cells pooled ratio**: $\frac{\text{exact\_all\_cells}}{444} \times 100\%$ |
-| **Metrik Per-Field** | Terhadap $N_{\text{field}}$ sel valid | Terhadap $N_{\text{field}}$ sel valid | Terhadap $N_{\text{docs}}$ (74 sampel) |
-| **True Macro Mean** | Tidak otomatis (dihitung terpisah jika perlu) | Tidak otomatis (dihitung terpisah jika perlu) | Tidak otomatis (dihitung terpisah jika perlu) |
-| **Tujuan Penggunaan** | Komparasi historis ekstraktor regex/NER | Validasi statistik 5-fold CV & Bootstrap CI | Benchmark end-to-end varian input & model LLM |
+| **Cakupan Field** | 5 Field dasar (tanpa `tingkat`) | 6 Field lengkap (termasuk `tingkat`) | **10 Field lengkap** (6 dasar + 3 AUCC + jenis penyelenggara) |
+| **Denominator** | Dinamis ($\approx 370$ sel valid GT) | Fixed $74 \times 6 = 444$ sel | **Fixed $104$ dokumen ($104 \times 9 = 936$ sel)** |
+| **Sifat Agregasi** | Pooled micro-ratio over cells | All-Cells pooled ratio | **Multi-tier**: Record EM, Per-field Token-F1, ANLS, AUCC Triplet, True Macro-F1 |
+| **Dataset GT** | `Ground_Truth_Sertifikat_v9.csv` (74) | `Ground_Truth_Sertifikat_v9.csv` (74) | **`Ground_Truth_Unified_AUCC.csv` ($N=104$ terpadu)** |
+| **Tujuan Penggunaan** | Komparasi historis regex legacy | Benchmark input matrix model | **Standar Resmi Evaluasi Pipeline Produksi Generatif & AUCC** |
 
-*Aturan Pelaporan*: Setiap laporan benchmark wajib mencantumkan secara tegas apakah metrik yang disajikan berbasis **Framework 5-Field** atau **All-Cells 6-Field**, serta apakah denominator yang dipakai berbasis sel GT valid (dinamis) atau fixed 444 sel. Dilarang mencampuradukkan kedua denominasi tersebut.
+*Aturan Pelaporan*: Setiap laporan benchmark wajib mencantumkan secara tegas apakah metrik yang disajikan berbasis **Jalur Legacy (74 sertifikat)** atau **Jalur Generatif & AUCC Resmi (104 sertifikat)**.
 
 ### 3.3 Pelaporan Subgroup Wajib (`Emb-25` vs `Scan-49`)
 Evaluasi wajib menyajikan rincian akurasi terpisah untuk:
