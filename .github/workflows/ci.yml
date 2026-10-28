@@ -70,14 +70,28 @@ jobs:
   test:
     name: Lint, Migrations & Pytest Suite
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_DB: certautofill_ci
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
     env:
       APP_ENV: test
       DATABASE_URL: "sqlite:///:memory:"
+      POSTGRES_TEST_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/certautofill_ci"
       GOOGLE_API_KEY: "dummy-test-key-ci"
       ENABLE_TESSERACT_GEMINI: "false"
       ENABLE_COMBINED_V4_2: "true"
       PYTHONPATH: ".:backend"
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -105,8 +119,14 @@ jobs:
       - name: Python code linting (Ruff)
         run: uv run ruff check backend/ tests/test_*.py scripts/stress_test.py scripts/run_stress_matrix.py
 
-      - name: Database migration baseline check (Alembic)
+      - name: Database migration baseline check (SQLite)
         run: uv run alembic -x url="sqlite:///:memory:" upgrade head
+
+      - name: Database migration check (PostgreSQL 17)
+        run: uv run alembic -x url="$POSTGRES_TEST_URL" upgrade head
+
+      - name: Database concurrent startup DDL check (PostgreSQL 17)
+        run: uv run python -m tests.test_database_concurrency
 
       - name: Python syntax & bytecode compilation check
         run: uv run python -m compileall backend/ tests/ scripts/stress_test.py scripts/run_stress_matrix.py -q
