@@ -38,6 +38,11 @@ from app.services.khp_master_staging import (
     resolve_khp_master_fields,
 )
 from tests.matchers import match_field
+from tests.evaluation_generative_v2 import (
+    evaluate_certificate_fields,
+    summarize_corpus_evaluations,
+    CertificateEvaluationResult,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -193,6 +198,7 @@ def run_khp_evaluation(
     }
 
     per_cert_results: list[dict[str, Any]] = []
+    generative_cert_results: list[CertificateEvaluationResult] = []
 
     for _, gt_row in df_gt.iterrows():
         fname = str(gt_row["Nama File"]).strip()
@@ -244,6 +250,7 @@ def run_khp_evaluation(
             "kelompok_kegiatan": pred_kelompok,
             "jenis_kegiatan": pred_jenis,
             "prestasi_partisipasi_jabatan": pred_role,
+            "jenis_penyelenggara": base_fields.get("jenis_penyelenggara", ""),
         }
 
         gt_values = {
@@ -268,7 +275,16 @@ def run_khp_evaluation(
             "prestasi_partisipasi_jabatan": str(
                 gt_row.get("Prestasi / Partisipasi / Jabatan", "") or ""
             ).strip(),
+            "jenis_penyelenggara": str(gt_row.get("Jenis Penyelenggara", "") or "").strip(),
         }
+
+        gen_cert = evaluate_certificate_fields(
+            filename=fname,
+            folder=str(gt_row.get("Folder", "") or ""),
+            predictions=predictions,
+            ground_truth=gt_values,
+        )
+        generative_cert_results.append(gen_cert)
 
         cert_exact_count = 0
         cert_eval_record: dict[str, Any] = {
@@ -313,6 +329,7 @@ def run_khp_evaluation(
             if fuzzy:
                 field_counts[field]["fuzzy"] += 1
 
+            gen_f = gen_cert.fields.get(field)
             details_rows.append(
                 {
                     "filename": fname,
@@ -321,6 +338,9 @@ def run_khp_evaluation(
                     "gt": gt_v,
                     "exact": exact,
                     "fuzzy": fuzzy,
+                    "token_f1": round(gen_f.token_f1, 4) if gen_f else 0.0,
+                    "char_sim": round(gen_f.char_sim, 4) if gen_f else 0.0,
+                    "component_score": round(gen_f.component_score, 4) if gen_f else 0.0,
                 }
             )
 
@@ -401,17 +421,31 @@ def run_khp_evaluation(
         "fuzzy_pct": round((all_fuzzy_sum / all_total) * 100, 2) if all_total else 0.0,
     }
 
+    # Compile generative metrics
+    gen_summary = summarize_corpus_evaluations(generative_cert_results)
+    gen_dict = gen_summary.as_dict()
+    metrics["generative_metrics"] = gen_dict
+
     # Save deliverables
     logger.info(f"Saving deliverables to {out_dir}...")
 
+    eval_fieldnames = [
+        "filename",
+        "field",
+        "pred",
+        "gt",
+        "exact",
+        "fuzzy",
+        "token_f1",
+        "char_sim",
+        "component_score",
+    ]
+
     # 1. evaluation_details.csv
     with open(out_dir / "evaluation_details.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["filename", "field", "pred", "gt", "exact", "fuzzy"]
-        )
+        writer = csv.DictWriter(f, fieldnames=eval_fieldnames)
         writer.writeheader()
         writer.writerows(details_rows)
-
     # 2. metrics.json
     with open(out_dir / "metrics.json", "w", encoding="utf-8") as f:
         json.dump(metrics, f, indent=2, ensure_ascii=False)
@@ -419,9 +453,7 @@ def run_khp_evaluation(
     # 3. mismatches.csv
     mismatches = [r for r in details_rows if not r["exact"]]
     with open(out_dir / "mismatches.csv", "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(
-            f, fieldnames=["filename", "field", "pred", "gt", "exact", "fuzzy"]
-        )
+        writer = csv.DictWriter(f, fieldnames=eval_fieldnames)
         writer.writeheader()
         writer.writerows(mismatches)
 
@@ -438,6 +470,26 @@ def run_khp_evaluation(
                     "Metric": "Master 3-Field Taxonomy Exact",
                     "Score": f"{metrics['macro_master_3f']['exact_pct']}%",
                     "Details": f"{master_exact_sum}/{master_total}",
+                },
+                {
+                    "Metric": "Record-Level Exact Match (Base 6-Field)",
+                    "Score": f"{gen_dict['record_exact_6f_pct']:.2f}%",
+                    "Details": f"{gen_summary.record_exact_6f_count}/{total_docs} zero-touch",
+                },
+                {
+                    "Metric": "Record-Level Exact Match (All Fields)",
+                    "Score": f"{gen_dict['record_exact_all_pct']:.2f}%",
+                    "Details": f"{gen_summary.record_exact_all_count}/{total_docs} perfect",
+                },
+                {
+                    "Metric": "AUCC Triplet Valid Rate",
+                    "Score": f"{gen_dict['aucc_triplet_pct']:.2f}%",
+                    "Details": f"{gen_summary.aucc_triplet_exact_count}/{total_docs}",
+                },
+                {
+                    "Metric": "Tingkat Multiclass Macro-F1",
+                    "Score": f"{gen_dict['tingkat_macro_f1']*100:.2f}%",
+                    "Details": "Unweighted Macro Mean across classes",
                 },
                 {
                     "Metric": "Base 6-Field Exact",
@@ -533,6 +585,26 @@ Serta resolusi tuple `(kegiatan_1, tingkat, jabatan) -> id_kegiatan_2` pada basi
 | `nomor_bukti_fisik_nomor_sertifikasi` | {metrics['fields']['nomor_bukti_fisik_nomor_sertifikasi']['exact_pct']}% | {metrics['fields']['nomor_bukti_fisik_nomor_sertifikasi']['fuzzy_pct']}% | {metrics['fields']['nomor_bukti_fisik_nomor_sertifikasi']['exact_count']}/{total_docs} |
 | `waktu_mulai_pelaksanaan` | {metrics['fields']['waktu_mulai_pelaksanaan']['exact_pct']}% | {metrics['fields']['waktu_mulai_pelaksanaan']['fuzzy_pct']}% | {metrics['fields']['waktu_mulai_pelaksanaan']['exact_count']}/{total_docs} |
 | `waktu_selesai_pelaksanaan` | {metrics['fields']['waktu_selesai_pelaksanaan']['exact_pct']}% | {metrics['fields']['waktu_selesai_pelaksanaan']['fuzzy_pct']}% | {metrics['fields']['waktu_selesai_pelaksanaan']['exact_count']}/{total_docs} |
+
+## 2.1 Metrik Generatif Terpadu (Modern Token-F1 & Continuous Metrics)
+
+| Dimensi Evaluasi Generatif | Persentase / Skor | Detail / Sampel |
+|---|---:|---|
+| **Record-Level Exact Match (Base 6-Field)** | **{gen_dict['record_exact_6f_pct']:.2f}%** | {gen_summary.record_exact_6f_count}/{total_docs} dokumen zero-touch |
+| **Record-Level Exact Match (All 9-Field + Jenis Penyelenggara)** | **{gen_dict['record_exact_all_pct']:.2f}%** | {gen_summary.record_exact_all_count}/{total_docs} dokumen sempurna |
+| **AUCC Triplet Match (Kelompok + Jenis + Jabatan)** | **{gen_dict['aucc_triplet_pct']:.2f}%** | {gen_summary.aucc_triplet_exact_count}/{total_docs} valid AUCC |
+| **Tingkat Multiclass Macro-F1** | **{gen_dict['tingkat_macro_f1']*100:.2f}%** | Rata-rata F1 per kelas |
+
+### Rincian Metrik Kontinu per Field
+
+| Field | Exact Match (%) | Mean Token-F1 | Mean CharSim (ANLS) | Mean Component / Partial |
+|---|---:|---:|---:|---:|
+| `nama_kegiatan_sertifikasi` | {gen_dict['per_field_stats']['nama_kegiatan_sertifikasi']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['nama_kegiatan_sertifikasi']['token_f1']:.4f} | {gen_dict['per_field_stats']['nama_kegiatan_sertifikasi']['char_sim']:.4f} | {gen_dict['per_field_stats']['nama_kegiatan_sertifikasi']['component_score']:.4f} |
+| `penyelenggara_kegiatan` | {gen_dict['per_field_stats']['penyelenggara_kegiatan']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['penyelenggara_kegiatan']['token_f1']:.4f} | {gen_dict['per_field_stats']['penyelenggara_kegiatan']['char_sim']:.4f} | {gen_dict['per_field_stats']['penyelenggara_kegiatan']['component_score']:.4f} |
+| `nomor_bukti_fisik_nomor_sertifikasi` | {gen_dict['per_field_stats']['nomor_bukti_fisik_nomor_sertifikasi']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['nomor_bukti_fisik_nomor_sertifikasi']['token_f1']:.4f} | {gen_dict['per_field_stats']['nomor_bukti_fisik_nomor_sertifikasi']['char_sim']:.4f} | {gen_dict['per_field_stats']['nomor_bukti_fisik_nomor_sertifikasi']['component_score']:.4f} |
+| `waktu_mulai_pelaksanaan` | {gen_dict['per_field_stats']['waktu_mulai_pelaksanaan']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['waktu_mulai_pelaksanaan']['token_f1']:.4f} | {gen_dict['per_field_stats']['waktu_mulai_pelaksanaan']['char_sim']:.4f} | {gen_dict['per_field_stats']['waktu_mulai_pelaksanaan']['component_score']:.4f} |
+| `waktu_selesai_pelaksanaan` | {gen_dict['per_field_stats']['waktu_selesai_pelaksanaan']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['waktu_selesai_pelaksanaan']['token_f1']:.4f} | {gen_dict['per_field_stats']['waktu_selesai_pelaksanaan']['char_sim']:.4f} | {gen_dict['per_field_stats']['waktu_selesai_pelaksanaan']['component_score']:.4f} |
+| `tingkat` | {gen_dict['per_field_stats']['tingkat']['exact_pct']:.2f}% | {gen_dict['per_field_stats']['tingkat']['token_f1']:.4f} | {gen_dict['per_field_stats']['tingkat']['char_sim']:.4f} | {gen_dict['per_field_stats']['tingkat']['component_score']:.4f} |
 
 ## 3. Resolusi Tuple AUCC (`kegiatan_2`)
 
