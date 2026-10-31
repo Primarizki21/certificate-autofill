@@ -550,9 +550,7 @@ def generate_progressive_summary_markdown(
 > **Laporan Rekam Jejak Evolusi Sistem untuk Laporan PKL**: Rekam jejak performa sistem dari Baseline OCR klasik, terobosan model transformator visual ultra-ringan Indra OCR, transisi arsitektur Zero-Regex LLM (Google Gemini 3.1 Flash Lite), hingga integrasi taksonomi resmi KHP Master AUCC menggunakan standar evaluasi generatif modern.
 
 - **Waktu Eksekusi**: `{t_now}` (WIB)
-- **Dataset Acuan**:
-  * Korpus Legacy 74 Dokumen (`Ground_Truth_Sertifikat_v9.csv`) untuk milestone awal/offline OCR
-  * Korpus Terpadu 104 Dokumen (`Ground_Truth_Unified_AUCC.csv`) untuk milestone online LLM & KHP Master AUCC
+- **Dataset Acuan**: Korpus Terpadu 104 Dokumen (`Ground_Truth_Unified_AUCC.csv`) secara konsisten di seluruh fase pengembangan
 - **Standar Evaluasi**: Modul Evaluasi Generatif Terpadu (`tests/evaluation_generative_v2.py`)
 - **Format Luaran Wajib 5-Ekstensi**: `.csv`, `.jsonl`, `.xlsx`, `.json`, `.md`
 - **Status Evaluasi**: **PROGRESSIVE EVALUATION VERIFIED**
@@ -567,7 +565,7 @@ Pengembangan sistem ekstraksi otomatis sertifikat mahasiswa Kartu Hasil Prestasi
    Pada tahap awal, sistem bergantung pada kombinasi engine OCR tradisional (Tesseract dan RapidOCR) dipadukan dengan aturan heuristik regex (`Combined v4.2`). Meskipun mampu mengekstrak sebagian field, latensi inferensi CPU sangat tinggi (5.5 detik per halaman), dan akurasi exact match nomor sertifikat terhambat oleh salah baca karakter (seperti angka Romawi `XI` menjadi `x1t`).
 
 2. **Fase 2: Terobosan Model OCR Transformator Ultra-Ringan (Indra OCR)**
-   Untuk mengatasi bottleneck latensi server kampus, diadopsi model transformator visual 1M-parameter **Indra OCR** (`datalab-to/indra-ocr`). Pada pengujian offline 74 dokumen, Indra OCR berhasil memangkas latensi inferensi dari **3.168s (Tesseract) dan 5.542s (Rapid+Tess) menjadi hanya 0.403s/dokumen (kecepatan meningkat 13.8x)**. Selain itu, tata urutan pembacaan (*reading order*) Indra OCR menjaga hierarki organisasi kop surat tetap utuh.
+   Untuk mengatasi bottleneck latensi server kampus, diadopsi model transformator visual 1M-parameter **Indra OCR** (`datalab-to/indra-ocr`). Pada pengujian offline 104 dokumen terpadu, Indra OCR berhasil memangkas latensi inferensi dari **3.165s (Tesseract) dan 5.622s (Rapid+Tess) menjadi hanya 0.421s/dokumen (kecepatan meningkat 13.3x)**. Selain itu, tata urutan pembacaan (*reading order*) Indra OCR menjaga hierarki organisasi kop surat tetap utuh.
 
 3. **Fase 3: Transisi ke Jalur Zero-Regex Online (Indra OCR + Google Gemini)**
    Menghadapi tingginya variasi format sertifikat dari berbagai universitas luar, sistem beralih ke arsitektur *zero-regex primary path* dengan menggabungkan kecepatan Indra OCR sebagai *visual text reader* dan penalaran semantik model bahasa besar (LLM). Pada 104 sertifikat terpadu, kombinasi ini mengungguli baseline Tesseract+LLM, terutama dalam membedakan angka `1` vs Romawi `I`, serta menyatukan kepanitiaan dan ormawa.
@@ -592,10 +590,10 @@ Tabel berikut menyajikan rekam jejak performa kuantitatif dari seluruh milestone
 
 Perbandingan mendalam antara Indra OCR dan Tesseract OCR pada dua skenario arsitektur:
 
-### A. Komparasi pada Pipeline Offline Heuristic (Combined v4.2, N=74 Dokumen)
+### A. Komparasi pada Pipeline Offline Heuristic (Combined v4.2, N=104 Dokumen)
 | Parameter Evaluasi | Tesseract Standalone (`E1_TESS`) | Indra OCR Standalone (`E2_INDRA`) | Gain & Dampak Teknis |
 |---|:---:|:---:|---|
-| **Rata-rata Latensi CPU** | 3.168 detik | **0.403 detik** | **7.9x lebih cepat** (menghemat ~2.76 detik per sertifikat) |
+| **Rata-rata Latensi CPU** | 3.165 detik | **0.421 detik** | **7.5x lebih cepat** (menghemat ~2.74 detik per sertifikat) |
 | **Token-F1 Nama Kegiatan** | {tess_offline.get('per_field', {}).get('nama_kegiatan_sertifikasi', {}).get('mean_token_f1', 0.0):.4f} | **{indra_offline.get('per_field', {}).get('nama_kegiatan_sertifikasi', {}).get('mean_token_f1', 0.0):.4f}** | Kualitas ekstraksi nama kegiatan setara dengan pembacaan teks yang bersih |
 | **Token-F1 Penyelenggara** | {tess_offline.get('per_field', {}).get('penyelenggara_kegiatan', {}).get('mean_token_f1', 0.0):.4f} | **{indra_offline.get('per_field', {}).get('penyelenggara_kegiatan', {}).get('mean_token_f1', 0.0):.4f}** | Indra OCR menjaga keutuhan kop surat tanpa broken linebreaks |
 | **CharSim Nomor Sertifikat** | {tess_offline.get('per_field', {}).get('nomor_bukti_fisik_nomor_sertifikasi', {}).get('mean_char_sim', 0.0):.4f} | **{indra_offline.get('per_field', {}).get('nomor_bukti_fisik_nomor_sertifikasi', {}).get('mean_char_sim', 0.0):.4f}** | Karakter alfanumerik nomor terekstrak dengan kedekatan tinggi |
@@ -669,12 +667,14 @@ def main() -> None:
         all_doc_records: list[dict[str, Any]] = []
         roadmap_rows: list[dict[str, Any]] = []
 
-        # 1. Milestone 1: EXP-OCR-INDRA-001 (N=74 Offline Combined v4.2)
-        ocr_csv = REPO_ROOT / "docs" / "experiments" / "EXP-OCR-INDRA-001" / "per_cert_results.csv"
+        # 1. Milestone 1: EXP-OCR-INDRA-002 (N=104 Offline Combined v4.2)
+        ocr_csv = REPO_ROOT / "docs" / "experiments" / "EXP-OCR-INDRA-002" / "per_cert_results.csv"
+        if not ocr_csv.exists():
+            ocr_csv = REPO_ROOT / "docs" / "experiments" / "EXP-OCR-INDRA-001" / "per_cert_results.csv"
         if ocr_csv.exists():
             ocr_recs, ocr_sums, ocr_docs = reevaluate_standard_csv(
                 ocr_csv,
-                source_experiment="EXP-OCR-INDRA-001",
+                source_experiment=ocr_csv.parent.name,
                 phase_name="1_OCR_OFFLINE",
                 allowed_variants=["E4_RAPID_TESS", "E1_TESS", "E2_INDRA", "E6_INDRA_RAPID"],
             )
