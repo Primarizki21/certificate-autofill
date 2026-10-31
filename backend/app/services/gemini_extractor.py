@@ -45,7 +45,7 @@ def _calculate_cost(
     thoughts_tokens: int,
 ) -> tuple[float, float]:
     input_rate, output_rate, cache_rate = _MODEL_PRICING.get(
-        model, _MODEL_PRICING["gemini-2.5-flash"]
+        model, _MODEL_PRICING["gemini-3.1-flash-lite"]
     )
     try:
         exchange_rate = float(

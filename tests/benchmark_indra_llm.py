@@ -564,7 +564,7 @@ if __name__ == "__main__":
     parser.add_argument("--out-dir", type=Path, default=DEFAULT_OUT_DIR, help="Output directory")
     parser.add_argument("--gt-csv", type=Path, default=DEFAULT_GT_PATH, help="Path to GT CSV")
     parser.add_argument("--manifest", type=Path, default=DEFAULT_MANIFEST, help="Path to manifest JSON")
-    parser.add_argument("--model", type=str, default="gemini-2.5-flash", help="Gemini model name")
+    parser.add_argument("--model", type=str, default="gemini-3.1-flash-lite", help="Gemini model name")
     parser.add_argument("--variants", nargs="+", choices=list(VARIANTS.keys()), default=None, help="Variants to run")
     args = parser.parse_args()
 

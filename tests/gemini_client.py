@@ -123,7 +123,7 @@ def calculate_cost(
 ) -> tuple[float, float]:
     """Hitung estimasi biaya dalam USD dan IDR berdasarkan token usage."""
     rate = exchange_rate if exchange_rate is not None else get_exchange_rate()
-    pricing = PRICING_TABLE.get(model, PRICING_TABLE["gemini-2.5-flash"])
+    pricing = PRICING_TABLE.get(model, PRICING_TABLE["gemini-3.1-flash-lite"])
 
     effective_output_tokens = candidates_tokens + thoughts_tokens
 
