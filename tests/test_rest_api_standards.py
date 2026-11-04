@@ -117,3 +117,11 @@ def test_production_startup_rejects_weak_admin_password(monkeypatch):
     )
     with pytest.raises(RuntimeError):
         asyncio.run(main.on_startup())
+
+
+def test_security_headers_present(test_db_client):
+    client, _ = test_db_client
+    resp = client.get("/livez")
+    assert resp.headers["x-content-type-options"] == "nosniff"
+    assert resp.headers["x-frame-options"] == "DENY"
+    assert resp.headers["referrer-policy"] == "no-referrer"

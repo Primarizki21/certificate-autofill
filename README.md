@@ -425,7 +425,9 @@ DELETE /api/admin/khp/rules/{rule_id} # Hapus aturan master KHP (?hard=true untu
 # - Paginasi GET /api/admin/khp/rules terikat maksimal 500 item per request (?limit=1..500).
 # Sistem & Monitoring
 GET    /metrics                       # Metrik Prometheus (ekstraksi, latensi, error rate)
-GET    /healthz                       # Health check endpoint
+GET    /healthz                       # Readiness: SELECT 1 ke database, 503 bila database mati
+GET    /livez                         # Liveness: proses HTTP hidup, tanpa dependensi database
+# /docs, /redoc, dan /openapi.json hanya aktif saat APP_ENV bukan production.
 ```
 
 ---

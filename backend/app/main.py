@@ -168,10 +168,15 @@ async def lifespan(app: FastAPI):
     finally:
         await on_shutdown()
 
+_docs_enabled = settings.app_env != "production"
+
 app = FastAPI(
     title="Certificate Autofill Prototype",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 def _get_cors_origins() -> list[str]:
     raw = (settings.cors_allowed_origins or "").strip()
@@ -195,6 +200,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if settings.app_env == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 def _normalize_metric_path(path: str) -> str:
     """Normalize dynamic URL paths to fixed endpoint templates to prevent high cardinality."""
     if path.startswith("/api/documents/") and path.endswith("/result"):

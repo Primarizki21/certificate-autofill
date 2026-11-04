@@ -17,7 +17,7 @@ services:
       - GEMINI_TIMEOUT_SECONDS=${GEMINI_TIMEOUT_SECONDS:-30.0}
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
     ports:
-      - "${STAGING_BACKEND_PORT:-8001}:8000"
+      - "${BACKEND_BIND:-127.0.0.1}:${STAGING_BACKEND_PORT:-8001}:8000"
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
