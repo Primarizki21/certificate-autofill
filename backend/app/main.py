@@ -13,7 +13,7 @@ import io
 import secrets
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
@@ -59,7 +59,7 @@ from app.services.job_processor import cleanup_expired_jobs_and_uploads, process
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
-from app.services.metrics import HTTP_REQUEST_DURATION
+from app.services.metrics import HTTP_REQUEST_DURATION, QUEUE_OLDEST_AGE_SECONDS, UPLOAD_REJECTED_QUEUE
 
 logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
@@ -266,6 +266,44 @@ def healthz() -> JSONResponse:
     return JSONResponse(content={"status": "ok"})
 
 
+def _queue_backlog_seconds(db: Session) -> float:
+    """Umur job queued tertua; 0 bila antrean kosong."""
+    oldest = (
+        db.query(func.min(ExtractionJob.created_at))
+        .filter(ExtractionJob.status == "queued")
+        .scalar()
+    )
+    if oldest is None:
+        return 0.0
+    if isinstance(oldest, str):
+        oldest = datetime.fromisoformat(oldest)
+    if oldest.tzinfo is None:
+        oldest = oldest.replace(tzinfo=timezone.utc)
+    return max(0.0, (datetime.now(timezone.utc) - oldest).total_seconds())
+
+
+def _reject_when_queue_saturated(db: Session) -> None:
+    """Tolak unggahan saat backlog melewati batas, agar PDF tidak kedaluwarsa
+    sebelum sempat diproses (file sementara dihapus setelah TTL)."""
+    threshold = settings.queue_backpressure_seconds
+    if threshold <= 0:
+        return
+    backlog = _queue_backlog_seconds(db)
+    if backlog <= threshold:
+        return
+    UPLOAD_REJECTED_QUEUE.inc()
+    logger.warning(
+        "Upload ditolak: backlog antrean %.0f detik melebihi batas %d detik.",
+        backlog,
+        threshold,
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="Antrean ekstraksi sedang penuh. Coba lagi beberapa menit lagi.",
+        headers={"Retry-After": "60"},
+    )
+
+
 @app.get("/metrics")
 def metrics(db: Session = Depends(get_db)) -> Response:
     try:
@@ -280,6 +318,7 @@ def metrics(db: Session = Depends(get_db)) -> Response:
         )
         QUEUE_JOBS.labels(status="queued").set(counts.get("queued", 0))
         QUEUE_JOBS.labels(status="processing").set(counts.get("processing", 0))
+        QUEUE_OLDEST_AGE_SECONDS.set(_queue_backlog_seconds(db))
     except Exception as exc:
         logger.debug("Prometheus queue gauge update skipped: %s", exc)
 
@@ -315,6 +354,7 @@ def upload_document(
 ) -> UploadResponse:
     REQUEST_COUNT.labels(endpoint="/api/documents").inc()
     enforce_upload_rate_limit(request, response)
+    _reject_when_queue_saturated(db)
     if not file.filename:
         raise HTTPException(status_code=400, detail="File wajib diunggah.")
 

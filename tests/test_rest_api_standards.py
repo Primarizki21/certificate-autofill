@@ -1,6 +1,8 @@
 import fitz
 import pytest
 from dataclasses import replace
+from datetime import datetime, timedelta, timezone
+from unittest.mock import MagicMock
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -149,3 +151,30 @@ def test_forwarded_for_ignored_unless_trusted(monkeypatch):
 
     monkeypatch.setattr(rate_limiter, "settings", replace(settings, trust_proxy_headers=True))
     assert rate_limiter.get_client_ip(request) == "1.2.3.4"
+
+
+def test_queue_backpressure_rejects_stale_backlog(monkeypatch):
+    import app.main as main
+
+    monkeypatch.setattr(
+        main, "settings", replace(settings, queue_backpressure_seconds=60)
+    )
+
+    stale_db = MagicMock()
+    stale_db.query.return_value.filter.return_value.scalar.return_value = (
+        datetime.now(timezone.utc) - timedelta(minutes=10)
+    )
+    with pytest.raises(main.HTTPException) as exc:
+        main._reject_when_queue_saturated(stale_db)
+    assert exc.value.status_code == 503
+    assert exc.value.headers["Retry-After"] == "60"
+
+    fresh_db = MagicMock()
+    fresh_db.query.return_value.filter.return_value.scalar.return_value = (
+        datetime.now(timezone.utc) - timedelta(seconds=5)
+    )
+    main._reject_when_queue_saturated(fresh_db)
+
+    empty_db = MagicMock()
+    empty_db.query.return_value.filter.return_value.scalar.return_value = None
+    assert main._queue_backlog_seconds(empty_db) == 0.0

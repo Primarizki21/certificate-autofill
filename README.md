@@ -145,7 +145,8 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
-| `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
+| `TEMP_FILE_TTL_HOURS` | `6` | Batas umur PDF tanpa job aktif sebelum dihapus. Harus lebih besar dari backlog antrean |
+| `QUEUE_BACKPRESSURE_SECONDS` | `1800` | Upload baru ditolak (503) bila job queued tertua lebih tua dari ini. `0` menonaktifkan |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
 | `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per IP address (standar 1 req/detik) |

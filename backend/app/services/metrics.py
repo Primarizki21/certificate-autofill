@@ -49,6 +49,18 @@ QUEUE_JOBS = Gauge(
     ["status"],
 )
 
+# Age of the oldest queued job; drives backlog alerts and upload backpressure
+QUEUE_OLDEST_AGE_SECONDS = Gauge(
+    "cert_queue_oldest_age_seconds",
+    "Age in seconds of the oldest queued extraction job (0 when queue is empty)",
+)
+
+# Uploads refused because the queue backlog exceeded the backpressure threshold
+UPLOAD_REJECTED_QUEUE = Counter(
+    "cert_upload_rejected_queue_total",
+    "Total uploads rejected because the extraction queue was saturated",
+)
+
 # HTTP API endpoint request latency
 HTTP_REQUEST_DURATION = Histogram(
     "cert_http_request_duration_seconds",

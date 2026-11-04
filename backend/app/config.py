@@ -35,7 +35,9 @@ class Settings:
     # Only trust X-Forwarded-For when a reverse proxy is guaranteed in front.
     trust_proxy_headers: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() == "true"
     upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
-    temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
+    temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "6"))
+    # Tolak upload baru bila job queued tertua sudah lebih tua dari ini (0 = mati).
+    queue_backpressure_seconds: int = int(os.getenv("QUEUE_BACKPRESSURE_SECONDS", "1800"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
     storage_cleanup_interval_seconds: int = int(os.getenv("STORAGE_CLEANUP_INTERVAL_SECONDS", "300"))
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
