@@ -16,13 +16,13 @@ import uuid
 from datetime import datetime
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import openpyxl
 from openpyxl.utils import get_column_letter
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import engine, get_db
@@ -228,10 +228,24 @@ def index() -> str:
     return (static_dir / "index.html").read_text(encoding="utf-8")
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, str]:
-    REQUEST_COUNT.labels(endpoint="/healthz").inc()
+@app.get("/livez")
+def livez() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/healthz")
+def healthz() -> JSONResponse:
+    REQUEST_COUNT.labels(endpoint="/healthz").inc()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Health check gagal: database tidak dapat dijangkau.")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "unreachable"},
+        )
+    return JSONResponse(content={"status": "ok"})
 
 
 @app.get("/metrics")
