@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -50,6 +50,11 @@ class ExtractionJob(Base):
     __table_args__ = (
         Index("ix_extraction_jobs_polling", "status", "available_at", "created_at"),
         Index("ix_extraction_jobs_lease", "status", "lease_expires_at"),
+        Index(
+            "ix_extraction_jobs_queued_created",
+            "created_at",
+            postgresql_where=text("status = 'queued'"),
+        ),
     )
 
 
