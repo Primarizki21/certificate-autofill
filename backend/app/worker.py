@@ -6,7 +6,6 @@ import threading
 import time
 from datetime import datetime, timezone
 from app.config import settings
-from app.database import init_db
 from app.services.job_processor import cleanup_expired_jobs_and_uploads, process_document_job
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -60,7 +59,6 @@ def main() -> None:
     except Exception as exc:
         logger.warning("Could not start worker metrics server: %s", exc)
 
-    init_db()
     next_cleanup = 0.0
     concurrency = max(1, settings.worker_concurrency)
     logger.info(

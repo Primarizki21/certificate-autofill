@@ -25,7 +25,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.database import get_db, init_db
+from app.database import engine, get_db
 from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
 from app.models import (
     Document,
@@ -76,25 +76,59 @@ async def _storage_cleanup_loop() -> None:
             logger.exception("Periodic ephemeral-storage cleanup failed.")
 
 
-def _run_auto_migrations() -> None:
-    """Run Alembic database migrations to head if configuration is present."""
-    try:
-        from alembic import command
-        from alembic.config import Config
+_MIGRATION_ADVISORY_LOCK_KEY = 742_031_001
 
-        root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
-        backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
-        ini_path = root_ini if root_ini.exists() else backend_ini
-        if ini_path.exists():
-            cfg = Config(str(ini_path))
-            command.upgrade(cfg, "head")
-            logger.info("Alembic database migrations applied successfully to head.")
+
+def _run_auto_migrations() -> None:
+    """Apply Alembic migrations; the sole owner of schema creation.
+
+    create_all() must not run before this: it creates tables without an
+    alembic_version row, so every later upgrade fails with DuplicateTable.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import text as sa_text
+
+    root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+    backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    ini_path = root_ini if root_ini.exists() else backend_ini
+    if not ini_path.exists():
+        raise RuntimeError(f"alembic.ini tidak ditemukan (dicari: {root_ini}, {backend_ini})")
+
+    cfg = Config(str(ini_path))
+    lock_connection = None
+    try:
+        if engine.dialect.name == "postgresql":
+            # Serialises concurrent container starts; released when the session closes.
+            lock_connection = engine.connect()
+            lock_connection.execute(sa_text("SET lock_timeout = '60s'"))
+            lock_connection.execute(
+                sa_text("SELECT pg_advisory_lock(:key)"),
+                {"key": _MIGRATION_ADVISORY_LOCK_KEY},
+            )
+        tables = set(sa_inspect(engine).get_table_names())
+        if "documents" in tables and "alembic_version" not in tables:
+            # Legacy schema built by create_all: record the baseline before upgrading.
+            command.stamp(cfg, "head")
+            logger.warning("Skema lama tanpa alembic_version: ditandai head sebelum upgrade.")
+        command.upgrade(cfg, "head")
+        logger.info("Alembic migrations applied to head.")
     except Exception as exc:
-        logger.debug("Alembic migration skipped or failed: %s", exc)
+        if settings.app_env == "production":
+            logger.exception("Alembic migration gagal; skema database tidak terjamin.")
+            raise
+        logger.warning("Alembic migration skipped: %s", exc)
+    finally:
+        if lock_connection is not None:
+            lock_connection.execute(
+                sa_text("SELECT pg_advisory_unlock(:key)"),
+                {"key": _MIGRATION_ADVISORY_LOCK_KEY},
+            )
+            lock_connection.close()
 
 
 async def on_startup() -> None:
-    init_db()
     _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog

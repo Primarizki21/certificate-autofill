@@ -240,7 +240,7 @@ def test_startup_schedules_storage_cleanup(monkeypatch):
     import app.main as main
 
     calls: list[str] = []
-    monkeypatch.setattr(main, "init_db", lambda: calls.append("init"))
+    monkeypatch.setattr(main, "_run_auto_migrations", lambda: calls.append("migrate"))
     monkeypatch.setattr(main, "cleanup_expired_jobs_and_uploads", lambda: calls.append("cleanup"))
 
     async def run_startup_and_shutdown():
@@ -250,4 +250,4 @@ def test_startup_schedules_storage_cleanup(monkeypatch):
         await main.on_shutdown()
 
     asyncio.run(run_startup_and_shutdown())
-    assert calls == ["init", "cleanup"]
+    assert calls == ["migrate", "cleanup"]

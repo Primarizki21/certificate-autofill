@@ -87,7 +87,7 @@ def db_session():
 
 @pytest.fixture
 def client(db_session, monkeypatch):
-    monkeypatch.setattr("app.main.init_db", lambda: None)
+    monkeypatch.setattr("app.main._run_auto_migrations", lambda: None)
     monkeypatch.setattr("app.main.cleanup_expired_jobs_and_uploads", lambda: None)
 
     def override_get_db():
