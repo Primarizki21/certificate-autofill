@@ -125,6 +125,31 @@ jobs:
       - name: Database migration check (PostgreSQL 17)
         run: uv run alembic -x url="$POSTGRES_TEST_URL" upgrade head
 
+      - name: Legacy create_all then Alembic (idempotent stamp)
+        env:
+          DATABASE_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/certautofill_ci"
+        run: |
+          uv run python - <<'PY'
+          from sqlalchemy import text
+          from app.database import engine, init_db
+
+          with engine.begin() as connection:
+              connection.execute(text("DROP SCHEMA public CASCADE; CREATE SCHEMA public;"))
+          init_db()
+          PY
+          uv run python - <<'PY'
+          from sqlalchemy import text
+          from app.database import engine
+          from app.main import _run_auto_migrations
+
+          _run_auto_migrations()
+          _run_auto_migrations()
+          with engine.connect() as connection:
+              version = connection.execute(text("select version_num from alembic_version")).scalar()
+          assert version, "alembic_version tidak terisi setelah stamp"
+          print(f"alembic_version={version}")
+          PY
+
       - name: Database concurrent startup DDL check (PostgreSQL 17)
         run: uv run python -m tests.test_database_concurrency
 
@@ -197,3 +222,35 @@ jobs:
 
       - name: Build Docker images
         run: docker compose build
+
+      - name: Container smoke test (production posture)
+        run: |
+          docker run -d --name smoke-backend -p 8001:8000 \
+            -e DATABASE_URL=sqlite:////tmp/smoke.db \
+            -e APP_ENV=production \
+            -e ADMIN_PASSWORD=ci-strong-password \
+            -e ENABLE_TESSERACT_GEMINI=false \
+            -e GOOGLE_API_KEY= \
+            certificate-autofill-dev-backend:latest
+          code=""
+          for i in $(seq 1 45); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/healthz)
+            [ "$code" = "200" ] && break
+            sleep 1
+          done
+          docker logs smoke-backend | tail -30
+          test "$code" = "200"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/docs)" = "404"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/api/admin/khp/rules)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u admin:admin123 http://localhost:8001/api/admin/khp/rules)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/api/documents/not-a-uuid/result)" = "404"
+          docker rm -f smoke-backend
+
+      - name: Scan image for vulnerabilities (informational)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: certificate-autofill-dev-backend:latest
+          format: table
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
