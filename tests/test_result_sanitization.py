@@ -1,10 +1,13 @@
 import json
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 from app.main import get_result
 from app.models import Document, ExtractedField, KHPMasterResolution
+
+DOC_ID = "3f1c2f4e-9b1a-4c7d-8e2f-1a2b3c4d5e6f"
 
 
 def test_html_and_js_contain_no_internal_review_panel() -> None:
@@ -48,7 +51,7 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
     monkeypatch.setattr("app.main.settings", SimpleNamespace(enable_khp_master_staging=True))
     mock_db = MagicMock()
     doc = Document(
-        id="doc-test-123",
+        id=DOC_ID,
         original_file_name="sertifikat.pdf",
         checksum_sha256="fake_sha",
         tahun_akademik="2024/2025",
@@ -59,7 +62,7 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
     )
     field = ExtractedField(
         id="f1",
-        document_id="doc-test-123",
+        document_id=DOC_ID,
         form_field_name="nama_kegiatan_sertifikasi",
         extracted_value="FIT COMPETITION 2025",
         confidence=0.95,
@@ -86,7 +89,7 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
     }
     resolution_row = KHPMasterResolution(
         id="res-123",
-        document_id="doc-test-123",
+        document_id=DOC_ID,
         resolution_json=json.dumps(full_internal_resolution),
     )
 
@@ -103,7 +106,7 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
     mock_db.query.side_effect = mock_query
     mock_db.get.return_value = doc
 
-    result = get_result("doc-test-123", db=mock_db)
+    result = get_result(DOC_ID, db=mock_db)
     payload = result.model_dump()
 
     # 1. Field form tetap ada untuk autofill
@@ -123,9 +126,10 @@ def test_get_result_uses_public_extraction_result_with_zero_internal_leakage(mon
 
 def test_get_result_short_circuits_unready_status() -> None:
     for unready_status in ("queued", "processing", "failed"):
+        doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, unready_status))
         mock_db = MagicMock()
         doc = Document(
-            id=f"doc-{unready_status}",
+            id=doc_id,
             original_file_name="test.pdf",
             checksum_sha256="fake_sha",
             tahun_akademik="2024/2025",
@@ -135,9 +139,9 @@ def test_get_result_short_circuits_unready_status() -> None:
         )
         mock_db.get.return_value = doc
 
-        result = get_result(f"doc-{unready_status}", db=mock_db)
+        result = get_result(doc_id, db=mock_db)
 
-        assert result.document_id == f"doc-{unready_status}"
+        assert result.document_id == doc_id
         assert result.status == unready_status
         assert result.needs_review is False
         assert result.fields == {}
