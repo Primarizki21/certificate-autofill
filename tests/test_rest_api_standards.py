@@ -178,3 +178,27 @@ def test_queue_backpressure_rejects_stale_backlog(monkeypatch):
     empty_db = MagicMock()
     empty_db.query.return_value.filter.return_value.scalar.return_value = None
     assert main._queue_backlog_seconds(empty_db) == 0.0
+
+
+def test_rate_limit_identity_uses_valid_api_key(monkeypatch):
+    from starlette.requests import Request
+    from app.services import api_key_auth, rate_limiter
+
+    allowed = ["sk-portal-kampus-1234567890"]
+    monkeypatch.setattr(api_key_auth, "get_allowed_api_keys", lambda: allowed)
+    monkeypatch.setattr(
+        rate_limiter, "settings", replace(settings, trust_proxy_headers=False)
+    )
+
+    def make_request(key: str) -> Request:
+        return Request(
+            {
+                "type": "http",
+                "headers": [(b"x-api-key", key.encode())],
+                "client": ("9.9.9.9", 1234),
+            }
+        )
+
+    valid_identity = rate_limiter.get_client_identity(make_request(allowed[0]))
+    assert valid_identity.startswith("key:")
+    assert rate_limiter.get_client_identity(make_request("sk-random-000000000")) == "ip:9.9.9.9"

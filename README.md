@@ -149,7 +149,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `QUEUE_BACKPRESSURE_SECONDS` | `1800` | Upload baru ditolak (503) bila job queued tertua lebih tua dari ini. `0` menonaktifkan |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
-| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per IP address (standar 1 req/detik) |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per pemanggil (API key valid, fallback IP) |
 | `MAX_PDF_PAGES` | `3` | Batas maksimum jumlah halaman file PDF sertifikat |
 | `MAX_IMAGE_PIXELS` | `60000000` | Batas aman piksel gambar (Pillow Decompression Bomb safeguard, 60 MP) |
 | `MAX_IMAGE_DIMENSION` | `8000` | Dimensi panjang/lebar piksel maksimum gambar (anti-pixel flood) |
@@ -211,8 +211,9 @@ Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum doku
    - Batas kanvas render maksimal 5000 pt untuk mencegah OOM saat proses rasterisasi.
 
 5. **Rate Limiting (Sliding Window)**:
-   - Endpoint upload dilindungi pembatas laju *in-memory* berbasis IP dengan jendela geser (*sliding window*).
-   - Default: **60 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+   - Endpoint upload dilindungi pembatas laju *in-memory* berbasis identitas pemanggil dengan jendela geser (*sliding window*).
+   - Identitas diambil dari API key valid (`X-API-Key` atau `Authorization: Bearer`) bila ada; tanpa key, fallback ke alamat IP. Ini menghindari satu portal kampus yang berbagi IP menelan seluruh kuota.
+   - Default: **60 unggahan per menit per identitas** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
 ---
 
 ## Hasil Evaluasi & Benchmark
