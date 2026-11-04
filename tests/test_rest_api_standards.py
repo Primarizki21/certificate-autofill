@@ -1,9 +1,11 @@
 import fitz
 import pytest
+from dataclasses import replace
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models import KHPKelompokKegiatan, KHPKegiatan1, KHPTingkat, KHPJabatanPrestasi
@@ -45,6 +47,7 @@ def test_db_client(monkeypatch):
         finally:
             pass
 
+    monkeypatch.setattr("app.main.settings", replace(settings, admin_password="admin123"))
     monkeypatch.setattr("app.main._run_auto_migrations", lambda: None)
     monkeypatch.setattr("app.main.cleanup_expired_jobs_and_uploads", lambda: None)
     monkeypatch.setattr("app.main.process_document_job", lambda *args, **kw: None)
@@ -101,3 +104,16 @@ def test_admin_khp_rules_pagination_limit_bounded(test_db_client):
     # Limit tidak valid > 500 memicu 422 Unprocessable Entity
     res_invalid = client.get("/api/admin/khp/rules?limit=600&offset=0", auth=auth)
     assert res_invalid.status_code == 422
+
+
+def test_production_startup_rejects_weak_admin_password(monkeypatch):
+    import asyncio
+    import app.main as main
+
+    monkeypatch.setattr(
+        main,
+        "settings",
+        replace(settings, app_env="production", admin_password="admin123"),
+    )
+    with pytest.raises(RuntimeError):
+        asyncio.run(main.on_startup())

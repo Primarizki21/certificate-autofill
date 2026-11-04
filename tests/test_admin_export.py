@@ -10,6 +10,7 @@ Tests:
 import io
 import csv
 import uuid
+from dataclasses import replace
 from datetime import datetime, timezone
 import openpyxl
 import pytest
@@ -18,6 +19,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlalchemy.orm import sessionmaker
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models import Document, ExtractedField
@@ -39,6 +41,7 @@ def db_session():
         session.close()
 @pytest.fixture
 def client(db_session, monkeypatch):
+    monkeypatch.setattr("app.main.settings", replace(settings, admin_password="admin123"))
     monkeypatch.setattr("app.main._run_auto_migrations", lambda: None)
     monkeypatch.setattr("app.main.cleanup_expired_jobs_and_uploads", lambda: None)
 

@@ -128,7 +128,21 @@ def _run_auto_migrations() -> None:
             lock_connection.close()
 
 
+_WEAK_ADMIN_PASSWORDS = {"", "admin", "admin123", "changeme", "password"}
+
+
+def _assert_production_secrets() -> None:
+    if settings.app_env != "production":
+        return
+    if settings.admin_password.strip().lower() in _WEAK_ADMIN_PASSWORDS:
+        raise RuntimeError(
+            "ADMIN_PASSWORD wajib diisi kata sandi kuat saat APP_ENV=production; "
+            "nilai kosong atau default ditolak agar /api/admin/* tidak terbuka."
+        )
+
+
 async def on_startup() -> None:
+    _assert_production_secrets()
     _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog

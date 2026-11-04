@@ -14,6 +14,7 @@ Tests:
 
 import csv
 import io
+from dataclasses import replace
 import openpyxl
 import pytest
 from fastapi.testclient import TestClient
@@ -21,6 +22,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.config import settings
 from app.database import Base, get_db
 from app.main import app
 from app.models import (
@@ -87,6 +89,7 @@ def db_session():
 
 @pytest.fixture
 def client(db_session, monkeypatch):
+    monkeypatch.setattr("app.main.settings", replace(settings, admin_password="admin123"))
     monkeypatch.setattr("app.main._run_auto_migrations", lambda: None)
     monkeypatch.setattr("app.main.cleanup_expired_jobs_and_uploads", lambda: None)
 
