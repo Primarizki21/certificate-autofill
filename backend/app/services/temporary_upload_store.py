@@ -17,6 +17,15 @@ class TemporaryUploadStore:
     - Keys strictly validated as UUIDs to prevent directory traversal.
     - Atomic writes via .part files and os.replace.
     - Magic bytes validation before persisting.
+
+    Portability contract (satu-satunya modul yang menyentuh direktori upload):
+    - Pemanggil hanya memakai keyword opaque dari stage_* dan tidak pernah
+      membangun path sendiri.
+    - Backend alternatif (NFS, MinIO/S3) cukup mengganti isi kelas ini:
+      NFS memakai path yang sama, S3 memetakan open_bytes/delete/reap_orphans
+      ke operasi objek. Pemanggil tidak berubah.
+    - Semua operasi yang dipakai (os.replace, unlink, mtime) kompatibel NFS;
+      hindari asumsi hardlink atau advisory lock pada filesystem bersama.
     """
 
     def __init__(self, root_dir: str | None = None) -> None:
