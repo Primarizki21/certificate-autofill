@@ -97,13 +97,14 @@ upload_rate_limiter = SlidingWindowRateLimiter()
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract client IP, taking proxy headers into account safely."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # First entry is client IP in X-Forwarded-For
-        ip = forwarded.split(",")[0].strip()
-        if ip:
-            return ip
+    """Extract client IP; X-Forwarded-For is only honoured behind a trusted proxy."""
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            # First entry is the client IP in X-Forwarded-For.
+            ip = forwarded.split(",")[0].strip()
+            if ip:
+                return ip
     client = request.client
     return client.host if client else "127.0.0.1"
 

@@ -125,3 +125,27 @@ def test_security_headers_present(test_db_client):
     assert resp.headers["x-content-type-options"] == "nosniff"
     assert resp.headers["x-frame-options"] == "DENY"
     assert resp.headers["referrer-policy"] == "no-referrer"
+
+
+def test_invalid_document_uuid_returns_404(test_db_client):
+    client, _ = test_db_client
+    resp = client.get("/api/documents/not-a-uuid/result")
+    assert resp.status_code == 404
+
+
+def test_forwarded_for_ignored_unless_trusted(monkeypatch):
+    from starlette.requests import Request
+    from app.services import rate_limiter
+
+    request = Request(
+        {
+            "type": "http",
+            "headers": [(b"x-forwarded-for", b"1.2.3.4")],
+            "client": ("9.9.9.9", 1234),
+        }
+    )
+    monkeypatch.setattr(rate_limiter, "settings", replace(settings, trust_proxy_headers=False))
+    assert rate_limiter.get_client_ip(request) == "9.9.9.9"
+
+    monkeypatch.setattr(rate_limiter, "settings", replace(settings, trust_proxy_headers=True))
+    assert rate_limiter.get_client_ip(request) == "1.2.3.4"

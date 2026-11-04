@@ -293,6 +293,16 @@ def get_options() -> OptionsResponse:
     return OptionsResponse(options=options)
 
 
+def _reject_oversized_body(request: Request, max_bytes: int) -> None:
+    """Reject from Content-Length before the body is buffered into memory."""
+    content_length = request.headers.get("content-length", "").strip()
+    if content_length.isdigit() and int(content_length) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Ukuran file maksimal {settings.max_upload_size_mb} MB.",
+        )
+
+
 @app.post("/api/documents", response_model=UploadResponse)
 def upload_document(
     request: Request,
@@ -308,8 +318,9 @@ def upload_document(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File wajib diunggah.")
 
-    content = file.file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    _reject_oversized_body(request, max_bytes)
+    content = file.file.read()
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Ukuran file maksimal {settings.max_upload_size_mb} MB.")
 
@@ -372,6 +383,10 @@ def upload_document(
 @app.get("/api/documents/{document_id}/result", response_model=PublicExtractionResult)
 def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtractionResult:
     REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/result").inc()
+    try:
+        uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
     document = db.get(Document, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
@@ -436,8 +451,9 @@ def extract_certificate_v1(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File sertifikat wajib diunggah.")
 
-    content = file.file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    _reject_oversized_body(request, max_bytes)
+    content = file.file.read()
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
