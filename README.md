@@ -178,6 +178,35 @@ uv run alembic upgrade head
 ```
 Dokumentasi lengkap migrasi tersedia di [Panduan Migrasi Database](docs/DATABASE_MIGRATIONS.md).
 
+### Backup & Restore PostgreSQL
+Service `backup` membuat `pg_dump` custom-format setiap jam (RPO 1 jam). Retensi otomatis: 48 jam per jam, 14 harian, 12 bulanan. PDF tidak ikut karena bersifat sementara.
+
+Sekali saja, buat role baca-only dengan password dari secret:
+```bash
+docker compose exec -T postgres psql -U postgres -d certautofill \
+  -v backup_password="$(cat /run/secrets/db_backup)" \
+  -f /scripts/sql/create_backup_role.sql
+```
+Lalu isi `BACKUP_DB_PASSWORD` di `.env` dengan password yang sama.
+
+Backup manual sekali jalan (tanpa menunggu jadwal):
+```bash
+docker compose run --rm -e BACKUP_ONCE=1 backup
+```
+
+Restore drill (wajib diuji, minimal sebulan sekali):
+```bash
+docker compose exec -T backup sh -c 'ls /backups/hourly | tail -1'
+docker compose exec -T postgres createdb -U postgres certautofill_restore
+docker compose exec -T backup pg_restore --no-owner --no-privileges \
+  -d postgresql://postgres@postgres:5432/certautofill_restore /backups/hourly/<file>.dump
+docker compose exec -T postgres psql -U postgres -d certautofill_restore \
+  -c "select count(*) from documents;"
+```
+Salinan offsite: mount direktori host/NAS ke `/backups-offsite` dan set `BACKUP_OFFSITE_DIR=/backups-offsite`.
+
+Jalur peningkatan ke point-in-time recovery (RPO menit): aktifkan `archive_mode` + WAL archiving dengan pgBackRest. Tidak ada perubahan kode aplikasi; dump per jam tetap dipertahankan sebagai lapisan kedua.
+
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
 Cukup ubah baris berikut di `.env`:
 ```bash
