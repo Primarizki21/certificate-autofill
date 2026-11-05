@@ -1,0 +1,34 @@
+# Overlay TLS opsional dengan Caddy. Pakai hanya bila server ini sendiri yang
+# menangani HTTPS. Bila TLS sudah diterminasi proxy kampus, jangan pakai file ini:
+# backend sudah bind ke 127.0.0.1 dan cukup diarahkan dari proxy tersebut.
+#
+#   SITE_ADDRESS=portal.kampus.ac.id \
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml \
+#     -f docker-compose.proxy.yml up -d
+services:
+  backend:
+    # Caddy berada di jaringan compose, bukan 127.0.0.1, sehingga uvicorn perlu
+    # mempercayai peernya agar X-Forwarded-For dipakai untuk rate limit.
+    # Aman karena port backend tetap hanya dipublikasikan ke loopback host.
+    environment:
+      - FORWARDED_ALLOW_IPS=*
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "${HTTPS_PORT:-443}:443"
+    environment:
+      - SITE_ADDRESS=${SITE_ADDRESS:-localhost}
+    volumes:
+      - ./deploy/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  caddy_data:
+  caddy_config:
