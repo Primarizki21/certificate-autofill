@@ -15,6 +15,7 @@ import time
 import uuid
 from datetime import datetime, timezone
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
@@ -25,7 +26,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_
 from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.database import engine, get_db
+from app.database import SessionLocal, engine, get_db
 from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
 from app.models import (
     Document,
@@ -450,7 +451,17 @@ def upload_document(
 
 
 @app.get("/api/documents/{document_id}/result", response_model=PublicExtractionResult)
-def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtractionResult:
+async def get_result_route(document_id: str) -> PublicExtractionResult:
+    # Session dibuka dan ditutup dalam satu panggilan threadpool. Dependency
+    # generator sinkron menahan koneksi sampai teardown yang berebut slot
+    # threadpool, dan itu memicu deadlock pool saat beban tinggi.
+    return await run_in_threadpool(get_result, document_id)
+
+
+def get_result(document_id: str, db: Session | None = None) -> PublicExtractionResult:
+    if db is None:
+        with SessionLocal() as session:
+            return get_result(document_id, session)
     REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/result").inc()
     try:
         uuid.UUID(document_id)
