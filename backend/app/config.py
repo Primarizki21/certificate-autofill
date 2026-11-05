@@ -4,9 +4,9 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(override=True)
+    load_dotenv(override=False)
     root_dir = Path(__file__).resolve().parents[2]
-    load_dotenv(root_dir / ".env", override=True)
+    load_dotenv(root_dir / ".env", override=False)
     google_env = root_dir / ".env.google"
     if google_env.exists():
         load_dotenv(google_env, override=False)
