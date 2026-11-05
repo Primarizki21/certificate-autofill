@@ -44,7 +44,7 @@ services:
         APP_VERSION: ${APP_VERSION:-dev}
     image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     env_file:
       - path: .env
         required: false
@@ -70,6 +70,7 @@ services:
       - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
       - WORKER_HEARTBEAT_STALE_SECONDS=${WORKER_HEARTBEAT_STALE_SECONDS:-60}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
     ports:
       - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
     security_opt:

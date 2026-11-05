@@ -141,6 +141,7 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
 | `DB_WORKER_POLL_SECONDS` | `1` | Jeda awal polling worker saat antrean kosong (naik bertahap dengan jitter) |
 | `WORKER_CONCURRENCY` | `2` | Jumlah thread pemrosesan paralel per worker (default `2` untuk utilisasi optimal) |
+| `UVICORN_WORKERS` | `1` | Proses uvicorn untuk endpoint HTTP. `4` terbukti memenuhi 1.000 poller 3 detik, tetapi rate limit menjadi per proses dan `/metrics` hanya satu worker |
 | `WORKER_HEARTBEAT_SECONDS` | `15` | Interval tulis heartbeat liveness ke tabel `worker_heartbeats` |
 | `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Worker dianggap mati bila heartbeat lebih tua dari nilai ini (dipakai metrik dan alert) |
 | `WORKER_IDLE_BACKOFF_MAX_SECONDS` | `5` | Batas atas backoff polling saat antrean kosong |

@@ -92,7 +92,7 @@ def seed_completed_documents(database_url: str, count: int) -> list[str]:
 
 
 def start_server(
-    port: int, env: dict[str, str], log_path: str | None = None
+    port: int, env: dict[str, str], log_path: str | None = None, workers: int = 1
 ) -> subprocess.Popen:
     stream = subprocess.DEVNULL
     if log_path:
@@ -109,7 +109,7 @@ def start_server(
             "--port",
             str(port),
             "--workers",
-            "1",
+            str(workers),
             "--log-level",
             "warning",
         ],

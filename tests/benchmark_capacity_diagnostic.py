@@ -144,6 +144,27 @@ def _client_worker(payload: tuple[int, list[str], int, float, float]):
     return asyncio.run(poll_interval(port, document_ids, pollers, interval, duration))
 
 
+def _tree_cpu(process: psutil.Process) -> float:
+    total = 0.0
+    for child in [process, *process.children(recursive=True)]:
+        try:
+            times = child.cpu_times()
+            total += times.user + times.system
+        except psutil.Error:
+            continue
+    return total
+
+
+def _tree_rss(process: psutil.Process) -> float:
+    total = 0.0
+    for child in [process, *process.children(recursive=True)]:
+        try:
+            total += child.memory_info().rss
+        except psutil.Error:
+            continue
+    return total
+
+
 def percentile(values: list[float], fraction: float) -> float:
     if not values:
         return 0.0
@@ -162,6 +183,7 @@ def main() -> None:
     parser.add_argument("--duration", type=float, default=30.0)
     parser.add_argument("--client-processes", type=int, default=1)
     parser.add_argument("--metrics-port", type=int, default=0)
+    parser.add_argument("--server-workers", type=int, default=1)
     parser.add_argument("--experiment-id", default=EXPERIMENT_ID)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
@@ -182,14 +204,16 @@ def main() -> None:
     os.environ["ENABLE_TESSERACT_GEMINI"] = "false"
     os.environ["GOOGLE_API_KEY"] = ""
     os.environ["PYTHONPATH"] = f"{REPO_ROOT}:{REPO_ROOT / 'backend'}"
-    os.environ["METRICS_PORT"] = str(args.metrics_port)
+    os.environ["METRICS_PORT"] = "0" if args.server_workers > 1 else str(args.metrics_port)
 
     create_schema(args.database_url)
     document_ids = seed_completed_documents(args.database_url, args.pollers)
 
     metrics_port = args.metrics_port or args.port
     log_path = REPO_ROOT / ".cache" / f"exp_capacity_diagnostic_{args.port}.log"
-    process = start_server(args.port, dict(os.environ), str(log_path))
+    process = start_server(
+        args.port, dict(os.environ), str(log_path), workers=args.server_workers
+    )
     wait_ready(args.port)
     server_process = psutil.Process(process.pid)
 
@@ -204,9 +228,9 @@ def main() -> None:
     )
     try:
         for interval in args.intervals:
-            before = scrape_histogram(metrics_port)
-            cpu_before = server_process.cpu_times()
-            rss_before = server_process.memory_info().rss
+            before = scrape_histogram(metrics_port) if args.server_workers == 1 else None
+            cpu_before = _tree_cpu(server_process)
+            rss_before = _tree_rss(server_process)
             interval_start = time.perf_counter()
             if client_pool:
                 per_process = args.pollers // args.client_processes
@@ -228,11 +252,11 @@ def main() -> None:
                     poll_interval(args.port, document_ids, args.pollers, interval, args.duration)
                 )
             time.sleep(3)
-            after = scrape_histogram(metrics_port)
-            cpu_after = server_process.cpu_times()
-            rss_after = server_process.memory_info().rss
+            after = scrape_histogram(metrics_port) if before is not None else None
+            cpu_after = _tree_cpu(server_process)
+            rss_after = _tree_rss(server_process)
 
-            delta = histogram_delta(before, after)
+            delta = histogram_delta(before, after) if before and after else None
             total = len(latencies)
             values = [value[1] for value in latencies]
             rps = round(total / elapsed, 2)
@@ -240,15 +264,15 @@ def main() -> None:
             response_estimate = (
                 round(args.pollers / rps_window - interval, 2) if rps_window else None
             )
-            cpu_seconds = round(
-                (cpu_after.user + cpu_after.system) - (cpu_before.user + cpu_before.system), 2
-            )
+            cpu_seconds = round(cpu_after - cpu_before, 2)
             cpu_percent_of_one_core = round(cpu_seconds / elapsed * 100, 1)
-            server_p95 = bucket_percentile(delta["buckets"], 0.95)
-            inf_count = delta["buckets"].get("+Inf", 0.0)
-            under_10s = delta["buckets"].get("10.0", 0.0)
+            server_p95 = bucket_percentile(delta["buckets"], 0.95) if delta else None
+            inf_count = delta["buckets"].get("+Inf", 0.0) if delta else 0.0
+            under_10s = delta["buckets"].get("10.0", 0.0) if delta else 0.0
             over_10s = (
-                round((inf_count - under_10s) / delta["count"], 4) if delta["count"] else 0.0
+                round((inf_count - under_10s) / delta["count"], 4)
+                if delta and delta["count"]
+                else None
             )
 
             row = {
@@ -259,9 +283,11 @@ def main() -> None:
                 "client_p50_ms": round(percentile(values, 0.50), 1),
                 "client_p95_ms": round(percentile(values, 0.95), 1),
                 "client_p99_ms": round(percentile(values, 0.99), 1),
-                "server_sample_count": int(delta["count"]),
-                "server_mean_ms": delta["mean_ms"],
-                "server_p95_ms": server_p95 if server_p95 is not None else ">10000",
+                "server_sample_count": int(delta["count"]) if delta else 0,
+                "server_mean_ms": delta["mean_ms"] if delta else None,
+                "server_p95_ms": (
+                    (server_p95 if server_p95 is not None else ">10000") if delta else "n/a"
+                ),
                 "server_share_over_10s": over_10s,
                 "server_cpu_pct_one_core": cpu_percent_of_one_core,
                 "server_rss_after_mb": round(rss_after / 1024**2, 1),
@@ -278,7 +304,7 @@ def main() -> None:
                 for bucket_row in bucket(latencies, interval_start)
             )
 
-            if response_estimate is not None and delta["mean_ms"] > 0:
+            if response_estimate is not None and delta and delta["mean_ms"] > 0:
                 if delta["mean_ms"] < response_estimate * 1000 * 0.5:
                     conclusions.append(
                         f"interval {interval}s: latensi dalam aplikasi {delta['mean_ms']} ms "
@@ -308,10 +334,10 @@ def main() -> None:
         "config": {
             "pollers": args.pollers,
             "client_processes": args.client_processes,
+            "server_workers": args.server_workers,
             "metrics_port": args.metrics_port,
             "intervals": args.intervals,
             "duration_seconds": args.duration,
-            "server_workers": 1,
             "threadpool_default_limit": 40,
             "db_pool_size": int(os.getenv("DB_POOL_SIZE", "20")),
             "db_max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
@@ -330,7 +356,7 @@ Memisahkan latensi di dalam aplikasi dari latensi yang dilihat klien pada
 ## Konfigurasi
 - Poller: {args.pollers:,} dalam {args.client_processes} proses klien, durasi {args.duration} s per interval
 - Interval diuji: {', '.join(str(value) for value in args.intervals)} detik
-- Server: 1 proses uvicorn, 40 slot threadpool, pool DB {os.getenv('DB_POOL_SIZE', '20')}
+- Server: {args.server_workers} worker uvicorn, pool DB {os.getenv('DB_POOL_SIZE', '20')}
 - Upload dinonaktifkan agar pengukuran hanya polling
 
 ## Hasil
@@ -340,7 +366,8 @@ Memisahkan latensi di dalam aplikasi dari latensi yang dilihat klien pada
         f"| {row['interval_seconds']} s | {row['rps']} | {row['rps_window']} | "
         f"{row['client_p50_ms']} ms | "
         f"{row['client_p95_ms']} ms | {row['server_mean_ms']} ms | {row['server_p95_ms']} | "
-        f"{row['server_share_over_10s']*100:.1f}% | {row['server_cpu_pct_one_core']}% | "
+        f"{(row['server_share_over_10s']*100 if row['server_share_over_10s'] is not None else 0):.1f}% | "
+        f"{row['server_cpu_pct_one_core']}% | "
         f"{row['server_rss_after_mb']} MB |"
         for row in rows
     ) + """
@@ -366,6 +393,7 @@ Memisahkan latensi di dalam aplikasi dari latensi yang dilihat klien pada
         "inputs": {
             "pollers": args.pollers,
             "client_processes": args.client_processes,
+            "server_workers": args.server_workers,
             "metrics_port": args.metrics_port,
             "intervals": args.intervals,
             "duration_seconds": args.duration,
