@@ -31,10 +31,10 @@ jobs:
               - 'backend/app/services/**'
               - 'backend/app/master_data.py'
               - 'backend/app/config.py'
-              - 'tests/test_benchmark_v2_production_equivalent.py'
-              - 'tests/test_combined_v4_2.py'
-              - 'tests/test_structural_act_robustness.py'
-              - 'tests/test_router_disambig_hardening.py'
+              # Seluruh tests/ ikut memicu gate: file helper (v2_*, router_disambig_v7,
+              # nomor_normalizer_v6) diimpor langsung oleh test gate, sehingga daftar
+              # file eksplisit gampang tertinggal saat helper berubah.
+              - 'tests/**'
 
   security-audit:
     name: Security & Secret Leak Check
@@ -59,7 +59,11 @@ jobs:
       - name: Scan tracked files for hardcoded secrets & API keys
         run: |
           echo "Scanning tracked files for API keys and secrets..."
-          LEAKED_KEYS=$(git grep -I -E 'AIza[0-9A-Za-z_-]{35}|(sk|rk)_(live|test)_[0-9A-Za-z_-]{20,}' || true)
+          # Pola disamakan dengan scripts/audit_safe_commit.sh agar audit lokal dan CI
+          # memakai set yang sama: Google, OpenAI/generic, Stripe, GitHub, AWS, HF,
+          # OAuth, Slack, dan private key.
+          SECRET_PATTERN='AIza[0-9A-Za-z_-]{35}|(sk|rk)_(live|test)_[0-9A-Za-z_-]{20,}|sk-[0-9A-Za-z]{24,}|ghp_[0-9A-Za-z]{36}|gho_[0-9A-Za-z]{36}|github_pat_[0-9A-Za-z_]{22,}|AKIA[0-9A-Z]{16}|hf_[0-9A-Za-z]{34,}|ya29\.[0-9A-Za-z_-]+|eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}|xox[baprs]-[0-9A-Za-z]{10,}|-----BEGIN (RSA|EC|OPENSSH|DSA|PGP)? PRIVATE KEY-----'
+          LEAKED_KEYS=$(git grep -I -E "$SECRET_PATTERN" || true)
           if [ -n "$LEAKED_KEYS" ]; then
             echo "❌ ERROR: Terdeteksi pola API key atau kredensial pada file berikut:"
             echo "$LEAKED_KEYS"
@@ -89,6 +93,10 @@ jobs:
       DATABASE_URL: "sqlite:///:memory:"
       POSTGRES_TEST_URL: "postgresql+psycopg2://postgres:postgres@localhost:5432/certautofill_ci"
       GOOGLE_API_KEY: "dummy-test-key-ci"
+      # Jalur utama produksi: Indra OCR, Gemini dimatikan agar offline (tanpa kuota).
+      ENABLE_INDRA_OCR: "true"
+      PRIMARY_OCR_ENGINE: "indra"
+      INDRA_OCR_THREADS: "2"
       ENABLE_TESSERACT_GEMINI: "false"
       ENABLE_COMBINED_V4_2: "true"
       PYTHONPATH: ".:backend"
@@ -108,10 +116,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies (Tesseract OCR & Libraries)
+      - name: Install system dependencies (Tesseract OCR fallback & libGL)
         run: |
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr tesseract-ocr-ind libgl1
+
+      - name: Cache Indra OCR model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-indra-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            hf-indra-
 
       - name: Install Python dependencies
         run: uv sync --frozen
@@ -173,6 +189,10 @@ jobs:
     env:
       APP_ENV: test
       DATABASE_URL: "sqlite:///:memory:"
+      # Jalur utama produksi: Indra OCR. Gemini dimatikan agar gate tetap offline.
+      ENABLE_INDRA_OCR: "true"
+      PRIMARY_OCR_ENGINE: "indra"
+      INDRA_OCR_THREADS: "2"
       ENABLE_TESSERACT_GEMINI: "false"
       ENABLE_COMBINED_V4_2: "true"
       PYTHONPATH: ".:backend"
@@ -193,10 +213,18 @@ jobs:
         with:
           python-version: "3.11"
 
-      - name: Install system dependencies (Tesseract OCR & Libraries)
+      - name: Install system dependencies (Tesseract OCR fallback & libGL)
         run: |
           sudo apt-get update
           sudo apt-get install -y tesseract-ocr tesseract-ocr-ind libgl1
+
+      - name: Cache Indra OCR model weights
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-indra-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: |
+            hf-indra-
 
       - name: Install Python dependencies
         run: uv sync --frozen
@@ -211,6 +239,16 @@ jobs:
             tests/test_nomor_v6.py \
             tests/test_router_disambig_hardening.py \
             tests/test_validate_v2_production_equivalent.py \
+            -v
+
+      - name: Run Primary OCR & Gemini Path Invariants
+        # Indra adalah engine utama; Gemini diuji pada level klien/ekstraktor dengan
+        # HTTP dimock sehingga tidak memerlukan API key atau jaringan.
+        run: |
+          uv run pytest \
+            tests/test_ocr_engine_indra.py \
+            tests/test_production_indra_pipeline.py \
+            tests/test_gemini_pipeline.py \
             -v
 
   docker-build:
@@ -238,19 +276,23 @@ jobs:
             -e ENABLE_TESSERACT_GEMINI=false \
             -e GOOGLE_API_KEY= \
             certificate-autofill-dev-backend:latest
+          trap 'docker rm -f smoke-backend' EXIT
           code=""
-          for i in $(seq 1 45); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/healthz)
+          # curl bisa mengembalikan 56 (connection reset) saat uvicorn belum siap.
+          # Tanpa `|| true`, `set -e` di langkah Actions menghentikan loop lebih awal.
+          for i in $(seq 1 60); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/healthz || true)
             [ "$code" = "200" ] && break
             sleep 1
           done
-          docker logs smoke-backend | tail -30
+          docker logs smoke-backend | tail -40
+          docker inspect -f 'state={{.State.Status}}' smoke-backend
           test "$code" = "200"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/docs)" = "404"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/api/admin/khp/rules)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' -u admin:admin123 http://localhost:8001/api/admin/khp/rules)" = "401"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -u admin: http://localhost:8001/api/admin/khp/rules)" = "401"
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:8001/api/documents/not-a-uuid/result)" = "404"
-          docker rm -f smoke-backend
 
       - name: Scan image for vulnerabilities (informational)
         uses: aquasecurity/trivy-action@v0.36.0
