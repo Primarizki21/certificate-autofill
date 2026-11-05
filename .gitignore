@@ -108,6 +108,9 @@ docs/stress_test
 # Local audit reports (not runtime code, never committed)
 docs/audit/
 docs/audit
+# Personal runbook/notes (never committed)
+docs/runbook/
+docs/runbook
 project_source
 # Agents Instructions and internal notes
 AGENTS.md
