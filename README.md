@@ -148,8 +148,8 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `WORKER_HEARTBEAT_SECONDS` | `15` | Interval tulis heartbeat liveness ke tabel `worker_heartbeats` |
 | `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Worker dianggap mati bila heartbeat lebih tua dari nilai ini (dipakai metrik dan alert) |
 | `WORKER_IDLE_BACKOFF_MAX_SECONDS` | `5` | Batas atas backoff polling saat antrean kosong |
-| `DB_POOL_SIZE` | `20` | Kapasitas connection pool tetap PostgreSQL (SQLAlchemy) |
-| `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
+| `DB_POOL_SIZE` | `20` | Kapasitas connection pool per proses. Anggaran: `max_connections=100`; 20+20 milik backend dan worker = 80. Turunkan ke 10+10 sebelum menambah replika |
+| `DB_MAX_OVERFLOW` | `20` | Batas lonjakan koneksi sementara per proses. `20+20` diuji `EXP-CAPACITY-007`; topologi 4 worker memakai `20+0` per proses (`EXP-CAPACITY-008`, 327,5 rps) |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
 | `TEMP_FILE_TTL_HOURS` | `6` | Batas umur PDF tanpa job aktif sebelum dihapus. Harus lebih besar dari backlog antrean |
