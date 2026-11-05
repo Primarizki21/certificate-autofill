@@ -661,6 +661,15 @@ security = HTTPBasic()
 
 
 def verify_admin(credentials: HTTPBasicCredentials = Depends(security)) -> str:
+    # Password kosong bukan kredensial: header "admin:" akan lolos perbandingan
+    # string kosong. Tolak selalu, termasuk saat APP_ENV bukan production.
+    if not settings.admin_password:
+        logger.error("ADMIN_PASSWORD kosong; akses /api/admin/* ditolak.")
+        raise HTTPException(
+            status_code=401,
+            detail="Akses ditolak: admin belum dikonfigurasi.",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     correct_username = secrets.compare_digest(credentials.username, settings.admin_username)
     correct_password = secrets.compare_digest(credentials.password, settings.admin_password)
     if not (correct_username and correct_password):

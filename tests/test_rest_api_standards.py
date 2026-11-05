@@ -121,6 +121,16 @@ def test_production_startup_rejects_weak_admin_password(monkeypatch):
         asyncio.run(main.on_startup())
 
 
+def test_empty_admin_password_rejects_basic_auth(test_db_client, monkeypatch):
+    client, _ = test_db_client
+    monkeypatch.setattr(
+        "app.main.settings",
+        replace(settings, app_env="development", admin_password=""),
+    )
+    resp = client.get("/api/admin/khp/rules", auth=("admin", ""))
+    assert resp.status_code == 401
+
+
 def test_security_headers_present(test_db_client):
     client, _ = test_db_client
     resp = client.get("/livez")
