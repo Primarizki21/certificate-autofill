@@ -150,6 +150,14 @@ def _assert_production_secrets() -> None:
 
 async def on_startup() -> None:
     _assert_production_secrets()
+    if settings.metrics_port > 0:
+        try:
+            from prometheus_client import start_http_server
+
+            start_http_server(settings.metrics_port)
+            logger.info("Metrics server listening on port %d", settings.metrics_port)
+        except Exception:
+            logger.exception("Gagal memulai metrics server pada port %d", settings.metrics_port)
     _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog

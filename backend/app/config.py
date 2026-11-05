@@ -43,6 +43,9 @@ class Settings:
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
     worker_heartbeat_seconds: int = int(os.getenv("WORKER_HEARTBEAT_SECONDS", "15"))
     worker_heartbeat_stale_seconds: int = int(os.getenv("WORKER_HEARTBEAT_STALE_SECONDS", "60"))
+    # Port metrik terpisah (0 = nonaktif). Berguna saat endpoint /metrics ikut
+    # mengantre di threadpool ketika server jenuh.
+    metrics_port: int = int(os.getenv("METRICS_PORT", "0"))
     worker_idle_backoff_max_seconds: int = int(os.getenv("WORKER_IDLE_BACKOFF_MAX_SECONDS", "5"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"

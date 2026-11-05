@@ -49,6 +49,12 @@ def write_json(path: str | Path, payload: Mapping[str, Any]) -> None:
         json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
 
 
+def _cell_value(value: Any) -> Any:
+    if isinstance(value, (dict, list, tuple)):
+        return json.dumps(value, ensure_ascii=False, default=str)
+    return value
+
+
 def write_xlsx(path: str | Path, sheets: Mapping[str, Sequence[Mapping[str, Any]]]) -> None:
     workbook = Workbook()
     workbook.remove(workbook.active)
@@ -61,7 +67,7 @@ def write_xlsx(path: str | Path, sheets: Mapping[str, Sequence[Mapping[str, Any]
                     headers.append(key)
         sheet.append(headers)
         for row in rows:
-            sheet.append([row.get(header) for header in headers])
+            sheet.append([_cell_value(row.get(header)) for header in headers])
     workbook.save(path)
 
 
