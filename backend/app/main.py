@@ -13,19 +13,20 @@ import io
 import secrets
 import time
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import BackgroundTasks, Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse, Response, StreamingResponse
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from fastapi.staticfiles import StaticFiles
 import openpyxl
 from openpyxl.utils import get_column_letter
 from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 from app.config import settings
-from app.database import get_db, init_db
+from app.database import SessionLocal, engine, get_db
 from app.master_data import FORM_OPTIONS, KHP_MASTER_OPTIONS
 from app.models import (
     Document,
@@ -38,6 +39,7 @@ from app.models import (
     KHPJabatanPrestasi,
     KHPKegiatan2,
     KHPMasterRule,
+    WorkerHeartbeat,
 )
 from app.schemas import (
     CreateKHPRuleRequest,
@@ -59,7 +61,13 @@ from app.services.job_processor import cleanup_expired_jobs_and_uploads, process
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
-from app.services.metrics import HTTP_REQUEST_DURATION
+from app.services.metrics import (
+    HTTP_REQUEST_DURATION,
+    QUEUE_OLDEST_AGE_SECONDS,
+    UPLOAD_REJECTED_QUEUE,
+    WORKER_ALIVE,
+    WORKER_HEARTBEAT_MAX_AGE_SECONDS,
+)
 
 logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
@@ -76,25 +84,81 @@ async def _storage_cleanup_loop() -> None:
             logger.exception("Periodic ephemeral-storage cleanup failed.")
 
 
-def _run_auto_migrations() -> None:
-    """Run Alembic database migrations to head if configuration is present."""
-    try:
-        from alembic import command
-        from alembic.config import Config
+_MIGRATION_ADVISORY_LOCK_KEY = 742_031_001
 
-        root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
-        backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
-        ini_path = root_ini if root_ini.exists() else backend_ini
-        if ini_path.exists():
-            cfg = Config(str(ini_path))
-            command.upgrade(cfg, "head")
-            logger.info("Alembic database migrations applied successfully to head.")
+
+def _run_auto_migrations() -> None:
+    """Apply Alembic migrations; the sole owner of schema creation.
+
+    create_all() must not run before this: it creates tables without an
+    alembic_version row, so every later upgrade fails with DuplicateTable.
+    """
+    from alembic import command
+    from alembic.config import Config
+    from sqlalchemy import inspect as sa_inspect
+    from sqlalchemy import text as sa_text
+
+    root_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
+    backend_ini = Path(__file__).resolve().parents[1] / "alembic.ini"
+    ini_path = root_ini if root_ini.exists() else backend_ini
+    if not ini_path.exists():
+        raise RuntimeError(f"alembic.ini tidak ditemukan (dicari: {root_ini}, {backend_ini})")
+
+    cfg = Config(str(ini_path))
+    lock_connection = None
+    try:
+        if engine.dialect.name == "postgresql":
+            # Serialises concurrent container starts; released when the session closes.
+            lock_connection = engine.connect()
+            lock_connection.execute(sa_text("SET lock_timeout = '60s'"))
+            lock_connection.execute(
+                sa_text("SELECT pg_advisory_lock(:key)"),
+                {"key": _MIGRATION_ADVISORY_LOCK_KEY},
+            )
+        tables = set(sa_inspect(engine).get_table_names())
+        if "documents" in tables and "alembic_version" not in tables:
+            # Legacy schema built by create_all: record the baseline before upgrading.
+            command.stamp(cfg, "head")
+            logger.warning("Skema lama tanpa alembic_version: ditandai head sebelum upgrade.")
+        command.upgrade(cfg, "head")
+        logger.info("Alembic migrations applied to head.")
     except Exception as exc:
-        logger.debug("Alembic migration skipped or failed: %s", exc)
+        if settings.app_env == "production":
+            logger.exception("Alembic migration gagal; skema database tidak terjamin.")
+            raise
+        logger.warning("Alembic migration skipped: %s", exc)
+    finally:
+        if lock_connection is not None:
+            lock_connection.execute(
+                sa_text("SELECT pg_advisory_unlock(:key)"),
+                {"key": _MIGRATION_ADVISORY_LOCK_KEY},
+            )
+            lock_connection.close()
+
+
+_WEAK_ADMIN_PASSWORDS = {"", "admin", "admin123", "changeme", "password"}
+
+
+def _assert_production_secrets() -> None:
+    if settings.app_env != "production":
+        return
+    if settings.admin_password.strip().lower() in _WEAK_ADMIN_PASSWORDS:
+        raise RuntimeError(
+            "ADMIN_PASSWORD wajib diisi kata sandi kuat saat APP_ENV=production; "
+            "nilai kosong atau default ditolak agar /api/admin/* tidak terbuka."
+        )
 
 
 async def on_startup() -> None:
-    init_db()
+    _assert_production_secrets()
+    if settings.metrics_port > 0:
+        try:
+            from prometheus_client import start_http_server
+
+            start_http_server(settings.metrics_port)
+            logger.info("Metrics server listening on port %d", settings.metrics_port)
+        except Exception:
+            logger.exception("Gagal memulai metrics server pada port %d", settings.metrics_port)
     _run_auto_migrations()
     if settings.enable_khp_master_staging:
         from app.services.aucc_catalog import warm_aucc_catalog
@@ -120,10 +184,15 @@ async def lifespan(app: FastAPI):
     finally:
         await on_shutdown()
 
+_docs_enabled = settings.app_env != "production"
+
 app = FastAPI(
     title="Certificate Autofill Prototype",
     version="0.1.0",
     lifespan=lifespan,
+    docs_url="/docs" if _docs_enabled else None,
+    redoc_url="/redoc" if _docs_enabled else None,
+    openapi_url="/openapi.json" if _docs_enabled else None,
 )
 def _get_cors_origins() -> list[str]:
     raw = (settings.cors_allowed_origins or "").strip()
@@ -147,6 +216,19 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    if settings.app_env == "production":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
+
+
 def _normalize_metric_path(path: str) -> str:
     """Normalize dynamic URL paths to fixed endpoint templates to prevent high cardinality."""
     if path.startswith("/api/documents/") and path.endswith("/result"):
@@ -180,10 +262,66 @@ def index() -> str:
     return (static_dir / "index.html").read_text(encoding="utf-8")
 
 
-@app.get("/healthz")
-def healthz() -> dict[str, str]:
-    REQUEST_COUNT.labels(endpoint="/healthz").inc()
+@app.get("/livez")
+def livez() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/healthz")
+def healthz() -> JSONResponse:
+    REQUEST_COUNT.labels(endpoint="/healthz").inc()
+    try:
+        with engine.connect() as connection:
+            connection.execute(text("SELECT 1"))
+    except Exception:
+        logger.exception("Health check gagal: database tidak dapat dijangkau.")
+        return JSONResponse(
+            status_code=503,
+            content={"status": "degraded", "database": "unreachable"},
+        )
+    return JSONResponse(content={"status": "ok"})
+
+
+def _as_utc(value: datetime | str) -> datetime:
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value
+
+
+def _queue_backlog_seconds(db: Session) -> float:
+    """Umur job queued tertua; 0 bila antrean kosong."""
+    oldest = (
+        db.query(func.min(ExtractionJob.created_at))
+        .filter(ExtractionJob.status == "queued")
+        .scalar()
+    )
+    if oldest is None:
+        return 0.0
+    return max(0.0, (datetime.now(timezone.utc) - _as_utc(oldest)).total_seconds())
+
+
+def _reject_when_queue_saturated(db: Session) -> None:
+    """Tolak unggahan saat backlog melewati batas, agar PDF tidak kedaluwarsa
+    sebelum sempat diproses (file sementara dihapus setelah TTL)."""
+    threshold = settings.queue_backpressure_seconds
+    if threshold <= 0:
+        return
+    backlog = _queue_backlog_seconds(db)
+    if backlog <= threshold:
+        return
+    UPLOAD_REJECTED_QUEUE.inc()
+    logger.warning(
+        "Upload ditolak: backlog antrean %.0f detik melebihi batas %d detik.",
+        backlog,
+        threshold,
+    )
+    raise HTTPException(
+        status_code=503,
+        detail="Antrean ekstraksi sedang penuh. Coba lagi beberapa menit lagi.",
+        headers={"Retry-After": "60"},
+    )
 
 
 @app.get("/metrics")
@@ -200,6 +338,17 @@ def metrics(db: Session = Depends(get_db)) -> Response:
         )
         QUEUE_JOBS.labels(status="queued").set(counts.get("queued", 0))
         QUEUE_JOBS.labels(status="processing").set(counts.get("processing", 0))
+        QUEUE_OLDEST_AGE_SECONDS.set(_queue_backlog_seconds(db))
+
+        now = datetime.now(timezone.utc)
+        stale_after = settings.worker_heartbeat_stale_seconds
+        ages = [
+            (now - _as_utc(last_seen)).total_seconds()
+            for (last_seen,) in db.query(WorkerHeartbeat.last_seen_at).all()
+            if last_seen is not None
+        ]
+        WORKER_ALIVE.set(sum(1 for age in ages if age <= stale_after))
+        WORKER_HEARTBEAT_MAX_AGE_SECONDS.set(max(ages) if ages else 0.0)
     except Exception as exc:
         logger.debug("Prometheus queue gauge update skipped: %s", exc)
 
@@ -211,6 +360,16 @@ def get_options() -> OptionsResponse:
     REQUEST_COUNT.labels(endpoint="/api/options").inc()
     options = KHP_MASTER_OPTIONS if settings.enable_khp_master_staging else FORM_OPTIONS
     return OptionsResponse(options=options)
+
+
+def _reject_oversized_body(request: Request, max_bytes: int) -> None:
+    """Reject from Content-Length before the body is buffered into memory."""
+    content_length = request.headers.get("content-length", "").strip()
+    if content_length.isdigit() and int(content_length) > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"Ukuran file maksimal {settings.max_upload_size_mb} MB.",
+        )
 
 
 @app.post("/api/documents", response_model=UploadResponse)
@@ -225,11 +384,13 @@ def upload_document(
 ) -> UploadResponse:
     REQUEST_COUNT.labels(endpoint="/api/documents").inc()
     enforce_upload_rate_limit(request, response)
+    _reject_when_queue_saturated(db)
     if not file.filename:
         raise HTTPException(status_code=400, detail="File wajib diunggah.")
 
-    content = file.file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    _reject_oversized_body(request, max_bytes)
+    content = file.file.read()
     if len(content) > max_bytes:
         raise HTTPException(status_code=413, detail=f"Ukuran file maksimal {settings.max_upload_size_mb} MB.")
 
@@ -290,8 +451,22 @@ def upload_document(
 
 
 @app.get("/api/documents/{document_id}/result", response_model=PublicExtractionResult)
-def get_result(document_id: str, db: Session = Depends(get_db)) -> PublicExtractionResult:
+async def get_result_route(document_id: str) -> PublicExtractionResult:
+    # Session dibuka dan ditutup dalam satu panggilan threadpool. Dependency
+    # generator sinkron menahan koneksi sampai teardown yang berebut slot
+    # threadpool, dan itu memicu deadlock pool saat beban tinggi.
+    return await run_in_threadpool(get_result, document_id)
+
+
+def get_result(document_id: str, db: Session | None = None) -> PublicExtractionResult:
+    if db is None:
+        with SessionLocal() as session:
+            return get_result(document_id, session)
     REQUEST_COUNT.labels(endpoint="/api/documents/{document_id}/result").inc()
+    try:
+        uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
     document = db.get(Document, document_id)
     if not document:
         raise HTTPException(status_code=404, detail="Dokumen tidak ditemukan.")
@@ -356,8 +531,9 @@ def extract_certificate_v1(
     if not file.filename:
         raise HTTPException(status_code=400, detail="File sertifikat wajib diunggah.")
 
-    content = file.file.read()
     max_bytes = settings.max_upload_size_mb * 1024 * 1024
+    _reject_oversized_body(request, max_bytes)
+    content = file.file.read()
     if len(content) > max_bytes:
         raise HTTPException(
             status_code=413,
@@ -485,6 +661,15 @@ security = HTTPBasic()
 
 
 def verify_admin(credentials: HTTPBasicCredentials = Depends(security)) -> str:
+    # Password kosong bukan kredensial: header "admin:" akan lolos perbandingan
+    # string kosong. Tolak selalu, termasuk saat APP_ENV bukan production.
+    if not settings.admin_password:
+        logger.error("ADMIN_PASSWORD kosong; akses /api/admin/* ditolak.")
+        raise HTTPException(
+            status_code=401,
+            detail="Akses ditolak: admin belum dikonfigurasi.",
+            headers={"WWW-Authenticate": "Basic"},
+        )
     correct_username = secrets.compare_digest(credentials.username, settings.admin_username)
     correct_password = secrets.compare_digest(credentials.password, settings.admin_password)
     if not (correct_username and correct_password):

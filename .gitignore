@@ -105,6 +105,9 @@ docs/security*/
 docs/security*
 docs/stress_test/
 docs/stress_test
+# Local audit reports (not runtime code, never committed)
+docs/audit/
+docs/audit
 project_source
 # Agents Instructions and internal notes
 AGENTS.md

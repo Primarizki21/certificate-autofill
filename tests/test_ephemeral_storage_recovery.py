@@ -102,6 +102,11 @@ def test_cleanup_expires_unclaimed_pdf(monkeypatch):
         temp_key = store.stage_bytes(b"%PDF-1.4\nExpired certificate")
         monkeypatch.setattr("app.services.job_processor.SessionLocal", testing_session)
         monkeypatch.setattr("app.services.job_processor.upload_store", store)
+        # TTL eksplisit: test tidak boleh bergantung pada .env lokal atau default.
+        monkeypatch.setattr(
+            "app.services.job_processor.settings",
+            replace(settings, temp_file_ttl_hours=1),
+        )
 
         document_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
@@ -240,7 +245,7 @@ def test_startup_schedules_storage_cleanup(monkeypatch):
     import app.main as main
 
     calls: list[str] = []
-    monkeypatch.setattr(main, "init_db", lambda: calls.append("init"))
+    monkeypatch.setattr(main, "_run_auto_migrations", lambda: calls.append("migrate"))
     monkeypatch.setattr(main, "cleanup_expired_jobs_and_uploads", lambda: calls.append("cleanup"))
 
     async def run_startup_and_shutdown():
@@ -250,4 +255,4 @@ def test_startup_schedules_storage_cleanup(monkeypatch):
         await main.on_shutdown()
 
     asyncio.run(run_startup_and_shutdown())
-    assert calls == ["init", "cleanup"]
+    assert calls == ["migrate", "cleanup"]

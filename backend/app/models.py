@@ -1,4 +1,4 @@
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Index, Integer, Numeric, String, Text, func, text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 
@@ -50,6 +50,11 @@ class ExtractionJob(Base):
     __table_args__ = (
         Index("ix_extraction_jobs_polling", "status", "available_at", "created_at"),
         Index("ix_extraction_jobs_lease", "status", "lease_expires_at"),
+        Index(
+            "ix_extraction_jobs_queued_created",
+            "created_at",
+            postgresql_where=text("status = 'queued'"),
+        ),
     )
 
 
@@ -65,6 +70,20 @@ class ExtractedField(Base):
     source = Column(String(100), nullable=False)
     needs_review = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+class WorkerHeartbeat(Base):
+    """Baris liveness per proses worker; umurnya dipakai metrik dan alert."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id = Column(String(80), primary_key=True)
+    hostname = Column(String(100), nullable=False)
+    concurrency = Column(Integer, nullable=False)
+    in_flight = Column(Integer, nullable=False, default=0)
+    state = Column(String(20), nullable=False, default="idle")
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, index=True)
 
 
 class KHPMasterResolution(Base):

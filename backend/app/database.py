@@ -11,6 +11,7 @@ engine_kwargs = {"pool_pre_ping": True}
 if not settings.database_url.startswith("sqlite"):
     engine_kwargs["pool_size"] = settings.db_pool_size
     engine_kwargs["max_overflow"] = settings.db_max_overflow
+    engine_kwargs["pool_recycle"] = 1800
 
 engine = create_engine(settings.database_url, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autocommit=False, autoflush=False)

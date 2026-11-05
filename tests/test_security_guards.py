@@ -324,7 +324,7 @@ class TestUploadEndpointSecurity:
             finally:
                 pass
 
-        monkeypatch.setattr("app.main.init_db", lambda: None)
+        monkeypatch.setattr("app.main._run_auto_migrations", lambda: None)
         monkeypatch.setattr("app.main.cleanup_expired_jobs_and_uploads", lambda: None)
         monkeypatch.setattr("app.main.process_document_job", lambda *args, **kw: None)
         app.dependency_overrides[get_db] = override_get_db

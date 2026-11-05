@@ -37,7 +37,7 @@ GOOGLE_API_KEY=""  # Masukkan kunci Google AI Studio API Anda
 
 ### 2. Menjalankan via Docker Compose
 
-Perintah default menyalakan backend FastAPI dan PostgreSQL 17:
+Perintah default menyalakan PostgreSQL 17, backend FastAPI, worker antrean, dan service backup:
 
 ```bash
 docker compose up --build
@@ -52,9 +52,10 @@ docker compose --profile monitoring up --build
 Setelah container aktif:
 | Service | URL | Keterangan |
 |---|---|---|
-| **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
+| **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP. Swagger (`/docs`) hanya aktif saat `APP_ENV` bukan `production` |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
 | **Worker (DB Polling)** | *(background)* | Service worker (`python -m app.worker`) untuk eksekusi antrean job di database |
+| **Backup PostgreSQL** | *(background)* | `pg_dump` custom-format tiap jam ke volume `pg_backups` |
 | **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
 | **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
 | **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
@@ -66,7 +67,7 @@ Setelah container aktif:
 Untuk mempercepat pengosongan antrean dokumen, jumlah kontainer worker dapat diskalakan secara dinamis:
 ```bash
 # Menjalankan 2 kontainer worker paralel (kapasitas 4 thread pemrosesan)
-docker compose --profile monitoring up -d --scale worker=2
+docker compose up -d --scale worker=2
 ```
 
 #### Mode Pengembangan Lokal (Live Hot-Reload):
@@ -82,11 +83,13 @@ Docker Compose otomatis me-mount kode sumber `./backend/app` secara live dan men
 
 #### Prasyarat:
 1. PostgreSQL 17 aktif di port `5434` dengan database `certautofill`.
-2. Tesseract OCR (`tesseract-ocr` dan `tesseract-ocr-ind`) terpasang di sistem operasi.
-3. Jalankan inisialisasi skema dan seed data master KHP universitas (pertama kali):
+2. Tesseract OCR (`tesseract-ocr` dan `tesseract-ocr-ind`) terpasang di sistem operasi (engine fallback).
+3. Dependensi Python terpasang: `uv sync --frozen` (atau `pip install -r requirements.txt`).
+4. Skema database dibuat otomatis oleh Alembic saat aplikasi menyala. Seed data master KHP cukup sekali:
    ```bash
-   python scripts/seed_khp_master.py
+   uv run python scripts/seed_khp_master.py
    ```
+5. Bobot ONNX Indra OCR dan RapidOCR diunduh sekali pada run pertama (butuh internet). Image Docker sudah melakukan prewarm saat build, sehingga runtime container tidak butuh unduhan.
 #### Linux / macOS:
 ```bash
 export APP_ENV=development
@@ -139,16 +142,21 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
 | `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
-| `DB_WORKER_POLL_SECONDS` | `1` | Jeda waktu polling worker saat antrean database kosong |
+| `DB_WORKER_POLL_SECONDS` | `1` | Jeda awal polling worker saat antrean kosong (naik bertahap dengan jitter) |
 | `WORKER_CONCURRENCY` | `2` | Jumlah thread pemrosesan paralel per worker (default `2` untuk utilisasi optimal) |
-| `DB_POOL_SIZE` | `20` | Kapasitas connection pool tetap PostgreSQL (SQLAlchemy) |
-| `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
+| `UVICORN_WORKERS` | `1` | Proses uvicorn untuk endpoint HTTP. `4` terbukti memenuhi 1.000 poller 3 detik, tetapi rate limit menjadi per proses dan `/metrics` hanya satu worker |
+| `WORKER_HEARTBEAT_SECONDS` | `15` | Interval tulis heartbeat liveness ke tabel `worker_heartbeats` |
+| `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Worker dianggap mati bila heartbeat lebih tua dari nilai ini (dipakai metrik dan alert) |
+| `WORKER_IDLE_BACKOFF_MAX_SECONDS` | `5` | Batas atas backoff polling saat antrean kosong |
+| `DB_POOL_SIZE` | `20` | Kapasitas connection pool per proses. Anggaran: `max_connections=100`; 20+20 milik backend dan worker = 80. Turunkan ke 10+10 sebelum menambah replika |
+| `DB_MAX_OVERFLOW` | `20` | Batas lonjakan koneksi sementara per proses. `20+20` diuji `EXP-CAPACITY-007`; topologi 4 worker memakai `20+0` per proses (`EXP-CAPACITY-008`, 327,5 rps) |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |
 | `UPLOAD_TEMP_DIR` | `/tmp/cert_uploads` | Direktori PDF sementara, izin direktori `0o700` dan file `0o600` |
-| `TEMP_FILE_TTL_HOURS` | `1` | Batas umur PDF tanpa job aktif sebelum dihapus |
+| `TEMP_FILE_TTL_HOURS` | `6` | Batas umur PDF tanpa job aktif sebelum dihapus. Harus lebih besar dari backlog antrean |
+| `QUEUE_BACKPRESSURE_SECONDS` | `1800` | Upload baru ditolak (503) bila job queued tertua lebih tua dari ini. `0` menonaktifkan |
 | `JOB_LEASE_SECONDS` | `900` | Batas kerja eksklusif satu worker untuk satu job |
 | `STORAGE_CLEANUP_INTERVAL_SECONDS` | `300` | Jeda cleanup file yatim dan job lease kedaluwarsa |
-| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per IP address (standar 1 req/detik) |
+| `RATE_LIMIT_PER_MINUTE` | `60` | Batas maksimum unggahan per menit per pemanggil (API key valid, fallback IP) |
 | `MAX_PDF_PAGES` | `3` | Batas maksimum jumlah halaman file PDF sertifikat |
 | `MAX_IMAGE_PIXELS` | `60000000` | Batas aman piksel gambar (Pillow Decompression Bomb safeguard, 60 MP) |
 | `MAX_IMAGE_DIMENSION` | `8000` | Dimensi panjang/lebar piksel maksimum gambar (anti-pixel flood) |
@@ -177,12 +185,43 @@ uv run alembic upgrade head
 ```
 Dokumentasi lengkap migrasi tersedia di [Panduan Migrasi Database](docs/DATABASE_MIGRATIONS.md).
 
+### Backup & Restore PostgreSQL
+Service `backup` membuat `pg_dump` custom-format setiap jam (RPO 1 jam). Retensi otomatis: 48 jam per jam, 14 harian, 12 bulanan. PDF tidak ikut karena bersifat sementara.
+
+Sekali saja, buat role baca-only dengan password dari secret:
+```bash
+docker compose exec -T postgres psql -U postgres -d certautofill \
+  -v backup_password="$(cat /run/secrets/db_backup)" \
+  -f /scripts/sql/create_backup_role.sql
+```
+Lalu isi `BACKUP_DB_PASSWORD` di `.env` dengan password yang sama.
+
+Backup manual sekali jalan (tanpa menunggu jadwal):
+```bash
+docker compose run --rm -e BACKUP_ONCE=1 backup
+```
+
+Restore drill (wajib diuji, minimal sebulan sekali):
+```bash
+docker compose exec -T backup sh -c 'ls /backups/hourly | tail -1'
+docker compose exec -T postgres createdb -U postgres certautofill_restore
+docker compose exec -T backup pg_restore --no-owner --no-privileges \
+  -d postgresql://postgres@postgres:5432/certautofill_restore /backups/hourly/<file>.dump
+docker compose exec -T postgres psql -U postgres -d certautofill_restore \
+  -c "select count(*) from documents;"
+```
+Salinan offsite: mount direktori host/NAS ke `/backups-offsite` dan set `BACKUP_OFFSITE_DIR=/backups-offsite`.
+
+Jalur peningkatan ke point-in-time recovery (RPO menit): aktifkan `archive_mode` + WAL archiving dengan pgBackRest. Tidak ada perubahan kode aplikasi; dump per jam tetap dipertahankan sebagai lapisan kedua.
+
 ### Ingin Berjalan 100% Offline Tanpa Cloud API?
 Cukup ubah baris berikut di `.env`:
 ```bash
 ENABLE_TESSERACT_GEMINI=false
 ```
-Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
+Sistem akan otomatis menggunakan pipeline offline rule-based lokal (Combined v4.2). Indra OCR tetap aktif karena berjalan lokal; yang dinonaktifkan hanya panggilan Gemini.
+
+Syarat offline penuh: bobot ONNX sudah tersedia. Image Docker sudah prewarm saat build; untuk instalasi manual, jalankan sekali saat masih ada internet, atau set `INDRA_OCR_MODEL_DIR` ke folder model yang sudah disalin.
 
 ---
 
@@ -210,8 +249,13 @@ Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum doku
    - Batas kanvas render maksimal 5000 pt untuk mencegah OOM saat proses rasterisasi.
 
 5. **Rate Limiting (Sliding Window)**:
-   - Endpoint upload dilindungi pembatas laju *in-memory* berbasis IP dengan jendela geser (*sliding window*).
-   - Default: **60 unggahan per menit per IP** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+   - Endpoint upload dilindungi pembatas laju *in-memory* berbasis identitas pemanggil dengan jendela geser (*sliding window*).
+   - Identitas diambil dari API key valid (`X-API-Key` atau `Authorization: Bearer`) bila ada; tanpa key, fallback ke alamat IP. Ini menghindari satu portal kampus yang berbagi IP menelan seluruh kuota.
+   - Default: **60 unggahan per menit per identitas** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+
+6. **Proteksi Ukuran & Antrean**:
+   - Header `Content-Length` diperiksa sebelum body dibaca; melebihi `MAX_UPLOAD_SIZE_MB` langsung ditolak `413`.
+   - Saat backlog antrean melewati `QUEUE_BACKPRESSURE_SECONDS`, upload baru ditolak `503` dengan header `Retry-After`, sehingga PDF tidak kedaluwarsa sebelum sempat diproses.
 ---
 
 ## Hasil Evaluasi & Benchmark
@@ -384,8 +428,10 @@ uv run pytest tests/ -v
 
 ### 2. Otomasi CI/CD (GitHub Actions)
 Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
-- **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
-- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 432 unit tests secara terisolasi.
+- **Job `security-audit`**: Memindai berkas ter-track untuk mencegah kebocoran `.env`, PDF privat, data AUCC privat (`khp/*`), serta pola kredensial aktif (Google, OpenAI, Stripe, GitHub, AWS, Hugging Face, OAuth, Slack, private key).
+- **Job `test`**: Lint backend (blocking) dan lint tes (informational), migrasi Alembic di SQLite dan PostgreSQL 17 termasuk uji stamp idempotensi, uji DDL konkurensi, `compileall`, lalu seluruh suite **463 tes** dengan engine Indra OCR aktif. Bobot model di-cache antar-run.
+- **Job `ml-quality-gate`**: Dipicu saat `backend/app/services/**`, `config.py`, `master_data.py`, atau `tests/**` berubah. Menjalankan invariant offline Combined v2/v4.2, OCR Indra, jalur pipeline Indra, dan klien Gemini (HTTP dimock, tanpa API key).
+- **Job `docker-build`**: Validasi `docker compose config`, build image, smoke test posture produksi (`/docs` 404, admin tanpa kredensial 401, UUID tidak valid 404), dan scan Trivy yang bersifat informational.
 
 
 ### 3. Pengujian Beban & Profiling Latensi (Stress Testing)
@@ -425,7 +471,9 @@ DELETE /api/admin/khp/rules/{rule_id} # Hapus aturan master KHP (?hard=true untu
 # - Paginasi GET /api/admin/khp/rules terikat maksimal 500 item per request (?limit=1..500).
 # Sistem & Monitoring
 GET    /metrics                       # Metrik Prometheus (ekstraksi, latensi, error rate)
-GET    /healthz                       # Health check endpoint
+GET    /healthz                       # Readiness: SELECT 1 ke database, 503 bila database mati
+GET    /livez                         # Liveness: proses HTTP hidup, tanpa dependensi database
+# /docs, /redoc, dan /openapi.json hanya aktif saat APP_ENV bukan production.
 ```
 
 ---
@@ -466,8 +514,8 @@ Hasil analisis disimpan di folder `graphify-out/` (otomatis terabaikan oleh `.gi
 
 | Dokumen / Antarmuka | Deskripsi |
 |---|---|
-| [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi (`/docs`) |
-| [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API |
+| [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi. Hanya aktif saat `APP_ENV` bukan `production` |
+| [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API (kondisi sama: non-production) |
 | [Frontend Guide](frontend/README_FRONTEND.md) | Panduan antarmuka web, penanganan cascading dropdown, dan modal pencarian kegiatan |
 | [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) | Panduan lengkap integrasi endpoint `/api/v1/extract`, format API Key, contoh cURL/JS/Python, dan setup Cloudflare Tunnel |
 | **Knowledge Graph Arsitektur** | Peta interaktif graf dependensi fungsi dan arsitektur pipeline via Graphify (lihat panduan di atas) |

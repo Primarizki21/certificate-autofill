@@ -4,9 +4,9 @@ from pathlib import Path
 
 try:
     from dotenv import load_dotenv
-    load_dotenv(override=True)
+    load_dotenv(override=False)
     root_dir = Path(__file__).resolve().parents[2]
-    load_dotenv(root_dir / ".env", override=True)
+    load_dotenv(root_dir / ".env", override=False)
     google_env = root_dir / ".env.google"
     if google_env.exists():
         load_dotenv(google_env, override=False)
@@ -32,11 +32,21 @@ class Settings:
     auto_downscale_target: int = int(os.getenv("AUTO_DOWNSCALE_TARGET", "2500"))
     max_pdf_canvas_dimension: int = int(os.getenv("MAX_PDF_CANVAS_DIMENSION", "5000"))
     rate_limit_per_minute: int = int(os.getenv("RATE_LIMIT_PER_MINUTE", "60"))
+    # Only trust X-Forwarded-For when a reverse proxy is guaranteed in front.
+    trust_proxy_headers: bool = os.getenv("TRUST_PROXY_HEADERS", "false").lower() == "true"
     upload_temp_dir: str = os.getenv("UPLOAD_TEMP_DIR", "/tmp/cert_uploads")
-    temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "1"))
+    temp_file_ttl_hours: int = int(os.getenv("TEMP_FILE_TTL_HOURS", "6"))
+    # Tolak upload baru bila job queued tertua sudah lebih tua dari ini (0 = mati).
+    queue_backpressure_seconds: int = int(os.getenv("QUEUE_BACKPRESSURE_SECONDS", "1800"))
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
     storage_cleanup_interval_seconds: int = int(os.getenv("STORAGE_CLEANUP_INTERVAL_SECONDS", "300"))
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
+    worker_heartbeat_seconds: int = int(os.getenv("WORKER_HEARTBEAT_SECONDS", "15"))
+    worker_heartbeat_stale_seconds: int = int(os.getenv("WORKER_HEARTBEAT_STALE_SECONDS", "60"))
+    # Port metrik terpisah (0 = nonaktif). Berguna saat endpoint /metrics ikut
+    # mengantre di threadpool ketika server jenuh.
+    metrics_port: int = int(os.getenv("METRICS_PORT", "0"))
+    worker_idle_backoff_max_seconds: int = int(os.getenv("WORKER_IDLE_BACKOFF_MAX_SECONDS", "5"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # EXP-INDRA-LLM-001: Indra OCR (datalab-to/indra-ocr, 1M param ONNX CPU).
@@ -91,7 +101,7 @@ class Settings:
     google_gemini_model: str = os.getenv("GOOGLE_GEMINI_MODEL", "gemini-3.1-flash-lite")
     gemini_timeout_seconds: float = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "30.0"))
     admin_username: str = os.getenv("ADMIN_USERNAME", "admin")
-    admin_password: str = os.getenv("ADMIN_PASSWORD", "admin123")
+    admin_password: str = os.getenv("ADMIN_PASSWORD", "")
     # API Key Authentication (prefix sk-, optional for internal mode)
     api_keys: str = os.getenv("API_KEYS", os.getenv("API_KEY", ""))
     require_api_key: bool = os.getenv("REQUIRE_API_KEY", "false").lower() == "true"

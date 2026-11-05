@@ -1,12 +1,13 @@
 """In-memory sliding window rate limiter for upload endpoints.
 
-Protects against automated flood and queue starvation attacks while
-remaining completely unobtrusive to legitimate users (e.g. 30 uploads/minute/IP).
+Protects against automated flood and queue starvation attacks. Bucket identity
+is the caller's valid API key when present, otherwise the client IP.
 """
 
 from __future__ import annotations
 
 import collections
+import hashlib
 import logging
 import threading
 import time
@@ -15,6 +16,7 @@ from typing import NamedTuple
 from fastapi import HTTPException, Request, Response
 
 from app.config import settings
+from app.services.api_key_auth import extract_key_from_request, validate_api_key
 
 logger = logging.getLogger("rate_limiter")
 
@@ -97,31 +99,45 @@ upload_rate_limiter = SlidingWindowRateLimiter()
 
 
 def get_client_ip(request: Request) -> str:
-    """Extract client IP, taking proxy headers into account safely."""
-    forwarded = request.headers.get("X-Forwarded-For")
-    if forwarded:
-        # First entry is client IP in X-Forwarded-For
-        ip = forwarded.split(",")[0].strip()
-        if ip:
-            return ip
+    """Extract client IP; X-Forwarded-For is only honoured behind a trusted proxy."""
+    if settings.trust_proxy_headers:
+        forwarded = request.headers.get("X-Forwarded-For")
+        if forwarded:
+            # First entry is the client IP in X-Forwarded-For.
+            ip = forwarded.split(",")[0].strip()
+            if ip:
+                return ip
     client = request.client
     return client.host if client else "127.0.0.1"
 
 
+def get_client_identity(request: Request) -> str:
+    """Bucket per pemanggil: API key valid bila ada, selain itu per IP.
+
+    Portal kampus bisa berbagi satu IP (NAT/proxy) dan NIM tidak tersedia di
+    request, jadi key pembatas yang stabil adalah API key pemanggil.
+    """
+    key = extract_key_from_request(request)
+    if key and validate_api_key(key):
+        digest = hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
+        return f"key:{digest}"
+    return f"ip:{get_client_ip(request)}"
+
+
 def enforce_upload_rate_limit(request: Request, response: Response | None = None) -> RateLimitResult:
     """Dependency / guard that enforces upload rate limits."""
-    client_ip = get_client_ip(request)
-    res = upload_rate_limiter.check(client_ip)
+    identity = get_client_identity(request)
+    res = upload_rate_limiter.check(identity)
     if not res.allowed:
         logger.warning(
-            "Rate limit exceeded for client_ip=%s (retry_after=%ds)",
-            client_ip,
+            "Rate limit exceeded for identity=%s (retry_after=%ds)",
+            identity,
             res.retry_after,
         )
         raise HTTPException(
             status_code=429,
             detail=(
-                f"Terlalu banyak permintaan upload dari perangkat Anda ({res.limit}/menit). "
+                f"Terlalu banyak permintaan upload dari pemanggil ini ({res.limit}/menit). "
                 f"Harap tunggu {res.retry_after} detik sebelum mencoba kembali."
             ),
             headers={

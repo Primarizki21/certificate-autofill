@@ -22,7 +22,7 @@ def test_cors_whitelisted_origin_allowed():
     """Whitelisted origin receives Access-Control-Allow-Origin and credentials enabled."""
     client = TestClient(app)
     response = client.get(
-        "/healthz",
+        "/livez",
         headers={"Origin": "http://localhost:5173"},
     )
     assert response.status_code == 200
@@ -34,7 +34,7 @@ def test_cors_malicious_origin_rejected():
     """Untrusted / malicious origin does NOT receive Access-Control-Allow-Origin header."""
     client = TestClient(app)
     response = client.get(
-        "/healthz",
+        "/livez",
         headers={"Origin": "http://evil-attacker.com"},
     )
     assert response.status_code == 200

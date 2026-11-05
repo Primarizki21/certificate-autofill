@@ -11,6 +11,20 @@ services:
       - "127.0.0.1:${POSTGRES_PORT:-5434}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./scripts/sql:/scripts/sql:ro
+    command:
+      - postgres
+      - -c
+      - statement_timeout=30s
+      - -c
+      - idle_in_transaction_session_timeout=30s
+      - -c
+      - shared_buffers=256MB
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 1G
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-certautofill}"]
       interval: 5s
@@ -25,16 +39,19 @@ services:
   backend:
     build:
       context: ./backend
+      args:
+        VCS_REF: ${VCS_REF:-unknown}
+        APP_VERSION: ${APP_VERSION:-dev}
     image: certificate-autofill-dev-backend:latest
     restart: unless-stopped
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers ${UVICORN_WORKERS:-1} --proxy-headers --forwarded-allow-ips=${FORWARDED_ALLOW_IPS:-127.0.0.1}
     env_file:
-      - path: .env.docker.example
-        required: false
       - path: .env
         required: false
     environment:
       - APP_ENV=${APP_ENV:-production}
+      - ADMIN_USERNAME=${ADMIN_USERNAME:-admin}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - DATABASE_URL=postgresql+psycopg2://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-certautofill}
       - PROCESSING_MODE=db_worker
       - UPLOAD_TEMP_DIR=/tmp/cert_uploads
@@ -47,11 +64,19 @@ services:
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
       - API_KEYS=${API_KEYS:-}
       - REQUIRE_API_KEY=${REQUIRE_API_KEY:-false}
-      - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
-      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
+      - TRUST_PROXY_HEADERS=${TRUST_PROXY_HEADERS:-true}
+      - FORWARDED_ALLOW_IPS=${FORWARDED_ALLOW_IPS:-127.0.0.1}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-10}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
+      - WORKER_HEARTBEAT_STALE_SECONDS=${WORKER_HEARTBEAT_STALE_SECONDS:-60}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
@@ -80,8 +105,6 @@ services:
     restart: unless-stopped
     command: python -m app.worker
     env_file:
-      - path: .env.docker.example
-        required: false
       - path: .env
         required: false
     environment:
@@ -100,9 +123,16 @@ services:
       - MAX_PDF_PAGES=${MAX_PDF_PAGES:-3}
       - WORKER_CONCURRENCY=${WORKER_CONCURRENCY:-2}
       - DB_WORKER_POLL_SECONDS=${DB_WORKER_POLL_SECONDS:-1}
-      - DB_POOL_SIZE=${DB_POOL_SIZE:-20}
-      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-20}
+      - WORKER_HEARTBEAT_SECONDS=${WORKER_HEARTBEAT_SECONDS:-15}
+      - WORKER_HEARTBEAT_STALE_SECONDS=${WORKER_HEARTBEAT_STALE_SECONDS:-60}
+      - WORKER_IDLE_BACKOFF_MAX_SECONDS=${WORKER_IDLE_BACKOFF_MAX_SECONDS:-5}
+      - DB_POOL_SIZE=${DB_POOL_SIZE:-10}
+      - DB_MAX_OVERFLOW=${DB_MAX_OVERFLOW:-10}
       - WORKER_METRICS_PORT=${WORKER_METRICS_PORT:-9102}
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     volumes:
       - cert_uploads:/tmp/cert_uploads
       - ./khp:/app/khp:ro
@@ -128,13 +158,47 @@ services:
         max-size: "20m"
         max-file: "5"
 
+  backup:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "/scripts/backup_postgres.sh"]
+    environment:
+      - PGHOST=postgres
+      - PGPORT=5432
+      - PGDATABASE=${POSTGRES_DB:-certautofill}
+      - PGUSER=${BACKUP_DB_USER:-cert_backup}
+      - PGPASSWORD=${BACKUP_DB_PASSWORD:-}
+      - BACKUP_INTERVAL_SECONDS=${BACKUP_INTERVAL_SECONDS:-3600}
+      - BACKUP_OFFSITE_DIR=${BACKUP_OFFSITE_DIR:-}
+    volumes:
+      - ./scripts/backup_postgres.sh:/scripts/backup_postgres.sh:ro
+      - pg_backups:/backups
+      # Untuk salinan offsite, tambahkan bind mount ke host/NAS lain lalu set
+      # BACKUP_OFFSITE_DIR=/backups-offsite
+      # - /mnt/nas/certautofill-backup:/backups-offsite
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "find /backups/hourly -name '*.dump' -mmin -120 | grep -q ."]
+      interval: 60s
+      timeout: 10s
+      retries: 2
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
   prometheus:
     image: prom/prometheus:v2.54.1
     profiles: ["monitoring"]
     ports:
-      - "${PROMETHEUS_PORT:-9090}:9090"
+      - "127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./monitoring/prometheus-alerts.yml:/etc/prometheus/alerts.yml:ro
     depends_on:
       - backend
     logging:
@@ -147,7 +211,7 @@ services:
     image: grafana/grafana:11.2.0
     profiles: ["monitoring"]
     ports:
-      - "${GRAFANA_PORT:-3000}:3000"
+      - "127.0.0.1:${GRAFANA_PORT:-3000}:3000"
     environment:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
@@ -165,7 +229,7 @@ services:
     image: grafana/loki:2.9.8
     profiles: ["monitoring"]
     ports:
-      - "${LOKI_PORT:-3100}:3100"
+      - "127.0.0.1:${LOKI_PORT:-3100}:3100"
     command: -config.file=/etc/loki/local-config.yaml
     volumes:
       - ./monitoring/loki-config.yml:/etc/loki/local-config.yaml:ro
@@ -194,3 +258,4 @@ volumes:
   postgres_data:
   grafana_data:
   cert_uploads:
+  pg_backups:
