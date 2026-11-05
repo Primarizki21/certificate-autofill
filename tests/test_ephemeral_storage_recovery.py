@@ -102,6 +102,11 @@ def test_cleanup_expires_unclaimed_pdf(monkeypatch):
         temp_key = store.stage_bytes(b"%PDF-1.4\nExpired certificate")
         monkeypatch.setattr("app.services.job_processor.SessionLocal", testing_session)
         monkeypatch.setattr("app.services.job_processor.upload_store", store)
+        # TTL eksplisit: test tidak boleh bergantung pada .env lokal atau default.
+        monkeypatch.setattr(
+            "app.services.job_processor.settings",
+            replace(settings, temp_file_ttl_hours=1),
+        )
 
         document_id = str(uuid.uuid4())
         job_id = str(uuid.uuid4())
