@@ -5,7 +5,7 @@ import socket
 import threading
 import uuid
 from datetime import datetime, timedelta, timezone
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 from app.config import settings
 from app.database import SessionLocal
@@ -305,7 +305,7 @@ def process_document_job(
         db.close()
 
 
-def cleanup_expired_jobs_and_uploads() -> int:
+def _run_cleanup_pass() -> int:
     """Recover expired leases and remove PDFs no active job owns."""
     db: Session = SessionLocal()
     terminal_keys: list[str] = []
@@ -381,3 +381,39 @@ def cleanup_expired_jobs_and_uploads() -> int:
 
     deleted_count = sum(upload_store.delete(key) for key in terminal_keys)
     return deleted_count + upload_store.reap_orphans(protected_keys=protected_keys)
+
+
+_CLEANUP_ADVISORY_LOCK_KEY = 742_031_002
+
+
+def cleanup_expired_jobs_and_uploads() -> int:
+    """Jalankan cleanup sekali secara single-flight antar node worker.
+
+    Hanya proses yang memegang advisory lock PostgreSQL yang memindai tabel.
+    Node lain langsung kembali, sehingga N worker tidak mengulang scan yang
+    sama dan tidak berebut baris.
+    """
+    probe = SessionLocal()
+    try:
+        bind = probe.get_bind()
+    finally:
+        probe.close()
+
+    lock_connection = None
+    if bind.dialect.name == "postgresql":
+        lock_connection = bind.connect()
+        acquired = lock_connection.execute(
+            select(func.pg_try_advisory_lock(_CLEANUP_ADVISORY_LOCK_KEY))
+        ).scalar()
+        if not acquired:
+            lock_connection.close()
+            logger.debug("Cleanup dilewati: worker lain memegang advisory lock.")
+            return 0
+    try:
+        return _run_cleanup_pass()
+    finally:
+        if lock_connection is not None:
+            lock_connection.execute(
+                select(func.pg_advisory_unlock(_CLEANUP_ADVISORY_LOCK_KEY))
+            )
+            lock_connection.close()
