@@ -72,6 +72,20 @@ class ExtractedField(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class WorkerHeartbeat(Base):
+    """Baris liveness per proses worker; umurnya dipakai metrik dan alert."""
+
+    __tablename__ = "worker_heartbeats"
+
+    worker_id = Column(String(80), primary_key=True)
+    hostname = Column(String(100), nullable=False)
+    concurrency = Column(Integer, nullable=False)
+    in_flight = Column(Integer, nullable=False, default=0)
+    state = Column(String(20), nullable=False, default="idle")
+    started_at = Column(DateTime(timezone=True), nullable=False)
+    last_seen_at = Column(DateTime(timezone=True), nullable=False, index=True)
+
+
 class KHPMasterResolution(Base):
     __tablename__ = "khp_master_resolutions"
 

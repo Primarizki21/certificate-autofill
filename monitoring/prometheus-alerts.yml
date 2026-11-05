@@ -1,0 +1,35 @@
+groups:
+  - name: certificate-autofill
+    rules:
+      - alert: ExtractionWorkerDown
+        expr: cert_worker_alive_count == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tidak ada worker ekstraksi dengan heartbeat segar"
+          description: "Semua worker berhenti atau heartbeat gagal ditulis. Antrean akan menumpuk."
+
+      - alert: ExtractionWorkerHeartbeatStale
+        expr: cert_worker_heartbeat_max_age_seconds > 60
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Heartbeat worker tertua melewati 60 detik"
+
+      - alert: ExtractionQueueBacklog
+        expr: cert_queue_oldest_age_seconds > 1800
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Job tertua di antrean lebih dari 30 menit"
+
+      - alert: ExtractionUploadsRejected
+        expr: rate(cert_upload_rejected_queue_total[10m]) > 0
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Upload ditolak karena antrean penuh"

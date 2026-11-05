@@ -41,6 +41,9 @@ class Settings:
     job_lease_seconds: int = int(os.getenv("JOB_LEASE_SECONDS", "900"))
     storage_cleanup_interval_seconds: int = int(os.getenv("STORAGE_CLEANUP_INTERVAL_SECONDS", "300"))
     worker_concurrency: int = int(os.getenv("WORKER_CONCURRENCY", "2"))
+    worker_heartbeat_seconds: int = int(os.getenv("WORKER_HEARTBEAT_SECONDS", "15"))
+    worker_heartbeat_stale_seconds: int = int(os.getenv("WORKER_HEARTBEAT_STALE_SECONDS", "60"))
+    worker_idle_backoff_max_seconds: int = int(os.getenv("WORKER_IDLE_BACKOFF_MAX_SECONDS", "5"))
     min_text_length: int = int(os.getenv("MIN_TEXT_LENGTH", "80"))
     enable_ocr_fallback: bool = os.getenv("ENABLE_OCR_FALLBACK", "true").lower() == "true"
     # EXP-INDRA-LLM-001: Indra OCR (datalab-to/indra-ocr, 1M param ONNX CPU).

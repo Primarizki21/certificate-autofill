@@ -139,8 +139,11 @@ Pipeline ekstraksi dapat disesuaikan melalui environment variable di file `.env`
 | `ENABLE_KHP_MASTER_STAGING` | `true` | Mengaktifkan resolusi master data resmi universitas, autofill 9-field KHP, dan UI cascading filter |
 | `ENABLE_COMBINED_V4_2` | `true` | Pipeline offline rule-based resmi saat Gemini tidak aktif atau kuota habis |
 | `PROCESSING_MODE` | `background` | Mode eksekusi job (`background`: FastAPI BackgroundTasks, `sync`: langsung, `db_worker`: polling DB) |
-| `DB_WORKER_POLL_SECONDS` | `1` | Jeda waktu polling worker saat antrean database kosong |
+| `DB_WORKER_POLL_SECONDS` | `1` | Jeda awal polling worker saat antrean kosong (naik bertahap dengan jitter) |
 | `WORKER_CONCURRENCY` | `2` | Jumlah thread pemrosesan paralel per worker (default `2` untuk utilisasi optimal) |
+| `WORKER_HEARTBEAT_SECONDS` | `15` | Interval tulis heartbeat liveness ke tabel `worker_heartbeats` |
+| `WORKER_HEARTBEAT_STALE_SECONDS` | `60` | Worker dianggap mati bila heartbeat lebih tua dari nilai ini (dipakai metrik dan alert) |
+| `WORKER_IDLE_BACKOFF_MAX_SECONDS` | `5` | Batas atas backoff polling saat antrean kosong |
 | `DB_POOL_SIZE` | `20` | Kapasitas connection pool tetap PostgreSQL (SQLAlchemy) |
 | `DB_MAX_OVERFLOW` | `20` | Batas toleransi lonjakan koneksi sementara saat jam sibuk |
 | `OCR_RAPID_THREADS` | `0` | Thread ONNX Runtime untuk RapidOCR (`0`: otomatis mengikuti kuota CPU container, `-1`: default library, `N`: eksplisit) |

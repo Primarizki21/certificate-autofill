@@ -38,6 +38,7 @@ from app.models import (
     KHPJabatanPrestasi,
     KHPKegiatan2,
     KHPMasterRule,
+    WorkerHeartbeat,
 )
 from app.schemas import (
     CreateKHPRuleRequest,
@@ -59,7 +60,13 @@ from app.services.job_processor import cleanup_expired_jobs_and_uploads, process
 from app.services.temporary_upload_store import upload_store
 from app.services.security_guard import SecurityValidationError, inspect_and_guard_upload
 from app.services.rate_limiter import enforce_upload_rate_limit
-from app.services.metrics import HTTP_REQUEST_DURATION, QUEUE_OLDEST_AGE_SECONDS, UPLOAD_REJECTED_QUEUE
+from app.services.metrics import (
+    HTTP_REQUEST_DURATION,
+    QUEUE_OLDEST_AGE_SECONDS,
+    UPLOAD_REJECTED_QUEUE,
+    WORKER_ALIVE,
+    WORKER_HEARTBEAT_MAX_AGE_SECONDS,
+)
 
 logger = logging.getLogger("certificate-main")
 REQUEST_COUNT = Counter("cert_autofill_requests_total", "Total HTTP requests", ["endpoint"])
@@ -266,6 +273,14 @@ def healthz() -> JSONResponse:
     return JSONResponse(content={"status": "ok"})
 
 
+def _as_utc(value: datetime | str) -> datetime:
+    if isinstance(value, str):
+        value = datetime.fromisoformat(value)
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=timezone.utc)
+    return value
+
+
 def _queue_backlog_seconds(db: Session) -> float:
     """Umur job queued tertua; 0 bila antrean kosong."""
     oldest = (
@@ -275,11 +290,7 @@ def _queue_backlog_seconds(db: Session) -> float:
     )
     if oldest is None:
         return 0.0
-    if isinstance(oldest, str):
-        oldest = datetime.fromisoformat(oldest)
-    if oldest.tzinfo is None:
-        oldest = oldest.replace(tzinfo=timezone.utc)
-    return max(0.0, (datetime.now(timezone.utc) - oldest).total_seconds())
+    return max(0.0, (datetime.now(timezone.utc) - _as_utc(oldest)).total_seconds())
 
 
 def _reject_when_queue_saturated(db: Session) -> None:
@@ -319,6 +330,16 @@ def metrics(db: Session = Depends(get_db)) -> Response:
         QUEUE_JOBS.labels(status="queued").set(counts.get("queued", 0))
         QUEUE_JOBS.labels(status="processing").set(counts.get("processing", 0))
         QUEUE_OLDEST_AGE_SECONDS.set(_queue_backlog_seconds(db))
+
+        now = datetime.now(timezone.utc)
+        stale_after = settings.worker_heartbeat_stale_seconds
+        ages = [
+            (now - _as_utc(last_seen)).total_seconds()
+            for (last_seen,) in db.query(WorkerHeartbeat.last_seen_at).all()
+            if last_seen is not None
+        ]
+        WORKER_ALIVE.set(sum(1 for age in ages if age <= stale_after))
+        WORKER_HEARTBEAT_MAX_AGE_SECONDS.set(max(ages) if ages else 0.0)
     except Exception as exc:
         logger.debug("Prometheus queue gauge update skipped: %s", exc)
 
