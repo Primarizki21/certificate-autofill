@@ -91,7 +91,13 @@ def seed_completed_documents(database_url: str, count: int) -> list[str]:
     return document_ids
 
 
-def start_server(port: int, env: dict[str, str]) -> subprocess.Popen:
+def start_server(
+    port: int, env: dict[str, str], log_path: str | None = None
+) -> subprocess.Popen:
+    stream = subprocess.DEVNULL
+    if log_path:
+        Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+        stream = open(log_path, "w", encoding="utf-8")
     process = subprocess.Popen(
         [
             sys.executable,
@@ -109,10 +115,11 @@ def start_server(port: int, env: dict[str, str]) -> subprocess.Popen:
         ],
         cwd=REPO_ROOT,
         env=env,
-        stdout=subprocess.PIPE,
+        stdout=stream,
         stderr=subprocess.STDOUT,
         text=True,
     )
+    process._log_stream = stream  # type: ignore[attr-defined]
     return process
 
 

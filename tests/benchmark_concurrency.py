@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+import subprocess
+
 import httpx
 import psutil
 from sqlalchemy import create_engine, text
@@ -214,6 +216,7 @@ def main() -> None:
     parser.add_argument("--poll-interval", type=float, default=3.0)
     parser.add_argument("--uploads-per-second", type=float, default=5.0)
     parser.add_argument("--duration", type=float, default=60.0)
+    parser.add_argument("--experiment-id", default=EXPERIMENT_ID)
     parser.add_argument("--force", action="store_true")
     args = parser.parse_args()
 
@@ -239,7 +242,8 @@ def main() -> None:
     payload = smallest_certificate()
 
     started_at = datetime.now(timezone.utc)
-    process = start_server(args.port, dict(os.environ))
+    log_path = REPO_ROOT / ".cache" / f"exp_capacity_server_{args.port}.log"
+    process = start_server(args.port, dict(os.environ), str(log_path))
     wait_ready(args.port)
     server_process = psutil.Process(process.pid)
     rss_samples: list[float] = []
@@ -260,6 +264,14 @@ def main() -> None:
         results = asyncio.run(with_sampler())
     finally:
         stop_server(process)
+        stream = getattr(process, "_log_stream", None)
+        if stream is not None and stream is not subprocess.DEVNULL:
+            stream.close()
+    server_log_tail = ""
+    if log_path.exists():
+        server_log_tail = "\n".join(
+            log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-60:]
+        )
 
     engine = create_engine(args.database_url)
     with engine.connect() as connection:
@@ -286,7 +298,7 @@ def main() -> None:
     status = "PASS" if all(gates.values()) else "FAIL"
 
     metrics = {
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": args.experiment_id,
         "started_at": started_at.isoformat(),
         "finished_at": datetime.now(timezone.utc).isoformat(),
         "git_revision": git_revision(),
@@ -297,9 +309,16 @@ def main() -> None:
             "duration_seconds": args.duration,
             "server_workers": 1,
             "server_pid": process.pid,
+            "db_pool_size": int(os.getenv("DB_POOL_SIZE", "20")),
+            "db_max_overflow": int(os.getenv("DB_MAX_OVERFLOW", "20")),
+            "threadpool_default_limit": 40,
         },
         "results": results,
-        "server": {"rss_max_mb": rss_max_mb, "db_connections_after": db_connections},
+        "server": {
+            "rss_max_mb": rss_max_mb,
+            "db_connections_after": db_connections,
+            "log_tail": server_log_tail,
+        },
         "gates": gates,
         "status": status,
     }
@@ -328,7 +347,7 @@ def main() -> None:
         {"metric": "db_connections_after", "value": db_connections},
     ]
 
-    summary = f"""# {EXPERIMENT_ID} — Beban HTTP 1.000 Poller
+    summary = f"""# {args.experiment_id} — Beban HTTP 1.000 Poller
 
 Status: **{status}**
 
@@ -336,6 +355,7 @@ Status: **{status}**
 - Poller: {args.pollers:,} klien, interval {args.poll_interval} s, durasi {args.duration} s
 - Upload: {args.uploads_per_second}/detik (10 API key berputar)
 - Server: 1 proses uvicorn, tanpa worker aktif (job hanya masuk antrean)
+- Pool DB: {os.getenv('DB_POOL_SIZE', '20')} + overflow {os.getenv('DB_MAX_OVERFLOW', '20')}
 - Total request polling: {results['poll']['requests']:,} ({results['poll']['rps']} rps)
 
 ## Hasil polling
@@ -374,7 +394,7 @@ tidak berjalan pada uji ini (worker dimatikan).
 """
     manifest = {
         "campaign_id": "CAMPAIGN-PRODUCTION-CAPACITY",
-        "experiment_id": EXPERIMENT_ID,
+        "experiment_id": args.experiment_id,
         "parent_id": None,
         "role": "capacity-http",
         "started_at": metrics["started_at"],
@@ -401,7 +421,7 @@ tidak berjalan pada uji ini (worker dimatikan).
         xlsx_sheets={"Ringkasan": rows, "Per Detik": records},
         force=args.force,
     )
-    print(f"{EXPERIMENT_ID}: {status} -> {args.output_dir}")
+    print(f"{args.experiment_id}: {status} -> {args.output_dir}")
 
 
 if __name__ == "__main__":
