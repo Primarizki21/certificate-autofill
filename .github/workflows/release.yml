@@ -42,31 +42,16 @@ jobs:
           git archive --format=tar.gz --prefix="${name}/" -o "${name}.tar.gz" HEAD
           sha256sum "${name}.tar.gz" > SHA256SUMS
 
+      - name: Susun catatan rilis
+        run: scripts/generate_release_notes.sh "$GITHUB_REF_NAME" > release-notes.md
+
       - name: Buat release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set -eu
-          NOTES=$(cat <<EOF
-          Rilis prototype pipeline ekstraksi sertifikat mahasiswa.
-
-          Cakupan saat ini: hanya sertifikat mahasiswa. Format dokumen lain belum didukung.
-
-          Image Docker tidak dilampirkan karena ukurannya sekitar 1,3 GB. Bangun dari tag ini di mesin yang punya internet:
-              scripts/build_release.sh ${GITHUB_REF_NAME}
-
-          Deploy di server:
-              docker load < cert-autofill-images-${GITHUB_REF_NAME}.tar.gz
-              BACKEND_IMAGE=cert-autofill-backend:${GITHUB_REF_NAME} \\
-                docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
-
-          Lampiran: arsip source dan SHA256SUMS untuk verifikasi integritas.
-          EOF
-          )
           gh release create "$GITHUB_REF_NAME" \
             --verify-tag \
             --title "$GITHUB_REF_NAME" \
-            --generate-notes \
-            --notes "$NOTES" \
+            --notes-file release-notes.md \
             "certificate-autofill-${GITHUB_REF_NAME}.tar.gz" \
             SHA256SUMS
