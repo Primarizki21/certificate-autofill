@@ -1,0 +1,72 @@
+name: Release
+
+# Rilis dibuat dari tag yang sudah ada di main. Alur:
+#   1. merge PR ke main
+#   2. git tag -a v0.1.0 -m "..." && git push origin v0.1.0
+#   3. workflow ini membuat GitHub Release + arsip source + SHA256SUMS
+"on":
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Validasi tag
+        run: |
+          set -eu
+          if ! printf '%s' "$GITHUB_REF_NAME" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag harus berformat vX.Y.Z, bukan $GITHUB_REF_NAME"
+            exit 1
+          fi
+          git fetch origin main --no-tags
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME menunjuk commit yang belum ada di main"
+            exit 1
+          fi
+
+      - name: Siapkan arsip source dan checksum
+        run: |
+          set -eu
+          name="certificate-autofill-${GITHUB_REF_NAME}"
+          git archive --format=tar.gz --prefix="${name}/" -o "${name}.tar.gz" HEAD
+          sha256sum "${name}.tar.gz" > SHA256SUMS
+
+      - name: Buat release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          NOTES=$(cat <<EOF
+          Rilis prototype pipeline ekstraksi sertifikat mahasiswa.
+
+          Cakupan saat ini: hanya sertifikat mahasiswa. Format dokumen lain belum didukung.
+
+          Image Docker tidak dilampirkan karena ukurannya sekitar 1,3 GB. Bangun dari tag ini di mesin yang punya internet:
+              scripts/build_release.sh ${GITHUB_REF_NAME}
+
+          Deploy di server:
+              docker load < cert-autofill-images-${GITHUB_REF_NAME}.tar.gz
+              BACKEND_IMAGE=cert-autofill-backend:${GITHUB_REF_NAME} \\
+                docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+          Lampiran: arsip source dan SHA256SUMS untuk verifikasi integritas.
+          EOF
+          )
+          gh release create "$GITHUB_REF_NAME" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "$NOTES" \
+            "certificate-autofill-${GITHUB_REF_NAME}.tar.gz" \
+            SHA256SUMS
