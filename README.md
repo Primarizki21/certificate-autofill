@@ -105,6 +105,17 @@ TLS punya tiga kemungkinan, pilih sesuai kondisi jaringan:
 | Intranet tanpa domain publik | Sama seperti di atas, tetapi tambahkan `tls internal` di `deploy/caddy/Caddyfile` dan distribusikan root CA Caddy ke klien |
 
 Bila memakai proxy, pastikan `TRUST_PROXY_HEADERS=true` (default compose) dan `FORWARDED_ALLOW_IPS` hanya berisi alamat proxy, bukan `*`.
+
+#### Catatan Rilis
+
+Workflow `Release` menyusun catatan otomatis dari Conventional Commits antara tag sebelumnya dan tag ini, lalu menambahkan sorotan manual bila tersedia. Untuk sorotan per versi:
+
+```bash
+cp docs/releases/TEMPLATE.md docs/releases/v0.2.0.md
+# isi Sorotan / Perubahan yang perlu perhatian, commit sebelum tag dibuat
+```
+
+Berkas `docs/releases/<tag>.md` bersifat opsional; tanpa berkas itu, release tetap berisi daftar perubahan per kategori (Fitur, Perbaikan, Performa, Refaktor, Dokumentasi, Pengujian, Internal).
 ---
 
 ### 3. Menjalankan secara Manual (Tanpa Docker)
