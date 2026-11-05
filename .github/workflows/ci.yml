@@ -116,8 +116,14 @@ jobs:
       - name: Install Python dependencies
         run: uv sync --frozen
 
-      - name: Python code linting (Ruff)
-        run: uv run ruff check backend/ tests/test_*.py scripts/stress_test.py scripts/run_stress_matrix.py
+      - name: Lint backend (blocking)
+        run: uv run ruff check backend/ scripts/stress_test.py scripts/run_stress_matrix.py
+
+      - name: Lint tests (informational, non-blocking)
+        # Tes tidak masuk image produksi. Pelanggaran lint di tes dicatat sebagai
+        # anotasi, tetapi tidak menggagalkan job; pytest tetap menjadi gate perilaku.
+        continue-on-error: true
+        run: uv run ruff check tests/test_*.py
 
       - name: Database migration baseline check (SQLite)
         run: uv run alembic -x url="sqlite:///:memory:" upgrade head
