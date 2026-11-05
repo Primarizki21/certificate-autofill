@@ -37,7 +37,7 @@ GOOGLE_API_KEY=""  # Masukkan kunci Google AI Studio API Anda
 
 ### 2. Menjalankan via Docker Compose
 
-Perintah default menyalakan backend FastAPI dan PostgreSQL 17:
+Perintah default menyalakan PostgreSQL 17, backend FastAPI, worker antrean, dan service backup:
 
 ```bash
 docker compose up --build
@@ -52,9 +52,10 @@ docker compose --profile monitoring up --build
 Setelah container aktif:
 | Service | URL | Keterangan |
 |---|---|---|
-| **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP + Swagger API docs (`/docs`) |
+| **FastAPI Web & Form** | `http://localhost:8000` | Antarmuka web form KHP. Swagger (`/docs`) hanya aktif saat `APP_ENV` bukan `production` |
 | **PostgreSQL 17** | `localhost:5434` | Database (`certautofill`, user: `postgres`, pass: `postgres`) |
 | **Worker (DB Polling)** | *(background)* | Service worker (`python -m app.worker`) untuk eksekusi antrean job di database |
+| **Backup PostgreSQL** | *(background)* | `pg_dump` custom-format tiap jam ke volume `pg_backups` |
 | **Prometheus** | `http://localhost:9090` | Aktif dengan profile `monitoring` |
 | **Grafana** | `http://localhost:3000` | Aktif dengan profile `monitoring` (`admin:admin`) |
 | **Loki** | `http://localhost:3100` | Aktif dengan profile `monitoring` |
@@ -66,7 +67,7 @@ Setelah container aktif:
 Untuk mempercepat pengosongan antrean dokumen, jumlah kontainer worker dapat diskalakan secara dinamis:
 ```bash
 # Menjalankan 2 kontainer worker paralel (kapasitas 4 thread pemrosesan)
-docker compose --profile monitoring up -d --scale worker=2
+docker compose up -d --scale worker=2
 ```
 
 #### Mode Pengembangan Lokal (Live Hot-Reload):
@@ -82,11 +83,13 @@ Docker Compose otomatis me-mount kode sumber `./backend/app` secara live dan men
 
 #### Prasyarat:
 1. PostgreSQL 17 aktif di port `5434` dengan database `certautofill`.
-2. Tesseract OCR (`tesseract-ocr` dan `tesseract-ocr-ind`) terpasang di sistem operasi.
-3. Jalankan inisialisasi skema dan seed data master KHP universitas (pertama kali):
+2. Tesseract OCR (`tesseract-ocr` dan `tesseract-ocr-ind`) terpasang di sistem operasi (engine fallback).
+3. Dependensi Python terpasang: `uv sync --frozen` (atau `pip install -r requirements.txt`).
+4. Skema database dibuat otomatis oleh Alembic saat aplikasi menyala. Seed data master KHP cukup sekali:
    ```bash
-   python scripts/seed_khp_master.py
+   uv run python scripts/seed_khp_master.py
    ```
+5. Bobot ONNX Indra OCR dan RapidOCR diunduh sekali pada run pertama (butuh internet). Image Docker sudah melakukan prewarm saat build, sehingga runtime container tidak butuh unduhan.
 #### Linux / macOS:
 ```bash
 export APP_ENV=development
@@ -216,7 +219,9 @@ Cukup ubah baris berikut di `.env`:
 ```bash
 ENABLE_TESSERACT_GEMINI=false
 ```
-Sistem akan otomatis menggunakan pipeline offline rule-based lokal.
+Sistem akan otomatis menggunakan pipeline offline rule-based lokal (Combined v4.2). Indra OCR tetap aktif karena berjalan lokal; yang dinonaktifkan hanya panggilan Gemini.
+
+Syarat offline penuh: bobot ONNX sudah tersedia. Image Docker sudah prewarm saat build; untuk instalasi manual, jalankan sekali saat masih ada internet, atau set `INDRA_OCR_MODEL_DIR` ke folder model yang sudah disalin.
 
 ---
 
@@ -247,6 +252,10 @@ Sistem menerapkan inspeksi keamanan bertingkat (*defense-in-depth*) sebelum doku
    - Endpoint upload dilindungi pembatas laju *in-memory* berbasis identitas pemanggil dengan jendela geser (*sliding window*).
    - Identitas diambil dari API key valid (`X-API-Key` atau `Authorization: Bearer`) bila ada; tanpa key, fallback ke alamat IP. Ini menghindari satu portal kampus yang berbagi IP menelan seluruh kuota.
    - Default: **60 unggahan per menit per identitas** (`RATE_LIMIT_PER_MINUTE = 60`, standar 1 req/detik). Jika terlampaui, sistem mengembalikan status HTTP 429 *Too Many Requests* dengan header standar `Retry-After`.
+
+6. **Proteksi Ukuran & Antrean**:
+   - Header `Content-Length` diperiksa sebelum body dibaca; melebihi `MAX_UPLOAD_SIZE_MB` langsung ditolak `413`.
+   - Saat backlog antrean melewati `QUEUE_BACKPRESSURE_SECONDS`, upload baru ditolak `503` dengan header `Retry-After`, sehingga PDF tidak kedaluwarsa sebelum sempat diproses.
 ---
 
 ## Hasil Evaluasi & Benchmark
@@ -419,8 +428,10 @@ uv run pytest tests/ -v
 
 ### 2. Otomasi CI/CD (GitHub Actions)
 Repositori ini dilengkapi pipeline **Continuous Integration (CI)** otomatis (`.github/workflows/ci.yml`) yang berjalan pada setiap *push* dan *pull request*:
-- **Job `security-audit`**: Memindai seluruh berkas untuk mencegah kebocoran file `.env`, kunci API aktif (`AIza...`, Stripe, OpenAI), berkas PDF privat, dan dump database kampus privat (`khp/*`).
-- **Job `test`**: Memasang dependensi sistem Tesseract OCR (dengan kamus bahasa Indonesia), kompilasi sintaks Python (`compileall`), dan menjalankan seluruh rangkaian 432 unit tests secara terisolasi.
+- **Job `security-audit`**: Memindai berkas ter-track untuk mencegah kebocoran `.env`, PDF privat, data AUCC privat (`khp/*`), serta pola kredensial aktif (Google, OpenAI, Stripe, GitHub, AWS, Hugging Face, OAuth, Slack, private key).
+- **Job `test`**: Lint backend (blocking) dan lint tes (informational), migrasi Alembic di SQLite dan PostgreSQL 17 termasuk uji stamp idempotensi, uji DDL konkurensi, `compileall`, lalu seluruh suite **463 tes** dengan engine Indra OCR aktif. Bobot model di-cache antar-run.
+- **Job `ml-quality-gate`**: Dipicu saat `backend/app/services/**`, `config.py`, `master_data.py`, atau `tests/**` berubah. Menjalankan invariant offline Combined v2/v4.2, OCR Indra, jalur pipeline Indra, dan klien Gemini (HTTP dimock, tanpa API key).
+- **Job `docker-build`**: Validasi `docker compose config`, build image, smoke test posture produksi (`/docs` 404, admin tanpa kredensial 401, UUID tidak valid 404), dan scan Trivy yang bersifat informational.
 
 
 ### 3. Pengujian Beban & Profiling Latensi (Stress Testing)
@@ -503,8 +514,8 @@ Hasil analisis disimpan di folder `graphify-out/` (otomatis terabaikan oleh `.gi
 
 | Dokumen / Antarmuka | Deskripsi |
 |---|---|
-| [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi (`/docs`) |
-| [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API |
+| [Swagger API Documentation](/docs) | Dokumentasi interaktif OpenAPI untuk pengujian endpoint upload dan status ekstraksi. Hanya aktif saat `APP_ENV` bukan `production` |
+| [ReDoc API Documentation](/redoc) | Dokumentasi alternatif ReDoc untuk spesifikasi skema data API (kondisi sama: non-production) |
 | [Frontend Guide](frontend/README_FRONTEND.md) | Panduan antarmuka web, penanganan cascading dropdown, dan modal pencarian kegiatan |
 | [API Integration Guide](docs/API_INTEGRATION_GUIDE.md) | Panduan lengkap integrasi endpoint `/api/v1/extract`, format API Key, contoh cURL/JS/Python, dan setup Cloudflare Tunnel |
 | **Knowledge Graph Arsitektur** | Peta interaktif graf dependensi fungsi dan arsitektur pipeline via Graphify (lihat panduan di atas) |
