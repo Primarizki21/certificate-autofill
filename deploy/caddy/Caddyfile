@@ -1,0 +1,7 @@
+# Domain publik: Caddy menerbitkan sertifikat Let's Encrypt otomatis.
+# Intranet tanpa domain publik: ganti alamat dengan hostname internal dan
+# tambahkan `tls internal`, lalu distribusikan root CA Caddy ke klien kampus.
+{$SITE_ADDRESS:localhost} {
+	encode zstd gzip
+	reverse_proxy backend:8000
+}

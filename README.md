@@ -77,6 +77,34 @@ cp docker-compose.override.yml.example docker-compose.override.yml
 docker compose up
 ```
 Docker Compose otomatis me-mount kode sumber `./backend/app` secara live dan mengaktifkan flag `--reload`.
+
+#### Deploy Produksi (Server Kampus)
+
+Server produksi menjalankan image, bukan build dari source. Build sekali di mesin yang punya internet:
+
+```bash
+scripts/build_release.sh v1.0.0   # menghasilkan cert-autofill-images-v1.0.0.tar.gz
+```
+
+Yang dibutuhkan di server (bukan seluruh repo): `docker-compose.yml`, `docker-compose.prod.yml`, `docker-compose.proxy.yml` (opsional), `.env`, `khp/`, `scripts/`, `monitoring/`, dan arsip image.
+
+```bash
+docker load < cert-autofill-images-v1.0.0.tar.gz
+BACKEND_IMAGE=cert-autofill-backend:v1.0.0 \
+  docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+```
+
+Compose produksi tidak membangun image dan memakai `pull_policy: never`, sehingga server boleh tanpa internet. Untuk rollback: muat arsip versi sebelumnya dan ganti `BACKEND_IMAGE`.
+
+TLS punya tiga kemungkinan, pilih sesuai kondisi jaringan:
+
+| Kondisi | Yang dipakai |
+|---|---|
+| TLS sudah diterminasi proxy/portal kampus | Tanpa file tambahan; backend bind ke `127.0.0.1:8000`, arahkan proxy kampus ke sana |
+| Server punya domain publik dan port 80/443 terbuka | Tambahkan `-f docker-compose.proxy.yml`, set `SITE_ADDRESS=<domain>`; Caddy menerbitkan sertifikat otomatis |
+| Intranet tanpa domain publik | Sama seperti di atas, tetapi tambahkan `tls internal` di `deploy/caddy/Caddyfile` dan distribusikan root CA Caddy ke klien |
+
+Bila memakai proxy, pastikan `TRUST_PROXY_HEADERS=true` (default compose) dan `FORWARDED_ALLOW_IPS` hanya berisi alamat proxy, bukan `*`.
 ---
 
 ### 3. Menjalankan secara Manual (Tanpa Docker)

@@ -1,0 +1,17 @@
+# Overlay produksi: jalankan image hasil build/transfer, jangan build dari source.
+#
+#   BACKEND_IMAGE=cert-autofill-backend:v1.0.0 \
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+#
+# `pull_policy: never` berarti image wajib sudah ada di host (docker load) atau
+# di registry lokal. Set IMAGE_PULL_POLICY=always bila server boleh menarik image
+# dari GHCR/registry.
+services:
+  backend:
+    build: !reset null
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE wajib diisi, mis. cert-autofill-backend:v1.0.0}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
+
+  worker:
+    image: ${BACKEND_IMAGE:?BACKEND_IMAGE wajib diisi, mis. cert-autofill-backend:v1.0.0}
+    pull_policy: ${IMAGE_PULL_POLICY:-never}
